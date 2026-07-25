@@ -8,11 +8,11 @@ Multi-role platform for reporting, tracking, and resolving road maintenance issu
 | Service | Role |
 |---------|------|
 | **FastAPI** (`backend/`) | Source of truth — models, auth, business logic, status machine, exports, jobs |
-| **Django** (`web/`) | Thin web UI — templates + HTMX/Alpine; calls FastAPI over HTTP |
+| **React** (`web/`) | Web UI (Vite + TypeScript); calls FastAPI over HTTP |
 | **React Native** (`mobile/`) | Contractor + Surveyor apps; same FastAPI API |
 | **PostgreSQL (Neon)** | Database via `DATABASE_URL` |
 
-Do **not** put business logic in Django views. Web and mobile share one API.
+Do **not** put business logic in the React or React Native clients. Web and mobile share one API.
 
 ## Roles
 
@@ -42,11 +42,10 @@ Valid transitions are enforced in FastAPI (`IssueStatus` + transition map).
 
 ## Photo rules
 
-Camera-only capture (no gallery). GPS lat/lng recorded at capture time.
+Camera-only capture on mobile (no gallery). GPS lat/lng recorded at capture time.
 
 ## Open questions (confirm with client)
 
 1. Exact Issue Types / Work Categories lists
-2. Django templates vs richer JS charts layer
-3. Photo storage: S3 vs local (default: local `UPLOAD_DIR`)
-4. Notifications: FCM / SMS / email
+2. Photo storage: S3 vs local (default: local `UPLOAD_DIR`)
+3. Notifications: FCM / SMS / email

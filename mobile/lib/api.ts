@@ -69,6 +69,11 @@ export const api = {
     request<Issue>(`/api/v1/issues/${id}/verify/reject`, { method: "POST", token, body: form }),
   reworkStart: (token: string, id: number) =>
     request<Issue>(`/api/v1/issues/${id}/rework/start`, { method: "POST", token }),
+  notifications: (token: string) =>
+    request<{ id: number; title: string; message: string; is_read: boolean; created_at: string }[]>(
+      "/api/v1/notifications",
+      { token }
+    ),
 };
 
 export { API_URL };

@@ -1,9 +1,39 @@
 import { Stack, router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { CameraCapture, type CapturedPhoto } from "../components/CameraCapture";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+
+const ISSUE_TYPES = [
+  "pothole",
+  "damaged_road",
+  "broken_drainage",
+  "encroachment",
+  "road_furniture",
+  "pavement",
+  "highway",
+  "vehicle_breakdown",
+  "unwanted_material",
+  "other",
+];
+
+const WORK_CATEGORIES = [
+  "pavement",
+  "highway",
+  "road_furniture",
+  "encroachment",
+  "drainage",
+  "safety",
+  "other",
+];
 
 export default function CreateIssueScreen() {
   const { token } = useAuth();
@@ -72,12 +102,55 @@ export default function CreateIssueScreen() {
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Stack.Screen options={{ title: "New issue" }} />
-      <Text style={styles.label}>Project ID: {projectId ?? "—"}</Text>
-      <Text style={styles.hint}>Projects: {projects.map((p) => p.name).join(", ") || "none"}</Text>
-      <TextInput style={styles.input} value={issueType} onChangeText={setIssueType} placeholder="Issue type" />
-      <TextInput style={styles.input} value={workCategory} onChangeText={setWorkCategory} placeholder="Work category" />
+
+      <Text style={styles.label}>Project</Text>
+      <View style={styles.chips}>
+        {projects.map((p) => (
+          <Pressable
+            key={p.id}
+            style={[styles.chip, projectId === p.id && styles.chipActive]}
+            onPress={() => setProjectId(p.id)}
+          >
+            <Text style={[styles.chipText, projectId === p.id && styles.chipTextActive]}>{p.name}</Text>
+          </Pressable>
+        ))}
+        {!projects.length ? <Text style={styles.hint}>No assigned projects.</Text> : null}
+      </View>
+
+      <Text style={styles.label}>Issue type</Text>
+      <View style={styles.chips}>
+        {ISSUE_TYPES.map((t) => (
+          <Pressable
+            key={t}
+            style={[styles.chip, issueType === t && styles.chipActive]}
+            onPress={() => setIssueType(t)}
+          >
+            <Text style={[styles.chipText, issueType === t && styles.chipTextActive]}>{t}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Work category</Text>
+      <View style={styles.chips}>
+        {WORK_CATEGORIES.map((t) => (
+          <Pressable
+            key={t}
+            style={[styles.chip, workCategory === t && styles.chipActive]}
+            onPress={() => setWorkCategory(t)}
+          >
+            <Text style={[styles.chipText, workCategory === t && styles.chipTextActive]}>{t}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       <TextInput style={styles.input} value={chainage} onChangeText={setChainage} placeholder="Chainage" />
-      <TextInput style={styles.input} value={deadlineDays} onChangeText={setDeadlineDays} placeholder="Deadline days" keyboardType="number-pad" />
+      <TextInput
+        style={styles.input}
+        value={deadlineDays}
+        onChangeText={setDeadlineDays}
+        placeholder="Deadline days"
+        keyboardType="number-pad"
+      />
       <TextInput
         style={[styles.input, { height: 100 }]}
         value={description}
@@ -103,8 +176,20 @@ export default function CreateIssueScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, backgroundColor: "#eef2f6" },
-  label: { fontWeight: "700", marginBottom: 4 },
+  label: { fontWeight: "700", marginBottom: 8, color: "#0b2a43" },
   hint: { color: "#5b6b7c", marginBottom: 12 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  chip: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#d5dee8",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipActive: { backgroundColor: "#0f4c81", borderColor: "#0f4c81" },
+  chipText: { color: "#152033", fontSize: 12, fontWeight: "600" },
+  chipTextActive: { color: "#fff" },
   input: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -113,9 +198,22 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
-  primary: { backgroundColor: "#0f4c81", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 8 },
+  primary: {
+    backgroundColor: "#0f4c81",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
   primaryText: { color: "#fff", fontWeight: "700" },
-  secondary: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#0f4c81", padding: 14, borderRadius: 12, alignItems: "center" },
+  secondary: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#0f4c81",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
   secondaryText: { color: "#0f4c81", fontWeight: "700" },
   error: { color: "#be123c", marginTop: 8 },
 });

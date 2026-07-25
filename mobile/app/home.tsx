@@ -7,12 +7,16 @@ import { useAuth } from "../lib/auth";
 export default function HomeScreen() {
   const { token, role, fullName, logout } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [unread, setUnread] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      setIssues(await api.issues(token));
+      const [issueList, notes] = await Promise.all([api.issues(token), api.notifications(token)]);
+      setIssues(issueList);
+      setUnread(notes.filter((n) => !n.is_read).length);
       setError(null);
     } catch (e: any) {
       setError(e.message);
@@ -31,7 +35,10 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.role}>{role}</Text>
+          <Text style={styles.role}>
+            {role}
+            {unread ? ` · ${unread} alerts` : ""}
+          </Text>
         </View>
         <Pressable
           onPress={async () => {
@@ -53,7 +60,16 @@ export default function HomeScreen() {
       <FlatList
         data={issues}
         keyExtractor={(i) => String(i.id)}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await load();
+              setRefreshing(false);
+            }}
+          />
+        }
         renderItem={({ item }) => (
           <Link href={`/issue/${item.id}`} asChild>
             <Pressable style={styles.card}>

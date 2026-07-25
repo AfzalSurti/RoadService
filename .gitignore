@@ -23,17 +23,17 @@ dist/
 build/
 
 # Django
-web/**/local_settings.py
-web/staticfiles/
-web/media/
+# (removed — web is React)
 *.sqlite3
 
 # FastAPI / uploads
 backend/uploads/
 backend/media/
 
-# Node / React Native
+# Node / React / React Native
 node_modules/
+web/node_modules/
+web/dist/
 mobile/node_modules/
 mobile/.expo/
 mobile/dist/

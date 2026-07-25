@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-to-a-long-random-string"
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
-    cors_origins: str = "http://localhost:8001,http://127.0.0.1:8001"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     upload_dir: str = "./uploads"
     verification_pending_hours: int = 24
     scheduler_enabled: bool = True
