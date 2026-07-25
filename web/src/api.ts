@@ -4,7 +4,7 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\
 
 export function mediaUrl(path?: string | null) {
   if (!path) return "";
-  if (path.startsWith("http")) return path;
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
   const name = path.split(/[/\\]/).pop() || path;
   return `${API_URL}/uploads/${name}`;
 }
@@ -137,6 +137,12 @@ export const api = {
     if (!res.ok) throw new ApiError("Export failed", res.status);
     return res.blob();
   },
+
+  catalog: (token: string) =>
+    request<{
+      categories: { id: string; name: string }[];
+      types: { id: string; label: string; category_id: string }[];
+    }>("/api/v1/catalog/defects", { token }),
 };
 
 export { ApiError, API_URL };

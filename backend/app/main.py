@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analytics, auth, issues, notifications, projects, users
+from app.api import analytics, auth, catalog, issues, notifications, projects, users
 from app.core.config import settings
 from app.jobs.verification import flip_stale_completed_to_verification_pending
 
@@ -44,13 +44,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-api = FastAPI()  # unused; routes mounted on main
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
 app.include_router(issues.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(catalog.router, prefix="/api/v1")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")

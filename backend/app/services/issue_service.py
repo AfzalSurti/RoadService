@@ -1,18 +1,29 @@
-from datetime import date, datetime, timezone
-from pathlib import Path
+from datetime import date
 
-import aiofiles
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.models.enums import STATUS_TRANSITIONS, IssueStatus, UserRole
-from app.models.issue import Issue, IssueRejection, IssueStatusHistory
+from app.models.issue import Issue, IssueStatusHistory
 from app.models.notification import Notification
 from app.models.project import Project
 from app.models.user import User
+from app.services.storage import save_upload
+
+__all__ = [
+    "remaining_days",
+    "ensure_transition",
+    "save_upload",
+    "record_status",
+    "notify",
+    "get_issue_or_404",
+    "get_project_or_404",
+    "assert_surveyor",
+    "assert_contractor",
+    "assert_admin",
+]
 
 
 def remaining_days(deadline: date) -> int:
@@ -31,20 +42,6 @@ def ensure_transition(current: IssueStatus, new: IssueStatus, *, system: bool = 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification Pending is set only by the scheduler",
         )
-
-
-async def save_upload(file: UploadFile, prefix: str) -> str:
-    upload_root = Path(settings.upload_dir)
-    upload_root.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename or "photo.jpg").suffix or ".jpg"
-    name = f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{ext}"
-    path = upload_root / name
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty photo upload")
-    async with aiofiles.open(path, "wb") as out:
-        await out.write(content)
-    return name  # served at /uploads/{name}
 
 
 async def record_status(

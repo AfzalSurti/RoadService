@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { StatusBadge, formatLabel } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
 import type { Issue, IssueStatus } from "../types";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
 
@@ -92,8 +92,11 @@ export function IssuesPage() {
                 }}
               >
                 <td>#{i.id}</td>
-                <td>{formatLabel(i.work_category)}</td>
-                <td>{formatLabel(i.issue_type)}</td>
+                <td>{i.work_category_label || i.work_category}</td>
+                <td>
+                  <strong>{i.issue_type}</strong>
+                  {i.issue_type_label ? ` · ${i.issue_type_label}` : ""}
+                </td>
                 <td>{i.chainage || "—"}</td>
                 <td>{i.priority}</td>
                 <td>

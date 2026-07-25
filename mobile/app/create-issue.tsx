@@ -1,46 +1,21 @@
 import { Stack, router } from "expo-router";
-import React, { useEffect, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CameraCapture, type CapturedPhoto } from "../components/CameraCapture";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
-const ISSUE_TYPES = [
-  "pothole",
-  "damaged_road",
-  "broken_drainage",
-  "encroachment",
-  "road_furniture",
-  "pavement",
-  "highway",
-  "vehicle_breakdown",
-  "unwanted_material",
-  "other",
-];
-
-const WORK_CATEGORIES = [
-  "pavement",
-  "highway",
-  "road_furniture",
-  "encroachment",
-  "drainage",
-  "safety",
-  "other",
-];
+type DefectType = { id: string; label: string; category_id: string };
+type Category = { id: string; name: string };
 
 export default function CreateIssueScreen() {
   const { token } = useAuth();
   const [projects, setProjects] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [types, setTypes] = useState<DefectType[]>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
-  const [issueType, setIssueType] = useState("pothole");
-  const [workCategory, setWorkCategory] = useState("pavement");
+  const [categoryId, setCategoryId] = useState<string>("ATMS");
+  const [issueTypeId, setIssueTypeId] = useState<string>("ATMS-1");
   const [description, setDescription] = useState("");
   const [deadlineDays, setDeadlineDays] = useState("10");
   const [chainage, setChainage] = useState("");
@@ -51,11 +26,21 @@ export default function CreateIssueScreen() {
 
   useEffect(() => {
     if (!token) return;
-    api.projects(token).then((p) => {
+    Promise.all([api.projects(token), api.catalog(token)]).then(([p, catalog]) => {
       setProjects(p);
       if (p[0]) setProjectId(p[0].id);
+      setCategories(catalog.categories);
+      setTypes(catalog.types);
+      if (catalog.categories[0]) setCategoryId(catalog.categories[0].id);
+      const first = catalog.types.find((t) => t.category_id === catalog.categories[0]?.id);
+      if (first) setIssueTypeId(first.id);
     });
   }, [token]);
+
+  const filteredTypes = useMemo(
+    () => types.filter((t) => t.category_id === categoryId),
+    [types, categoryId]
+  );
 
   if (showCamera) {
     return (
@@ -78,8 +63,8 @@ export default function CreateIssueScreen() {
     try {
       const form = new FormData();
       form.append("project_id", String(projectId));
-      form.append("issue_type", issueType);
-      form.append("work_category", workCategory);
+      form.append("issue_type", issueTypeId);
+      form.append("work_category", categoryId);
       form.append("description", description);
       form.append("before_lat", String(photo.lat));
       form.append("before_lng", String(photo.lng));
@@ -114,31 +99,36 @@ export default function CreateIssueScreen() {
             <Text style={[styles.chipText, projectId === p.id && styles.chipTextActive]}>{p.name}</Text>
           </Pressable>
         ))}
-        {!projects.length ? <Text style={styles.hint}>No assigned projects.</Text> : null}
       </View>
 
-      <Text style={styles.label}>Issue type</Text>
+      <Text style={styles.label}>Category</Text>
       <View style={styles.chips}>
-        {ISSUE_TYPES.map((t) => (
+        {categories.map((c) => (
           <Pressable
-            key={t}
-            style={[styles.chip, issueType === t && styles.chipActive]}
-            onPress={() => setIssueType(t)}
+            key={c.id}
+            style={[styles.chip, categoryId === c.id && styles.chipActive]}
+            onPress={() => {
+              setCategoryId(c.id);
+              const first = types.find((t) => t.category_id === c.id);
+              if (first) setIssueTypeId(first.id);
+            }}
           >
-            <Text style={[styles.chipText, issueType === t && styles.chipTextActive]}>{t}</Text>
+            <Text style={[styles.chipText, categoryId === c.id && styles.chipTextActive]}>{c.name}</Text>
           </Pressable>
         ))}
       </View>
 
-      <Text style={styles.label}>Work category</Text>
+      <Text style={styles.label}>Issue type</Text>
       <View style={styles.chips}>
-        {WORK_CATEGORIES.map((t) => (
+        {filteredTypes.map((t) => (
           <Pressable
-            key={t}
-            style={[styles.chip, workCategory === t && styles.chipActive]}
-            onPress={() => setWorkCategory(t)}
+            key={t.id}
+            style={[styles.chip, issueTypeId === t.id && styles.chipActive]}
+            onPress={() => setIssueTypeId(t.id)}
           >
-            <Text style={[styles.chipText, workCategory === t && styles.chipTextActive]}>{t}</Text>
+            <Text style={[styles.chipText, issueTypeId === t.id && styles.chipTextActive]}>
+              {t.id} · {t.label}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -175,45 +165,46 @@ export default function CreateIssueScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 16, backgroundColor: "#eef2f6" },
-  label: { fontWeight: "700", marginBottom: 8, color: "#0b2a43" },
-  hint: { color: "#5b6b7c", marginBottom: 12 },
+  page: { padding: 16, backgroundColor: "#0a0c10" },
+  label: { fontWeight: "700", marginBottom: 8, color: "#e8eef6" },
+  hint: { color: "#8b9bb0", marginBottom: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
   chip: {
-    backgroundColor: "#fff",
+    backgroundColor: "#12161d",
     borderWidth: 1,
-    borderColor: "#d5dee8",
+    borderColor: "#243041",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  chipActive: { backgroundColor: "#0f4c81", borderColor: "#0f4c81" },
-  chipText: { color: "#152033", fontSize: 12, fontWeight: "600" },
-  chipTextActive: { color: "#fff" },
+  chipActive: { backgroundColor: "#3b9eff", borderColor: "#3b9eff" },
+  chipText: { color: "#e8eef6", fontSize: 12, fontWeight: "600" },
+  chipTextActive: { color: "#041018" },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: "#12161d",
     borderWidth: 1,
-    borderColor: "#d5dee8",
+    borderColor: "#243041",
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
+    color: "#e8eef6",
   },
   primary: {
-    backgroundColor: "#0f4c81",
+    backgroundColor: "#3b9eff",
     padding: 14,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 8,
   },
-  primaryText: { color: "#fff", fontWeight: "700" },
+  primaryText: { color: "#041018", fontWeight: "700" },
   secondary: {
-    backgroundColor: "#fff",
+    backgroundColor: "#12161d",
     borderWidth: 1,
-    borderColor: "#0f4c81",
+    borderColor: "#3b9eff",
     padding: 14,
     borderRadius: 12,
     alignItems: "center",
   },
-  secondaryText: { color: "#0f4c81", fontWeight: "700" },
-  error: { color: "#be123c", marginTop: 8 },
+  secondaryText: { color: "#3b9eff", fontWeight: "700" },
+  error: { color: "#fb7185", marginTop: 8 },
 });

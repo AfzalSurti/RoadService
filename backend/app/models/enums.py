@@ -24,29 +24,6 @@ class IssuePriority(str, Enum):
     CRITICAL = "critical"
 
 
-class IssueType(str, Enum):
-    POTHOLE = "pothole"
-    DAMAGED_ROAD = "damaged_road"
-    BROKEN_DRAINAGE = "broken_drainage"
-    ENCROACHMENT = "encroachment"
-    ROAD_FURNITURE = "road_furniture"
-    PAVEMENT = "pavement"
-    HIGHWAY = "highway"
-    VEHICLE_BREAKDOWN = "vehicle_breakdown"
-    UNWANTED_MATERIAL = "unwanted_material"
-    OTHER = "other"
-
-
-class WorkCategory(str, Enum):
-    PAVEMENT = "pavement"
-    HIGHWAY = "highway"
-    ROAD_FURNITURE = "road_furniture"
-    ENCROACHMENT = "encroachment"
-    DRAINAGE = "drainage"
-    SAFETY = "safety"
-    OTHER = "other"
-
-
 # Explicit allowed transitions (from_status -> set of to_status)
 STATUS_TRANSITIONS: dict[IssueStatus, set[IssueStatus]] = {
     IssueStatus.OPEN: {IssueStatus.IN_PROGRESS},

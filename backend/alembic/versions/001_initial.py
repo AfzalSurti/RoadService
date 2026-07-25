@@ -52,120 +52,189 @@ issue_status = sa.Enum(
 
 
 def upgrade() -> None:
-    user_role.create(op.get_bind(), checkfirst=True)
-    issue_type.create(op.get_bind(), checkfirst=True)
-    work_category.create(op.get_bind(), checkfirst=True)
-    issue_priority.create(op.get_bind(), checkfirst=True)
-    issue_status.create(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    # Idempotent enum create (Neon may retain types from a prior failed migration)
+    for typ, values in [
+        ("user_role", "'government','admin','contractor','surveyor'"),
+        (
+            "issue_type",
+            "'pothole','damaged_road','broken_drainage','encroachment','road_furniture',"
+            "'pavement','highway','vehicle_breakdown','unwanted_material','other'",
+        ),
+        (
+            "work_category",
+            "'pavement','highway','road_furniture','encroachment','drainage','safety','other'",
+        ),
+        ("issue_priority", "'low','medium','high','critical'"),
+        (
+            "issue_status",
+            "'open','in_progress','completed','verification_pending','under_review','closed'",
+        ),
+    ]:
+        bind.execute(
+            sa.text(
+                f"DO $$ BEGIN CREATE TYPE {typ} AS ENUM ({values}); "
+                f"EXCEPTION WHEN duplicate_object THEN null; END $$;"
+            )
+        )
 
-    op.create_table(
-        "users",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("email", sa.String(255), nullable=False),
-        sa.Column("full_name", sa.String(255), nullable=False),
-        sa.Column("hashed_password", sa.String(255), nullable=False),
-        sa.Column("role", user_role, nullable=False),
-        sa.Column("phone", sa.String(32), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                hashed_password VARCHAR(255) NOT NULL,
+                role user_role NOT NULL,
+                phone VARCHAR(32),
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
+    op.execute(sa.text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
 
-    op.create_table(
-        "projects",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("location", sa.String(512), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("chainage_from", sa.String(64), nullable=True),
-        sa.Column("chainage_to", sa.String(64), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    # Fall back to original create_table path only when tables missing — use IF NOT EXISTS for all
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                location VARCHAR(512) NOT NULL,
+                description TEXT,
+                chainage_from VARCHAR(64),
+                chainage_to VARCHAR(64),
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_projects_name", "projects", ["name"])
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_projects_name ON projects (name)"))
 
-    op.create_table(
-        "project_contractors",
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS project_contractors (
+                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                PRIMARY KEY (project_id, user_id)
+            )
+            """
+        )
     )
-    op.create_table(
-        "project_surveyors",
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS project_surveyors (
+                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                PRIMARY KEY (project_id, user_id)
+            )
+            """
+        )
     )
 
-    op.create_table(
-        "issues",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=False),
-        sa.Column("issue_type", issue_type, nullable=False),
-        sa.Column("work_category", work_category, nullable=False),
-        sa.Column("description", sa.Text(), nullable=False),
-        sa.Column("priority", issue_priority, nullable=False),
-        sa.Column("status", issue_status, nullable=False),
-        sa.Column("chainage", sa.String(64), nullable=True),
-        sa.Column("before_photo_path", sa.String(512), nullable=False),
-        sa.Column("before_lat", sa.Float(), nullable=False),
-        sa.Column("before_lng", sa.Float(), nullable=False),
-        sa.Column("completion_photo_path", sa.String(512), nullable=True),
-        sa.Column("completion_lat", sa.Float(), nullable=True),
-        sa.Column("completion_lng", sa.Float(), nullable=True),
-        sa.Column("completion_remarks", sa.Text(), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("verification_photo_path", sa.String(512), nullable=True),
-        sa.Column("verification_lat", sa.Float(), nullable=True),
-        sa.Column("verification_lng", sa.Float(), nullable=True),
-        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("deadline_days", sa.Integer(), nullable=False),
-        sa.Column("deadline_date", sa.Date(), nullable=False),
-        sa.Column("reported_by_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("assigned_contractor_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS issues (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects(id),
+                issue_type issue_type NOT NULL,
+                work_category work_category NOT NULL,
+                description TEXT NOT NULL,
+                priority issue_priority NOT NULL,
+                status issue_status NOT NULL,
+                chainage VARCHAR(64),
+                before_photo_path VARCHAR(512) NOT NULL,
+                before_lat FLOAT NOT NULL,
+                before_lng FLOAT NOT NULL,
+                completion_photo_path VARCHAR(512),
+                completion_lat FLOAT,
+                completion_lng FLOAT,
+                completion_remarks TEXT,
+                completed_at TIMESTAMPTZ,
+                verification_photo_path VARCHAR(512),
+                verification_lat FLOAT,
+                verification_lng FLOAT,
+                verified_at TIMESTAMPTZ,
+                deadline_days INTEGER NOT NULL,
+                deadline_date DATE NOT NULL,
+                reported_by_id INTEGER NOT NULL REFERENCES users(id),
+                assigned_contractor_id INTEGER NOT NULL REFERENCES users(id),
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_issues_project_id", "issues", ["project_id"])
-    op.create_index("ix_issues_status", "issues", ["status"])
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_issues_project_id ON issues (project_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_issues_status ON issues (status)"))
 
-    op.create_table(
-        "issue_status_history",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("issue_id", sa.Integer(), sa.ForeignKey("issues.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("from_status", issue_status, nullable=True),
-        sa.Column("to_status", issue_status, nullable=False),
-        sa.Column("actor_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
-        sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS issue_status_history (
+                id SERIAL PRIMARY KEY,
+                issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+                from_status issue_status,
+                to_status issue_status NOT NULL,
+                actor_id INTEGER REFERENCES users(id),
+                note TEXT,
+                created_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_issue_status_history_issue_id", "issue_status_history", ["issue_id"])
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_issue_status_history_issue_id ON issue_status_history (issue_id)"
+        )
+    )
 
-    op.create_table(
-        "issue_rejections",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("issue_id", sa.Integer(), sa.ForeignKey("issues.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("reason", sa.Text(), nullable=False),
-        sa.Column("comments", sa.Text(), nullable=True),
-        sa.Column("photo_path", sa.String(512), nullable=True),
-        sa.Column("lat", sa.Float(), nullable=True),
-        sa.Column("lng", sa.Float(), nullable=True),
-        sa.Column("rejected_by_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS issue_rejections (
+                id SERIAL PRIMARY KEY,
+                issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+                reason TEXT NOT NULL,
+                comments TEXT,
+                photo_path VARCHAR(512),
+                lat FLOAT,
+                lng FLOAT,
+                rejected_by_id INTEGER NOT NULL REFERENCES users(id),
+                created_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_issue_rejections_issue_id", "issue_rejections", ["issue_id"])
+    op.execute(
+        sa.text("CREATE INDEX IF NOT EXISTS ix_issue_rejections_issue_id ON issue_rejections (issue_id)")
+    )
 
-    op.create_table(
-        "notifications",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("issue_id", sa.Integer(), sa.ForeignKey("issues.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("title", sa.String(255), nullable=False),
-        sa.Column("message", sa.Text(), nullable=False),
-        sa.Column("is_read", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+    op.execute(
+        sa.text(
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                issue_id INTEGER REFERENCES issues(id) ON DELETE SET NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT false,
+                created_at TIMESTAMPTZ DEFAULT now()
+            )
+            """
+        )
     )
-    op.create_index("ix_notifications_user_id", "notifications", ["user_id"])
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications (user_id)"))
 
 
 def downgrade() -> None:

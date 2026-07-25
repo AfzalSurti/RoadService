@@ -74,6 +74,11 @@ export const api = {
       "/api/v1/notifications",
       { token }
     ),
+  catalog: (token: string) =>
+    request<{
+      categories: { id: string; name: string }[];
+      types: { id: string; label: string; category_id: string }[];
+    }>("/api/v1/catalog/defects", { token }),
 };
 
 export { API_URL };

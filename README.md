@@ -9,7 +9,10 @@ Road Issue Management System — report, track, and resolve road maintenance iss
 | API | FastAPI + SQLAlchemy + Alembic + PostgreSQL (Neon via `DATABASE_URL`) |
 | Web | **React (Vite + TypeScript)** — thin FastAPI client |
 | Mobile | **React Native (Expo)** — Surveyor & Contractor |
+| Photos | **Cloudinary** (`CLOUDINARY_*` in `.env`) |
 | Jobs | APScheduler — 24h Completed → Verification Pending |
+
+Issue types come from the client defect sheets (ATMS-1…, S1…, letter codes). See `GET /api/v1/catalog/defects`.
 
 ## Quick start
 

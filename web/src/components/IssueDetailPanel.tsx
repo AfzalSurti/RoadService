@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import type { Issue } from "../types";
-import { StatusBadge, formatLabel } from "./StatusBadge";
+import { StatusBadge } from "./StatusBadge";
 
 type Props = {
   issueId: number;
@@ -44,7 +44,8 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
       <div className="drawer" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <h2 style={{ margin: 0 }}>
-            #{issue.id} · {formatLabel(issue.issue_type)}
+            #{issue.id} · {issue.issue_type}
+            {issue.issue_type_label ? ` · ${issue.issue_type_label}` : ""}
           </h2>
           <button className="btn ghost" type="button" onClick={onClose}>
             Close
@@ -81,7 +82,7 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
           </div>
           <div>
             <dt>Category</dt>
-            <dd>{formatLabel(issue.work_category)}</dd>
+            <dd>{issue.work_category_label || issue.work_category}</dd>
           </div>
         </dl>
 

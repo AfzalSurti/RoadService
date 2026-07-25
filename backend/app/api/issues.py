@@ -4,10 +4,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.catalog.defects import CATEGORIES, DEFECT_BY_ID, resolve_defect
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
-from app.models.enums import IssuePriority, IssueStatus, IssueType, UserRole, WorkCategory
+from app.models.enums import IssuePriority, IssueStatus, UserRole
 from app.models.issue import Issue, IssueRejection, IssueStatusHistory
 from app.models.user import User
 from app.schemas import IssueAdminUpdate, IssueOut
@@ -26,10 +28,15 @@ from app.services.issue_service import (
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
+_CATEGORY_NAMES = {c["id"]: c["name"] for c in CATEGORIES}
+
 
 def _to_out(issue: Issue) -> IssueOut:
     data = IssueOut.model_validate(issue)
     data.remaining_days = remaining_days(issue.deadline_date)
+    defect = DEFECT_BY_ID.get(issue.issue_type)
+    data.issue_type_label = defect.label if defect else issue.issue_type
+    data.work_category_label = _CATEGORY_NAMES.get(issue.work_category, issue.work_category)
     return data
 
 
@@ -62,8 +69,8 @@ async def create_issue(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
     project_id: Annotated[int, Form()],
-    issue_type: Annotated[IssueType, Form()],
-    work_category: Annotated[WorkCategory, Form()],
+    issue_type: Annotated[str, Form()],
+    work_category: Annotated[str, Form()],
     description: Annotated[str, Form()],
     before_lat: Annotated[float, Form()],
     before_lng: Annotated[float, Form()],
@@ -75,9 +82,13 @@ async def create_issue(
 ):
     """Surveyor creates issue with camera photo + GPS (multipart)."""
     assert_surveyor(user)
+    try:
+        defect = resolve_defect(issue_type, work_category)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     project = await get_project_or_404(db, project_id)
     if user not in project.surveyors and user.role != UserRole.ADMIN:
-        # Allow if surveyor is assigned to project
         surveyor_ids = {s.id for s in project.surveyors}
         if user.id not in surveyor_ids:
             raise HTTPException(status_code=403, detail="Surveyor not assigned to this project")
@@ -93,8 +104,8 @@ async def create_issue(
 
     issue = Issue(
         project_id=project_id,
-        issue_type=issue_type,
-        work_category=work_category,
+        issue_type=defect.id,
+        work_category=defect.category_id,
         description=description,
         priority=priority,
         status=IssueStatus.OPEN,

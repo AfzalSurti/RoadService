@@ -1,3 +1,3 @@
-from app.api import analytics, auth, issues, notifications, projects, users
+from app.api import analytics, auth, catalog, issues, notifications, projects, users
 
-__all__ = ["analytics", "auth", "issues", "notifications", "projects", "users"]
+__all__ = ["analytics", "auth", "catalog", "issues", "notifications", "projects", "users"]

@@ -1,10 +1,11 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import IssuePriority, IssueStatus, IssueType, WorkCategory
+from app.models.enums import IssuePriority, IssueStatus
+from app.models.pg_enum import pg_enum
 
 
 class Issue(Base):
@@ -12,33 +13,32 @@ class Issue(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    issue_type: Mapped[IssueType] = mapped_column(Enum(IssueType, name="issue_type"), nullable=False)
-    work_category: Mapped[WorkCategory] = mapped_column(
-        Enum(WorkCategory, name="work_category"), nullable=False
-    )
+    # Catalog IDs e.g. ATMS-1, S1, T — see app.catalog.defects
+    issue_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    work_category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     priority: Mapped[IssuePriority] = mapped_column(
-        Enum(IssuePriority, name="issue_priority"), default=IssuePriority.MEDIUM
+        pg_enum(IssuePriority, "issue_priority"), default=IssuePriority.MEDIUM
     )
     status: Mapped[IssueStatus] = mapped_column(
-        Enum(IssueStatus, name="issue_status"), default=IssueStatus.OPEN, index=True
+        pg_enum(IssueStatus, "issue_status"), default=IssueStatus.OPEN, index=True
     )
     chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Before (creation) — surveyor
-    before_photo_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    before_photo_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     before_lat: Mapped[float] = mapped_column(Float, nullable=False)
     before_lng: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Completion — contractor
-    completion_photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    completion_photo_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     completion_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     completion_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     completion_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Verification — surveyor
-    verification_photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    verification_photo_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     verification_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     verification_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -63,7 +63,7 @@ class Issue(Base):
     rejection_history = relationship("IssueRejection", back_populates="issue", order_by="IssueRejection.created_at")
 
 
-_issue_status_enum = Enum(IssueStatus, name="issue_status", create_constraint=False)
+_issue_status_enum = pg_enum(IssueStatus, "issue_status")
 
 
 class IssueStatusHistory(Base):
@@ -87,7 +87,7 @@ class IssueRejection(Base):
     issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), nullable=False, index=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     comments: Mapped[str | None] = mapped_column(Text, nullable=True)
-    photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     rejected_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

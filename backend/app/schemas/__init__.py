@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.enums import IssuePriority, IssueStatus, IssueType, UserRole, WorkCategory
+from app.models.enums import IssuePriority, IssueStatus, UserRole
 
 
 class Token(BaseModel):
@@ -81,15 +81,15 @@ class ProjectOut(BaseModel):
 
 class IssueCreate(BaseModel):
     project_id: int
-    issue_type: IssueType
-    work_category: WorkCategory
+    issue_type: str
+    work_category: str
     description: str
     priority: IssuePriority = IssuePriority.MEDIUM
     chainage: str | None = None
     before_lat: float
     before_lng: float
     deadline_days: int = Field(default=10, ge=1, le=365)
-    assigned_contractor_id: int | None = None  # defaults to project's first contractor
+    assigned_contractor_id: int | None = None
 
 
 class IssueComplete(BaseModel):
@@ -114,7 +114,7 @@ class IssueAdminUpdate(BaseModel):
     assigned_contractor_id: int | None = None
     deadline_days: int | None = Field(default=None, ge=1, le=365)
     priority: IssuePriority | None = None
-    status: IssueStatus | None = None  # admin override only
+    status: IssueStatus | None = None
 
 
 class StatusHistoryOut(BaseModel):
@@ -143,8 +143,10 @@ class IssueOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     project_id: int
-    issue_type: IssueType
-    work_category: WorkCategory
+    issue_type: str
+    work_category: str
+    issue_type_label: str | None = None
+    work_category_label: str | None = None
     description: str
     priority: IssuePriority
     status: IssueStatus

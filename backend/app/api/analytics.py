@@ -104,8 +104,8 @@ async def export_excel(
         ws.append([
             i.id,
             i.project_id,
-            i.issue_type.value,
-            i.work_category.value,
+            i.issue_type,
+            i.work_category,
             i.priority.value,
             i.status.value,
             i.chainage,
@@ -142,7 +142,7 @@ async def export_pdf(
     ]
     data = [["ID", "Type", "Status", "Priority", "Deadline"]]
     for i in issues:
-        data.append([str(i.id), i.issue_type.value, i.status.value, i.priority.value, i.deadline_date.isoformat()])
+        data.append([str(i.id), i.issue_type, i.status.value, i.priority.value, i.deadline_date.isoformat()])
     table = Table(data, repeatRows=1)
     table.setStyle(
         TableStyle([

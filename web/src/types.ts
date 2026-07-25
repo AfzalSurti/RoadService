@@ -56,6 +56,8 @@ export type Issue = {
   project_id: number;
   issue_type: string;
   work_category: string;
+  issue_type_label?: string | null;
+  work_category_label?: string | null;
   description: string;
   priority: string;
   status: IssueStatus;

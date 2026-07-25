@@ -1,10 +1,8 @@
 from app.models.enums import (
     IssuePriority,
     IssueStatus,
-    IssueType,
     STATUS_TRANSITIONS,
     UserRole,
-    WorkCategory,
 )
 from app.models.issue import Issue, IssueRejection, IssueStatusHistory
 from app.models.notification import Notification
@@ -22,8 +20,6 @@ __all__ = [
     "IssueStatusHistory",
     "IssueStatus",
     "IssuePriority",
-    "IssueType",
-    "WorkCategory",
     "STATUS_TRANSITIONS",
     "Notification",
 ]
