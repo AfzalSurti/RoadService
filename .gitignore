@@ -1,0 +1,60 @@
+# Environment
+.env
+.env.local
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+dist/
+build/
+
+# Django
+web/**/local_settings.py
+web/staticfiles/
+web/media/
+*.sqlite3
+
+# FastAPI / uploads
+backend/uploads/
+backend/media/
+
+# Node / React Native
+node_modules/
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+.metro-health-check*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Alembic
+# keep migrations, ignore local versions if any

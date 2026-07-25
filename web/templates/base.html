@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}RoadService{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if session_user %}
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Road<span>Service</span></div>
+      <nav>
+        <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="{% url 'issues' %}" class="{% if request.resolver_match.url_name == 'issues' or request.resolver_match.url_name == 'issue_detail' %}active{% endif %}">Issues</a>
+        <a href="{% url 'map' %}" class="{% if request.resolver_match.url_name == 'map' %}active{% endif %}">Map</a>
+        {% if session_user.role == 'admin' %}
+        <a href="{% url 'projects' %}" class="{% if request.resolver_match.url_name == 'projects' %}active{% endif %}">Projects</a>
+        <a href="{% url 'users' %}" class="{% if request.resolver_match.url_name == 'users' %}active{% endif %}">Users</a>
+        {% endif %}
+        <a href="{% url 'export_excel' %}">Export Excel</a>
+        <a href="{% url 'export_pdf' %}">Export PDF</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="user-chip">{{ session_user.full_name }}<small>{{ session_user.role }}</small></div>
+        <a class="logout" href="{% url 'logout' %}">Sign out</a>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+        {% if readonly %}<span class="badge view-only">View only</span>{% endif %}
+      </header>
+      {% if messages %}
+      <ul class="flash">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    {% block auth %}{% endblock %}
+  {% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

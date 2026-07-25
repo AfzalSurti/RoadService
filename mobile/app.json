@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "RoadService",
+    "slug": "roadservice",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "roadservice",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow RoadService to capture issue photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow RoadService to attach GPS to photos."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

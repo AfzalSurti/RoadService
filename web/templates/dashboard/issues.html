@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block page_title %}Issues{% endblock %}
+{% block content %}
+<div class="tabs">
+  <a class="pill {% if current_status == 'all' %}active{% endif %}" href="{% url 'issues' %}">All Issues</a>
+  <a class="pill {% if current_status == 'open' %}active{% endif %}" href="?status=open">Open</a>
+  <a class="pill {% if current_status == 'in_progress' %}active{% endif %}" href="?status=in_progress">In Progress</a>
+  <a class="pill {% if current_status == 'completed' %}active{% endif %}" href="?status=completed">Completed</a>
+  <a class="pill {% if current_status == 'verification_pending' %}active{% endif %}" href="?status=verification_pending">Verification Pending</a>
+  <a class="pill {% if current_status == 'under_review' %}active{% endif %}" href="?status=under_review">Under Review</a>
+  <a class="pill {% if current_status == 'closed' %}active{% endif %}" href="?status=closed">Closed</a>
+</div>
+
+<section class="panel">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Work Category</th>
+        <th>Issue Type</th>
+        <th>Chainage</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Reporter</th>
+        <th>Assignee</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in issues %}
+      <tr>
+        <td>#{{ i.id }}</td>
+        <td>{{ i.work_category }}</td>
+        <td>{{ i.issue_type }}</td>
+        <td>{{ i.chainage|default:"—" }}</td>
+        <td>{{ i.priority }}</td>
+        <td><span class="badge status-{{ i.status }}">{{ i.status }}</span></td>
+        <td>{{ i.reported_by_id }}</td>
+        <td>{{ i.assigned_contractor_id }}</td>
+        <td>{{ i.created_at|slice:":10" }}</td>
+        <td><a href="{% url 'issue_detail' i.id %}">View</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10">No issues found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

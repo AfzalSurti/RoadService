@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block page_title %}Issue #{{ issue.id }}{% endblock %}
+{% block content %}
+<section class="detail-grid">
+  <div class="panel">
+    <h2>{{ issue.issue_type }} · {{ issue.work_category }}</h2>
+    <p class="muted">{{ issue.description }}</p>
+    <dl class="meta">
+      <div><dt>Status</dt><dd><span class="badge status-{{ issue.status }}">{{ issue.status }}</span></dd></div>
+      <div><dt>Priority</dt><dd>{{ issue.priority }}</dd></div>
+      <div><dt>Chainage</dt><dd>{{ issue.chainage|default:"—" }}</dd></div>
+      <div><dt>GPS</dt><dd>{{ issue.before_lat }}, {{ issue.before_lng }}</dd></div>
+      <div><dt>Deadline</dt><dd>{{ issue.deadline_date }} ({{ issue.remaining_days }} days left)</dd></div>
+      <div><dt>Reporter / Assignee</dt><dd>{{ issue.reported_by_id }} / {{ issue.assigned_contractor_id }}</dd></div>
+    </dl>
+    {% if session_user.role == 'contractor' and issue.status == 'open' %}
+    <form method="post" action="{% url 'contractor_start' issue.id %}">{% csrf_token %}<button type="submit">Start work</button></form>
+    {% endif %}
+  </div>
+    <div class="panel photos">
+    <h3>Before</h3>
+    <img src="{{ api_base }}/uploads/{{ issue.before_photo_path }}" alt="Before" onerror="this.style.display='none'" />
+    {% if issue.completion_photo_path %}
+    <h3>After (completion)</h3>
+    <img src="{{ api_base }}/uploads/{{ issue.completion_photo_path }}" alt="After" onerror="this.style.display='none'" />
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Audit trail</h2>
+  <ul class="timeline">
+    {% for h in issue.status_history %}
+    <li>
+      <strong>{{ h.from_status|default:"—" }} → {{ h.to_status }}</strong>
+      <span>{{ h.created_at }} · actor {{ h.actor_id|default:"system" }}</span>
+      {% if h.note %}<p>{{ h.note }}</p>{% endif %}
+    </li>
+    {% empty %}
+    <li>No history yet.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

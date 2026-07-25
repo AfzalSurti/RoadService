@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Sign in — RoadService{% endblock %}
+{% block auth %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="brand large">Road<span>Service</span></div>
+    <p class="muted">Sign in to the road issue management dashboard</p>
+    {% if messages %}
+    <ul class="flash">
+      {% for message in messages %}
+      <li class="{{ message.tags }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <label>Email
+        <input type="email" name="email" required autofocus placeholder="admin@roadservice.local" />
+      </label>
+      <label>Password
+        <input type="password" name="password" required />
+      </label>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

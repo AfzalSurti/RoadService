@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block page_title %}Projects{% endblock %}
+{% block content %}
+<section class="panel">
+  <table class="data">
+    <thead><tr><th>ID</th><th>Name</th><th>Location</th><th>Chainage</th><th>Active</th></tr></thead>
+    <tbody>
+      {% for p in projects %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.name }}</td>
+        <td>{{ p.location }}</td>
+        <td>{{ p.chainage_from }} – {{ p.chainage_to }}</td>
+        <td>{{ p.is_active }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

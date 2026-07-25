@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block page_title %}Map{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="legend">
+    <span class="badge status-open">Open</span>
+    <span class="badge status-in_progress">In Progress</span>
+    <span class="badge status-completed">Completed</span>
+    <span class="badge status-verification_pending">Verification Pending</span>
+    <span class="badge status-under_review">Under Review</span>
+    <span class="badge status-closed">Closed</span>
+  </div>
+  <div id="map" class="map-canvas"></div>
+</section>
+{{ issues|json_script:"issues-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+  const issues = JSON.parse(document.getElementById('issues-data').textContent);
+  const colors = {
+    open: '#e11d48',
+    in_progress: '#f59e0b',
+    completed: '#3b82f6',
+    verification_pending: '#8b5cf6',
+    under_review: '#ea580c',
+    closed: '#16a34a',
+  };
+  const map = L.map('map').setView([20.5937, 78.9629], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+  const bounds = [];
+  issues.forEach(i => {
+    const marker = L.circleMarker([i.before_lat, i.before_lng], {
+      radius: 8,
+      color: colors[i.status] || '#333',
+      fillColor: colors[i.status] || '#333',
+      fillOpacity: 0.85,
+    }).addTo(map);
+    marker.bindPopup(`<strong>#${i.id}</strong> ${i.issue_type}<br/>${i.status}`);
+    bounds.push([i.before_lat, i.before_lng]);
+  });
+  if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+</script>
+{% endblock %}
