@@ -1,11 +1,11 @@
 import type { IssueStatus } from "../types";
 
 const LABELS: Record<IssueStatus, string> = {
-  open: "Open",
+  open: "To Do",
   in_progress: "In Progress",
   completed: "Completed",
   verification_pending: "Verification Pending",
-  under_review: "Under Review",
+  under_review: "Under Review / Rework",
   closed: "Closed",
 };
 

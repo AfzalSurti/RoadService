@@ -5,7 +5,7 @@ import { useAuth } from "../lib/auth";
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("surveyor@roadservice.local");
+  const [email, setEmail] = useState("surveyor@roadservice.app");
   const [password, setPassword] = useState("Surveyor123!");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

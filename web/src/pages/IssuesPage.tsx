@@ -8,11 +8,11 @@ import { IssueDetailPanel } from "../components/IssueDetailPanel";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
   { key: "all", label: "All Issues" },
-  { key: "open", label: "Open" },
+  { key: "open", label: "To Do" },
   { key: "in_progress", label: "In Progress" },
   { key: "completed", label: "Completed" },
   { key: "verification_pending", label: "Verification Pending" },
-  { key: "under_review", label: "Under Review" },
+  { key: "under_review", label: "Under Review / Rework" },
   { key: "closed", label: "Closed" },
 ];
 

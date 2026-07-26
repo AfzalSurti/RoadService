@@ -31,6 +31,12 @@ router = APIRouter(prefix="/issues", tags=["issues"])
 _CATEGORY_NAMES = {c["id"]: c["name"] for c in CATEGORIES}
 
 
+def _assert_verifier(user: User) -> None:
+    """Surveyor verifies on site; admin may also approve/reject."""
+    if user.role not in (UserRole.SURVEYOR, UserRole.ADMIN):
+        raise HTTPException(status_code=403, detail="Only surveyor or admin can verify")
+
+
 def _to_out(issue: Issue) -> IssueOut:
     data = IssueOut.model_validate(issue)
     data.remaining_days = remaining_days(issue.deadline_date)
@@ -208,7 +214,7 @@ async def verify_approve(
     verification_lng: Annotated[float, Form()],
     photo: Annotated[UploadFile, File()],
 ):
-    assert_surveyor(user)
+    _assert_verifier(user)
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
         raise HTTPException(status_code=400, detail="Issue is not awaiting verification")
@@ -240,7 +246,7 @@ async def verify_reject(
     photo: Annotated[UploadFile, File()],
     comments: Annotated[str | None, Form()] = None,
 ):
-    assert_surveyor(user)
+    _assert_verifier(user)
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
         raise HTTPException(status_code=400, detail="Issue is not awaiting verification")

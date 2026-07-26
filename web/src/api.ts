@@ -115,6 +115,18 @@ export const api = {
   startIssue: (token: string, id: number) =>
     request<Issue>(`/api/v1/issues/${id}/start`, { method: "POST", token }),
 
+  reworkStart: (token: string, id: number) =>
+    request<Issue>(`/api/v1/issues/${id}/rework/start`, { method: "POST", token }),
+
+  completeIssue: (token: string, id: number, form: FormData) =>
+    request<Issue>(`/api/v1/issues/${id}/complete`, { method: "POST", token, body: form }),
+
+  approveIssue: (token: string, id: number, form: FormData) =>
+    request<Issue>(`/api/v1/issues/${id}/verify/approve`, { method: "POST", token, body: form }),
+
+  rejectIssue: (token: string, id: number, form: FormData) =>
+    request<Issue>(`/api/v1/issues/${id}/verify/reject`, { method: "POST", token, body: form }),
+
   adminUpdateIssue: (token: string, id: number, body: Record<string, unknown>) =>
     request<Issue>(`/api/v1/issues/${id}`, {
       method: "PATCH",

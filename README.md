@@ -73,10 +73,10 @@ npx expo start
 
 | Email | Password | Role |
 |-------|----------|------|
-| admin@roadservice.local | Admin123! | admin |
-| gov@roadservice.local | Gov123! | government |
-| contractor@roadservice.local | Contractor123! | contractor |
-| surveyor@roadservice.local | Surveyor123! | surveyor |
+| admin@roadservice.app | Admin123! | admin |
+| gov@roadservice.app | Gov123! | government |
+| contractor@roadservice.app | Contractor123! | contractor |
+| surveyor@roadservice.app | Surveyor123! | surveyor |
 
 ## Layout
 

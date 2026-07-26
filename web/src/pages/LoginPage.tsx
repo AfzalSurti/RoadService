@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 export function LoginPage() {
   const { token, login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@roadservice.local");
+  const [email, setEmail] = useState("admin@roadservice.app");
   const [password, setPassword] = useState("Admin123!");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

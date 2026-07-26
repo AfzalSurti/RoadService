@@ -145,6 +145,38 @@ table.data tr.clickable:hover { background: #1a222d; }
 .badge.status-under_review { background: #3a1d0c; color: #fdba74; }
 .badge.status-closed { background: #0f2e1c; color: #4ade80; }
 
+.camera-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0a0e14;
+}
+.camera-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.camera-video {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #000;
+  margin-bottom: 0.75rem;
+}
+.reject-box {
+  border: 1px solid #7f1d1d;
+  background: #2a1014;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+}
+.reject-box h3 { margin: 0 0 0.5rem; color: #fda4af; }
+.actions-stack { display: grid; gap: 0.65rem; margin-top: 1rem; }
+
 .btn {
   background: var(--accent);
   color: #041018;
@@ -160,12 +192,20 @@ table.data tr.clickable:hover { background: #1a222d; }
 
 .form-grid { display: grid; gap: 0.85rem; }
 .form-grid label { display: grid; gap: 0.35rem; font-weight: 500; font-size: 0.9rem; }
-.form-grid input, .form-grid select, .form-grid textarea {
+.form-grid input, .form-grid select, .form-grid textarea,
+.actions-stack textarea, .actions-stack input {
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #0a0e14;
   color: var(--ink);
+  width: 100%;
+}
+.actions-stack label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .detail-layout {

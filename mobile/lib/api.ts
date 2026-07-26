@@ -22,6 +22,13 @@ export type Issue = {
   remaining_days?: number;
   assigned_contractor_id: number;
   reported_by_id: number;
+  completion_remarks?: string | null;
+  rejection_history?: {
+    id: number;
+    reason: string;
+    comments: string | null;
+    created_at: string;
+  }[];
 };
 
 async function request<T>(
@@ -56,6 +63,7 @@ export const api = {
     }),
   issues: (token: string, status?: string) =>
     request<Issue[]>(`/api/v1/issues${status ? `?status=${status}` : ""}`, { token }),
+  issue: (token: string, id: number) => request<Issue>(`/api/v1/issues/${id}`, { token }),
   projects: (token: string) => request<any[]>("/api/v1/projects", { token }),
   startIssue: (token: string, id: number) =>
     request<Issue>(`/api/v1/issues/${id}/start`, { method: "POST", token }),
