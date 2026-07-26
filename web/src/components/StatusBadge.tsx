@@ -11,9 +11,9 @@ const LABELS: Record<IssueStatus, string> = {
 
 export function StatusBadge({ status }: { status: IssueStatus | string }) {
   const key = status as IssueStatus;
-  return <span className={`badge status-${status}`}>{LABELS[key] || status.replaceAll("_", " ")}</span>;
+  return <span className={`badge status-${status}`}>{LABELS[key] || status.replace(/_/g, " ")}</span>;
 }
 
 export function formatLabel(value: string) {
-  return value.replaceAll("_", " ");
+  return value.replace(/_/g, " ");
 }

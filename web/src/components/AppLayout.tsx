@@ -12,7 +12,7 @@ export function AppLayout() {
           Road<span>Service</span>
         </div>
         <nav>
-          <NavLink to="/" end>
+          <NavLink to="/dashboard" end>
             Dashboard
           </NavLink>
           <NavLink to="/issues">Issues</NavLink>
@@ -35,7 +35,7 @@ export function AppLayout() {
             type="button"
             onClick={() => {
               logout();
-              navigate("/login");
+              navigate("/");
             }}
           >
             Sign out

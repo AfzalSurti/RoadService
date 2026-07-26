@@ -4,6 +4,7 @@ import { useAuth } from "./auth";
 import { AppLayout } from "./components/AppLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IssuesPage } from "./pages/IssuesPage";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -18,28 +19,28 @@ function Protected({ children }: { children: ReactNode }) {
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { role } = useAuth();
-  if (role !== "admin") return <Navigate to="/" replace />;
+  if (role !== "admin") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/"
         element={
           <Protected>
             <AppLayout />
           </Protected>
         }
       >
-        <Route index element={<DashboardPage />} />
-        <Route path="issues" element={<IssuesPage />} />
-        <Route path="map" element={<MapPage />} />
-        <Route path="reports" element={<ReportsPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/issues" element={<IssuesPage />} />
+        <Route path="/map" element={<MapPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route
-          path="users"
+          path="/users"
           element={
             <AdminOnly>
               <UsersPage />
@@ -47,7 +48,7 @@ export default function App() {
           }
         />
         <Route
-          path="projects"
+          path="/projects"
           element={
             <AdminOnly>
               <ProjectsPage />

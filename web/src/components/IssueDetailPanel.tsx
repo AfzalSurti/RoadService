@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import * as v from "../lib/validation";
 import type { Issue } from "../types";
 import { CameraCapture, type CapturedShot } from "./CameraCapture";
 import { StatusBadge } from "./StatusBadge";
@@ -24,6 +25,7 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
   const [remarks, setRemarks] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [rejectComments, setRejectComments] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
 
   const load = () => {
     if (!token) return;
@@ -260,15 +262,36 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
                   <textarea
                     rows={3}
                     value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
+                    aria-invalid={Boolean(fieldErrors.remarks)}
+                    onChange={(e) => {
+                      setRemarks(e.target.value);
+                      if (fieldErrors.remarks) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.remarks;
+                          return next;
+                        });
+                      }
+                    }}
                     placeholder="What work was done?"
                   />
+                  {fieldErrors.remarks ? <span className="field-error">{fieldErrors.remarks}</span> : null}
                 </label>
                 <button
                   className="btn"
                   type="button"
                   disabled={busy}
-                  onClick={() => setCameraMode("complete")}
+                  onClick={() => {
+                    const remarksErr = v.minLength(remarks, 5, "Remarks");
+                    if (remarksErr) {
+                      setFieldErrors({ remarks: remarksErr });
+                      setError(remarksErr);
+                      return;
+                    }
+                    setFieldErrors({});
+                    setError(null);
+                    setCameraMode("complete");
+                  }}
                 >
                   Submit (camera + GPS + date)
                 </button>
@@ -293,28 +316,61 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
                   Rejection reason
                   <input
                     value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
+                    aria-invalid={Boolean(fieldErrors.rejectReason)}
+                    onChange={(e) => {
+                      setRejectReason(e.target.value);
+                      if (fieldErrors.rejectReason) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.rejectReason;
+                          return next;
+                        });
+                      }
+                    }}
                     placeholder="Why rework is needed"
                   />
+                  {fieldErrors.rejectReason ? (
+                    <span className="field-error">{fieldErrors.rejectReason}</span>
+                  ) : null}
                 </label>
                 <label>
                   Comments for contractor
                   <textarea
                     rows={3}
                     value={rejectComments}
-                    onChange={(e) => setRejectComments(e.target.value)}
+                    aria-invalid={Boolean(fieldErrors.rejectComments)}
+                    onChange={(e) => {
+                      setRejectComments(e.target.value);
+                      if (fieldErrors.rejectComments) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.rejectComments;
+                          return next;
+                        });
+                      }
+                    }}
                     placeholder="Visible to contractor on next visit"
                   />
+                  {fieldErrors.rejectComments ? (
+                    <span className="field-error">{fieldErrors.rejectComments}</span>
+                  ) : null}
                 </label>
                 <button
                   className="btn secondary"
                   type="button"
                   disabled={busy}
                   onClick={() => {
-                    if (!rejectReason.trim()) {
-                      setError("Rejection reason is required");
+                    const errors = v.collect({
+                      rejectReason: v.minLength(rejectReason, 3, "Rejection reason"),
+                      rejectComments: v.minLength(rejectComments, 5, "Comments"),
+                    });
+                    if (Object.keys(errors).length) {
+                      setFieldErrors(errors);
+                      setError(v.firstError(errors));
                       return;
                     }
+                    setFieldErrors({});
+                    setError(null);
                     setCameraMode("reject");
                   }}
                 >
@@ -327,7 +383,26 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
               <div className="form-grid">
                 <label>
                   Change deadline (days)
-                  <input value={deadlineDays} onChange={(e) => setDeadlineDays(e.target.value)} />
+                  <input
+                    value={deadlineDays}
+                    inputMode="numeric"
+                    aria-invalid={Boolean(fieldErrors.deadlineDays)}
+                    onChange={(e) => {
+                      setDeadlineDays(e.target.value);
+                      if (fieldErrors.deadlineDays) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.deadlineDays;
+                          return next;
+                        });
+                      }
+                    }}
+                  />
+                  {fieldErrors.deadlineDays ? (
+                    <span className="field-error">{fieldErrors.deadlineDays}</span>
+                  ) : (
+                    <span className="field-hint">1–365 days</span>
+                  )}
                 </label>
                 <button
                   className="btn secondary"
@@ -335,7 +410,15 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
                   disabled={busy}
                   onClick={async () => {
                     if (!token) return;
+                    const deadlineErr = v.integerInRange(deadlineDays, 1, 365, "Deadline");
+                    if (deadlineErr) {
+                      setFieldErrors({ deadlineDays: deadlineErr });
+                      setError(deadlineErr);
+                      return;
+                    }
+                    setFieldErrors({});
                     setBusy(true);
+                    setError(null);
                     try {
                       const updated = await api.adminUpdateIssue(token, issue.id, {
                         deadline_days: Number(deadlineDays),
