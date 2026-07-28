@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -17,12 +17,14 @@ const TABS: { key: "all" | IssueStatus; label: string }[] = [
 ];
 
 export function IssuesPage() {
-  const { token } = useAuth();
+  const { token, role, isReadonly } = useAuth();
   const [params, setParams] = useSearchParams();
   const status = (params.get("status") as IssueStatus | null) || null;
   const selectedId = params.get("id") ? Number(params.get("id")) : null;
+  const action = params.get("action");
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const load = () => {
@@ -42,7 +44,32 @@ export function IssuesPage() {
     if (el) el.textContent = "Issues";
   }, []);
 
+  const openIssue = (id: number, nextAction?: string) => {
+    const next = new URLSearchParams(params);
+    next.set("id", String(id));
+    if (nextAction) next.set("action", nextAction);
+    else next.delete("action");
+    setParams(next);
+  };
+
+  const startWork = async (issue: Issue, e: MouseEvent) => {
+    e.stopPropagation();
+    if (!token) return;
+    setBusyId(issue.id);
+    setError(null);
+    try {
+      if (issue.status === "under_review") await api.reworkStart(token, issue.id);
+      else await api.startIssue(token, issue.id);
+      load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const selected = issues.find((i) => i.id === selectedId) || null;
+  const showContractorActions = !isReadonly && role === "contractor";
 
   return (
     <>
@@ -78,6 +105,7 @@ export function IssuesPage() {
               <th>Reporter</th>
               <th>Assignee</th>
               <th>Created</th>
+              {showContractorActions ? <th>Quick action</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -85,11 +113,7 @@ export function IssuesPage() {
               <tr
                 key={i.id}
                 className="clickable"
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  next.set("id", String(i.id));
-                  setParams(next);
-                }}
+                onClick={() => openIssue(i.id)}
               >
                 <td>#{i.id}</td>
                 <td>{i.work_category_label || i.work_category}</td>
@@ -105,11 +129,44 @@ export function IssuesPage() {
                 <td>{i.reported_by_id}</td>
                 <td>{i.assigned_contractor_id}</td>
                 <td>{i.created_at.slice(0, 10)}</td>
+                {showContractorActions ? (
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {i.status === "open" || i.status === "under_review" ? (
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={busyId === i.id}
+                        onClick={(e) => startWork(i, e)}
+                      >
+                        {i.status === "under_review" ? "Start rework" : "Start work"}
+                      </button>
+                    ) : null}
+                    {i.status === "in_progress" ? (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => openIssue(i.id, "submit")}
+                      >
+                        Submit
+                      </button>
+                    ) : null}
+                    {i.status === "under_review" ? (
+                      <button
+                        className="btn ghost"
+                        type="button"
+                        style={{ marginLeft: 6 }}
+                        onClick={() => openIssue(i.id, "rejection")}
+                      >
+                        View comments
+                      </button>
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
             ))}
             {!issues.length ? (
               <tr>
-                <td colSpan={9}>No issues found.</td>
+                <td colSpan={showContractorActions ? 10 : 9}>No issues found.</td>
               </tr>
             ) : null}
           </tbody>
@@ -120,9 +177,11 @@ export function IssuesPage() {
         <IssueDetailPanel
           issueId={selectedId}
           fallback={selected}
+          focusAction={action}
           onClose={() => {
             const next = new URLSearchParams(params);
             next.delete("id");
+            next.delete("action");
             setParams(next);
           }}
           onChanged={() => {

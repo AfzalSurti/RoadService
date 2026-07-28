@@ -2,6 +2,16 @@ import type { DashboardStats, Issue, IssueStatus, Project, TokenResponse, User }
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
 
+export type Notification = {
+  id: number;
+  user_id: number;
+  issue_id: number | null;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
+
 export function mediaUrl(path?: string | null) {
   if (!path) return "";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
@@ -155,6 +165,18 @@ export const api = {
       categories: { id: string; name: string }[];
       types: { id: string; label: string; category_id: string }[];
     }>("/api/v1/catalog/defects", { token }),
+
+  notifications: (token: string, unreadOnly = false) =>
+    request<Notification[]>(
+      `/api/v1/notifications${unreadOnly ? "?unread_only=true" : ""}`,
+      { token }
+    ),
+
+  markNotificationRead: (token: string, id: number) =>
+    request<Notification>(`/api/v1/notifications/${id}/read`, { method: "POST", token }),
+
+  markAllNotificationsRead: (token: string) =>
+    request<{ marked: number }>("/api/v1/notifications/read-all", { method: "POST", token }),
 };
 
 export { ApiError, API_URL };

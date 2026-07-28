@@ -8,7 +8,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import analytics, auth, catalog, issues, notifications, projects, users
 from app.core.config import settings
-from app.jobs.verification import flip_stale_completed_to_verification_pending
+from app.jobs.verification import (
+    flip_stale_completed_to_verification_pending,
+    warn_approaching_verification_deadline,
+)
 
 scheduler = AsyncIOScheduler()
 
@@ -22,6 +25,13 @@ async def lifespan(_app: FastAPI):
             "interval",
             minutes=15,
             id="verification_pending_flip",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            warn_approaching_verification_deadline,
+            "interval",
+            minutes=15,
+            id="verification_due_soon",
             replace_existing=True,
         )
         scheduler.start()

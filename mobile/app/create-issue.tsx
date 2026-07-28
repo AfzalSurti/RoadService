@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { CameraCapture, type CapturedPhoto } from "../components/CameraCapture";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { enqueueOfflineJob, isNetworkError } from "../lib/offline";
 
 type DefectType = { id: string; label: string; category_id: string };
 type Category = { id: string; name: string };
@@ -75,7 +76,30 @@ export default function CreateIssueScreen() {
         name: "before.jpg",
         type: "image/jpeg",
       } as any);
-      await api.createIssue(token, form);
+      try {
+        await api.createIssue(token, form);
+      } catch (e) {
+        if (isNetworkError(e)) {
+          const fields: Record<string, string> = {
+            project_id: String(projectId),
+            issue_type: issueTypeId,
+            work_category: categoryId,
+            description,
+            before_lat: String(photo.lat),
+            before_lng: String(photo.lng),
+            deadline_days: deadlineDays,
+          };
+          if (chainage) fields.chainage = chainage;
+          await enqueueOfflineJob({
+            type: "create",
+            photoUri: photo.uri,
+            fields,
+          });
+          router.replace("/home");
+          return;
+        }
+        throw e;
+      }
       router.replace("/home");
     } catch (e: any) {
       setError(e.message);

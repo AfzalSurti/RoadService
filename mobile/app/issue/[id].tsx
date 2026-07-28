@@ -1,12 +1,19 @@
 import { Stack, useLocalSearchParams, router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CameraCapture, type CapturedPhoto } from "../../components/CameraCapture";
-import { api, type Issue } from "../../lib/api";
+import { api, API_URL, type Issue } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { enqueueOfflineJob, isNetworkError } from "../../lib/offline";
+
+function mediaUrl(path?: string | null) {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${API_URL}/uploads/${path.split(/[/\\]/).pop()}`;
+}
 
 export default function IssueDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
   const { token, role } = useAuth();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [mode, setMode] = useState<"none" | "complete" | "approve" | "reject">("none");
@@ -14,6 +21,7 @@ export default function IssueDetailScreen() {
   const [comments, setComments] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const load = async () => {
     if (!token) return;
@@ -25,6 +33,10 @@ export default function IssueDetailScreen() {
     load().catch((e) => setError(e.message));
   }, [token, id]);
 
+  useEffect(() => {
+    if (action === "submit") setMode("none");
+  }, [action]);
+
   const onPhoto = async (photo: CapturedPhoto) => {
     if (!token || !issue) return;
     try {
@@ -32,15 +44,31 @@ export default function IssueDetailScreen() {
       form.append("photo", { uri: photo.uri, name: "capture.jpg", type: "image/jpeg" } as any);
       const capturedAt = new Date().toISOString();
       if (mode === "complete") {
-        form.append("completion_lat", String(photo.lat));
-        form.append("completion_lng", String(photo.lng));
-        form.append(
-          "completion_remarks",
-          [remarks.trim(), `Captured at ${capturedAt}`, `GPS ${photo.lat}, ${photo.lng}`]
+        const fields = {
+          completion_lat: String(photo.lat),
+          completion_lng: String(photo.lng),
+          completion_remarks: [remarks.trim(), `Captured at ${capturedAt}`, `GPS ${photo.lat}, ${photo.lng}`]
             .filter(Boolean)
-            .join("\n")
-        );
-        await api.completeIssue(token, issue.id, form);
+            .join("\n"),
+        };
+        try {
+          for (const [k, v] of Object.entries(fields)) form.append(k, v);
+          await api.completeIssue(token, issue.id, form);
+        } catch (e) {
+          if (isNetworkError(e)) {
+            await enqueueOfflineJob({
+              type: "complete",
+              issueId: issue.id,
+              photoUri: photo.uri,
+              fields,
+            });
+            setInfo("Saved offline — will sync when network returns");
+            setMode("none");
+            router.replace("/home");
+            return;
+          }
+          throw e;
+        }
       } else if (mode === "approve") {
         form.append("verification_lat", String(photo.lat));
         form.append("verification_lng", String(photo.lng));
@@ -67,12 +95,13 @@ export default function IssueDetailScreen() {
   if (!issue) {
     return (
       <View style={styles.page}>
-        <Text>{error || "Loading…"}</Text>
+        <Text style={{ color: "#e8eef6" }}>{error || "Loading…"}</Text>
       </View>
     );
   }
 
   const latestRejection = [...(issue.rejection_history || [])].sort((a, b) => b.id - a.id)[0];
+  const showSubmitFocus = action === "submit" && issue.status === "in_progress";
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
@@ -85,8 +114,31 @@ export default function IssueDetailScreen() {
       </Text>
       <Text style={{ marginBottom: 16, color: "#e8eef6" }}>{issue.description}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {info ? <Text style={styles.info}>{info}</Text> : null}
 
-      {issue.status === "under_review" && latestRejection ? (
+      <View style={styles.photoGrid}>
+        <Text style={styles.section}>Photos</Text>
+        {issue.before_photo_path ? (
+          <>
+            <Text style={styles.meta}>Surveyor (before)</Text>
+            <Image source={{ uri: mediaUrl(issue.before_photo_path) }} style={styles.photo} />
+          </>
+        ) : null}
+        {issue.completion_photo_path ? (
+          <>
+            <Text style={styles.meta}>Contractor (submit)</Text>
+            <Image source={{ uri: mediaUrl(issue.completion_photo_path) }} style={styles.photo} />
+          </>
+        ) : null}
+        {issue.verification_photo_path ? (
+          <>
+            <Text style={styles.meta}>Final (closed)</Text>
+            <Image source={{ uri: mediaUrl(issue.verification_photo_path) }} style={styles.photo} />
+          </>
+        ) : null}
+      </View>
+
+      {(issue.status === "under_review" || action === "rejection") && latestRejection ? (
         <View style={styles.rejectBox}>
           <Text style={styles.rejectTitle}>Rework comments</Text>
           <Text style={styles.rejectText}>Reason: {latestRejection.reason}</Text>
@@ -104,7 +156,7 @@ export default function IssueDetailScreen() {
             await load();
           }}
         >
-          <Text style={styles.primaryText}>Mark In Progress</Text>
+          <Text style={styles.primaryText}>Start work</Text>
         </Pressable>
       ) : null}
 
@@ -121,17 +173,19 @@ export default function IssueDetailScreen() {
       ) : null}
 
       {role === "contractor" && issue.status === "in_progress" ? (
-        <View>
+        <View style={showSubmitFocus ? styles.focusBox : undefined}>
           <TextInput
             style={styles.input}
             placeholder="Description / remarks"
+            placeholderTextColor="#8b9bb0"
             value={remarks}
             onChangeText={setRemarks}
             multiline
           />
           <Pressable style={styles.primary} onPress={() => setMode("complete")}>
-            <Text style={styles.primaryText}>Submit (camera + GPS + date)</Text>
+            <Text style={styles.primaryText}>Submit (camera + GPS)</Text>
           </Pressable>
+          <Text style={styles.meta}>If offline, photo is queued and synced later.</Text>
         </View>
       ) : null}
 
@@ -145,12 +199,14 @@ export default function IssueDetailScreen() {
           <TextInput
             style={styles.input}
             placeholder="Rejection reason"
+            placeholderTextColor="#8b9bb0"
             value={reason}
             onChangeText={setReason}
           />
           <TextInput
             style={styles.input}
             placeholder="Comments for contractor"
+            placeholderTextColor="#8b9bb0"
             value={comments}
             onChangeText={setComments}
             multiline
@@ -168,6 +224,9 @@ const styles = StyleSheet.create({
   page: { padding: 16, backgroundColor: "#0a0c10", flexGrow: 1 },
   title: { fontSize: 20, fontWeight: "800", color: "#e8eef6" },
   meta: { color: "#8b9bb0", marginBottom: 8 },
+  section: { color: "#e8eef6", fontWeight: "700", marginBottom: 8, marginTop: 4 },
+  photoGrid: { marginBottom: 16 },
+  photo: { width: "100%", height: 180, borderRadius: 12, marginBottom: 10, backgroundColor: "#1c2430" },
   primary: {
     backgroundColor: "#3b9eff",
     padding: 14,
@@ -187,6 +246,7 @@ const styles = StyleSheet.create({
     color: "#e8eef6",
   },
   error: { color: "#fb7185", marginBottom: 8 },
+  info: { color: "#fbbf24", marginBottom: 8 },
   rejectBox: {
     backgroundColor: "#2a1014",
     borderColor: "#7f1d1d",
@@ -197,4 +257,11 @@ const styles = StyleSheet.create({
   },
   rejectTitle: { color: "#fda4af", fontWeight: "700", marginBottom: 6 },
   rejectText: { color: "#e8eef6", marginBottom: 4 },
+  focusBox: {
+    borderWidth: 1,
+    borderColor: "#3b9eff",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+  },
 });

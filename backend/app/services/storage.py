@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
-import aiofiles
 import cloudinary
 import cloudinary.uploader
 from fastapi import HTTPException, UploadFile
@@ -19,12 +18,7 @@ def _configure_cloudinary() -> None:
     )
 
 
-async def save_upload(file: UploadFile, prefix: str) -> str:
-    """Upload photo to Cloudinary (preferred) or local uploads/ fallback. Returns URL or filename."""
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty photo upload")
-
+def _upload_bytes(content: bytes, prefix: str, filename: str = "photo.jpg") -> str:
     if settings.cloudinary_enabled:
         _configure_cloudinary()
         public_id = f"roadservice/{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
@@ -44,9 +38,65 @@ async def save_upload(file: UploadFile, prefix: str) -> str:
 
     upload_root = Path(settings.upload_dir)
     upload_root.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename or "photo.jpg").suffix or ".jpg"
+    ext = Path(filename).suffix or ".jpg"
     name = f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{ext}"
     path = upload_root / name
-    async with aiofiles.open(path, "wb") as out:
-        await out.write(content)
+    path.write_bytes(content)
     return name
+
+
+async def save_upload(file: UploadFile, prefix: str) -> str:
+    """Upload photo to Cloudinary (preferred) or local uploads/ fallback. Returns URL or filename."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty photo upload")
+    return _upload_bytes(content, prefix, file.filename or "photo.jpg")
+
+
+def upload_from_url(url: str, prefix: str) -> str:
+    """Download a remote image and store on Cloudinary / local uploads.
+
+    Falls back to storing the original remote URL if Cloudinary credentials fail.
+    """
+    import ssl
+    import urllib.request
+
+    content: bytes | None = None
+    ctx = ssl._create_unverified_context()  # noqa: S323
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:  # noqa: S310
+            content = resp.read()
+    except Exception:
+        content = None
+
+    if content:
+        try:
+            return _upload_bytes(content, prefix, "remote.jpg")
+        except Exception as exc:  # noqa: BLE001
+            print(f"    Cloudinary byte upload failed: {exc}")
+
+    if settings.cloudinary_enabled:
+        _configure_cloudinary()
+        public_id = f"roadservice/{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+        try:
+            result = cloudinary.uploader.upload(
+                url,
+                public_id=public_id,
+                resource_type="image",
+                overwrite=True,
+            )
+            out = result.get("secure_url") or result.get("url")
+            if out:
+                return out
+        except Exception as exc:  # noqa: BLE001
+            print(f"    Cloudinary URL upload failed: {exc}")
+
+    # Last resort: keep the remote URL so the UI still shows photos
+    return url

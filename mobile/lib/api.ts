@@ -22,6 +22,9 @@ export type Issue = {
   remaining_days?: number;
   assigned_contractor_id: number;
   reported_by_id: number;
+  before_photo_path?: string;
+  completion_photo_path?: string | null;
+  verification_photo_path?: string | null;
   completion_remarks?: string | null;
   rejection_history?: {
     id: number;
@@ -78,10 +81,13 @@ export const api = {
   reworkStart: (token: string, id: number) =>
     request<Issue>(`/api/v1/issues/${id}/rework/start`, { method: "POST", token }),
   notifications: (token: string) =>
-    request<{ id: number; title: string; message: string; is_read: boolean; created_at: string }[]>(
-      "/api/v1/notifications",
-      { token }
-    ),
+    request<
+      { id: number; title: string; message: string; is_read: boolean; created_at: string; issue_id?: number | null }[]
+    >("/api/v1/notifications", { token }),
+  markNotificationRead: (token: string, id: number) =>
+    request(`/api/v1/notifications/${id}/read`, { method: "POST", token }),
+  markAllNotificationsRead: (token: string) =>
+    request<{ marked: number }>("/api/v1/notifications/read-all", { method: "POST", token }),
   catalog: (token: string) =>
     request<{
       categories: { id: string; name: string }[];

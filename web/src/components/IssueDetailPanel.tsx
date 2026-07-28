@@ -9,13 +9,14 @@ import { StatusBadge } from "./StatusBadge";
 type Props = {
   issueId: number;
   fallback?: Issue | null;
+  focusAction?: string | null;
   onClose: () => void;
   onChanged?: () => void;
 };
 
 type CameraMode = "complete" | "approve" | "reject" | null;
 
-export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Props) {
+export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onChanged }: Props) {
   const { token, role, isReadonly } = useAuth();
   const [issue, setIssue] = useState<Issue | null>(fallback || null);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
   const [rejectReason, setRejectReason] = useState("");
   const [rejectComments, setRejectComments] = useState("");
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
+  const [highlightRejection, setHighlightRejection] = useState(false);
 
   const load = () => {
     if (!token) return;
@@ -41,6 +43,18 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
   useEffect(() => {
     load();
   }, [token, issueId]);
+
+  useEffect(() => {
+    if (!focusAction || !issue) return;
+    if (focusAction === "submit" && issue.status === "in_progress") {
+      // Scroll/focus remarks — contractor taps Submit from list
+      document.getElementById("submit-remarks")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (focusAction === "rejection") {
+      setHighlightRejection(true);
+      document.getElementById("rejection-box")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focusAction, issue?.id, issue?.status]);
 
   const canVerify =
     !isReadonly &&
@@ -160,7 +174,10 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
         </dl>
 
         {issue.status === "under_review" && latestRejection ? (
-          <div className="reject-box">
+          <div
+            id="rejection-box"
+            className={`reject-box${highlightRejection ? " reject-box-focus" : ""}`}
+          >
             <h3>Surveyor / admin comments (rework)</h3>
             <p>
               <strong>Reason:</strong> {latestRejection.reason}
@@ -173,26 +190,43 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
           </div>
         ) : null}
 
-        <div className="photos" style={{ marginTop: 16 }}>
-          <h3>Before (surveyor)</h3>
-          <img src={mediaUrl(issue.before_photo_path)} alt="Before" />
-          {issue.completion_photo_path ? (
-            <>
-              <h3>After (contractor submit)</h3>
-              <img src={mediaUrl(issue.completion_photo_path)} alt="After" />
-              {issue.completion_remarks ? (
-                <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                  {issue.completion_remarks}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-          {issue.verification_photo_path ? (
-            <>
-              <h3>Verification</h3>
-              <img src={mediaUrl(issue.verification_photo_path)} alt="Verification" />
-            </>
-          ) : null}
+        <div className="photo-stage-grid">
+          <article className="photo-stage">
+            <h3>1 · Surveyor (before)</h3>
+            <p className="muted">Captured while surveying the defect</p>
+            {issue.before_photo_path ? (
+              <img src={mediaUrl(issue.before_photo_path)} alt="Surveyor before photo" />
+            ) : (
+              <div className="photo-empty">No surveyor photo</div>
+            )}
+          </article>
+          <article className="photo-stage">
+            <h3>2 · Contractor (submit)</h3>
+            <p className="muted">Proof photo after repair work</p>
+            {issue.completion_photo_path ? (
+              <>
+                <img src={mediaUrl(issue.completion_photo_path)} alt="Contractor after photo" />
+                {issue.completion_remarks ? (
+                  <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
+                    {issue.completion_remarks}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="photo-empty">Awaiting contractor submit</div>
+            )}
+          </article>
+          <article className="photo-stage">
+            <h3>3 · Final (closed)</h3>
+            <p className="muted">Verification photo when issue is closed</p>
+            {issue.verification_photo_path ? (
+              <img src={mediaUrl(issue.verification_photo_path)} alt="Final closed photo" />
+            ) : (
+              <div className="photo-empty">
+                {issue.status === "closed" ? "No final photo" : "Not closed yet"}
+              </div>
+            )}
+          </article>
         </div>
 
         {cameraMode ? (
@@ -257,7 +291,7 @@ export function IssueDetailPanel({ issueId, fallback, onClose, onChanged }: Prop
 
             {!isReadonly && role === "contractor" && issue.status === "in_progress" ? (
               <>
-                <label>
+                <label id="submit-remarks">
                   Description / remarks (saved with submit)
                   <textarea
                     rows={3}

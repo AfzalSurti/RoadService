@@ -42,3 +42,18 @@ async def mark_read(
     await db.commit()
     await db.refresh(n)
     return n
+
+
+@router.post("/read-all")
+async def mark_all_read(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    result = await db.execute(
+        select(Notification).where(Notification.user_id == user.id, Notification.is_read.is_(False))
+    )
+    notes = result.scalars().all()
+    for n in notes:
+        n.is_read = True
+    await db.commit()
+    return {"marked": len(notes)}

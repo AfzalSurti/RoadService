@@ -10,7 +10,7 @@ from app.catalog.defects import DEFECT_BY_ID, DEFECT_TYPES
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.enums import IssuePriority, IssueStatus, UserRole
-from app.models.issue import Issue, IssueStatusHistory
+from app.models.issue import Issue, IssueRejection, IssueStatusHistory
 from app.models.project import Project
 from app.models.user import User
 
@@ -28,7 +28,24 @@ EMAIL_ALIASES = {
     "surveyor@roadservice.local": "surveyor@roadservice.app",
 }
 
+from app.services.storage import upload_from_url
+
 PHOTO = "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+
+# Distinct Unsplash sources used when Cloudinary is configured during first seed
+SEED_PHOTO_URLS = {
+    "before": "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1200&q=80",
+    "after": "https://images.unsplash.com/photo-1581094271901-8022df4466f9?w=1200&q=80",
+    "final": "https://images.unsplash.com/photo-1464037866556-68135793b5af?w=1200&q=80",
+}
+
+
+def _seed_photo(kind: str, prefix: str) -> str:
+    try:
+        return upload_from_url(SEED_PHOTO_URLS[kind], prefix)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Photo upload failed ({kind}): {exc}; using fallback URL")
+        return PHOTO
 
 # Spread around Ahmedabad corridor for the map view
 DEMO_ISSUES = [
@@ -136,7 +153,7 @@ async def _seed_demo_issues(db, project: Project, surveyor: User, contractor: Us
             priority=item["priority"],
             status=IssueStatus.OPEN,
             chainage=item["chainage"],
-            before_photo_path=PHOTO,
+            before_photo_path=_seed_photo("before", f"seed_before_{type_id}"),
             before_lat=item["lat"],
             before_lng=item["lng"],
             deadline_days=item["deadline_days"],
@@ -177,7 +194,7 @@ async def _seed_demo_issues(db, project: Project, surveyor: User, contractor: Us
             IssueStatus.CLOSED,
         ):
             hours_ago = item.get("completed_hours_ago", 6)
-            issue.completion_photo_path = PHOTO
+            issue.completion_photo_path = _seed_photo("after", f"seed_after_{type_id}")
             issue.completion_lat = item["lat"] + 0.0002
             issue.completion_lng = item["lng"] + 0.0002
             issue.completion_remarks = "Demo completion remarks"
@@ -216,9 +233,20 @@ async def _seed_demo_issues(db, project: Project, surveyor: User, contractor: Us
                 )
             )
             issue.status = IssueStatus.UNDER_REVIEW
+            db.add(
+                IssueRejection(
+                    issue_id=issue.id,
+                    reason="Incomplete repair at site",
+                    comments="Edges not compacted; please redo and resubmit with clear after photo.",
+                    photo_path=_seed_photo("after", f"seed_reject_{type_id}"),
+                    lat=item["lat"],
+                    lng=item["lng"],
+                    rejected_by_id=surveyor.id,
+                )
+            )
 
         if target == IssueStatus.CLOSED or item.get("verified"):
-            issue.verification_photo_path = PHOTO
+            issue.verification_photo_path = _seed_photo("final", f"seed_final_{type_id}")
             issue.verification_lat = item["lat"]
             issue.verification_lng = item["lng"]
             issue.verified_at = now - timedelta(hours=1)
