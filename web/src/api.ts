@@ -1,4 +1,13 @@
-import type { DashboardStats, Issue, IssueStatus, Project, TokenResponse, User } from "./types";
+import type {
+  DashboardStats,
+  Issue,
+  IssueStatus,
+  Project,
+  ProjectRateSummary,
+  RateItem,
+  TokenResponse,
+  User,
+} from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
 
@@ -177,6 +186,36 @@ export const api = {
 
   markAllNotificationsRead: (token: string) =>
     request<{ marked: number }>("/api/v1/notifications/read-all", { method: "POST", token }),
+
+  rateItems: (token: string, projectId?: number) =>
+    request<RateItem[]>(
+      `/api/v1/rates${projectId ? `?project_id=${projectId}` : ""}`,
+      { token }
+    ),
+
+  createRateItem: (
+    token: string,
+    body: {
+      project_id: number;
+      item_no: string;
+      description: string;
+      unit: string;
+      boq_quantity: number;
+      rate: number;
+      remarks?: string;
+    }
+  ) =>
+    request<RateItem>("/api/v1/rates", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  deleteRateItem: (token: string, id: number) =>
+    request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),
+
+  projectRateSummary: (token: string, projectId: number) =>
+    request<ProjectRateSummary>(`/api/v1/rates/summary/${projectId}`, { token }),
 };
 
 export { ApiError, API_URL };

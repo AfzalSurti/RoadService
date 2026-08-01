@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "scheme": "roadservice",
     "userInterfaceStyle": "light",
+    "android": {
+      "usesCleartextTraffic": true
+    },
     "plugins": [
       "expo-router",
       [
@@ -19,7 +22,9 @@
         {
           "locationWhenInUsePermission": "Allow RoadService to attach GPS to photos."
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

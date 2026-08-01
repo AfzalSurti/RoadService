@@ -7,6 +7,7 @@ from app.models.enums import (
 from app.models.issue import Issue, IssueRejection, IssueStatusHistory
 from app.models.notification import Notification
 from app.models.project import Project, project_contractors, project_surveyors
+from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
 
 __all__ = [
@@ -22,4 +23,6 @@ __all__ = [
     "IssuePriority",
     "STATUS_TRANSITIONS",
     "Notification",
+    "RateItem",
+    "QuantityEntry",
 ]

@@ -59,6 +59,10 @@ export default function CreateIssueScreen() {
       setError("Project and camera photo with GPS are required");
       return;
     }
+    if (!description.trim() || description.trim().length < 5) {
+      setError("Enter a short description (at least 5 characters)");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -66,13 +70,15 @@ export default function CreateIssueScreen() {
       form.append("project_id", String(projectId));
       form.append("issue_type", issueTypeId);
       form.append("work_category", categoryId);
-      form.append("description", description);
+      form.append("description", description.trim());
       form.append("before_lat", String(photo.lat));
       form.append("before_lng", String(photo.lng));
-      form.append("deadline_days", deadlineDays);
-      if (chainage) form.append("chainage", chainage);
+      form.append("deadline_days", String(Number(deadlineDays) || 10));
+      form.append("priority", "medium");
+      if (chainage.trim()) form.append("chainage", chainage.trim());
+      const uri = photo.uri.startsWith("file://") ? photo.uri : `file://${photo.uri}`;
       form.append("photo", {
-        uri: photo.uri,
+        uri,
         name: "before.jpg",
         type: "image/jpeg",
       } as any);
@@ -84,15 +90,16 @@ export default function CreateIssueScreen() {
             project_id: String(projectId),
             issue_type: issueTypeId,
             work_category: categoryId,
-            description,
+            description: description.trim(),
             before_lat: String(photo.lat),
             before_lng: String(photo.lng),
-            deadline_days: deadlineDays,
+            deadline_days: String(Number(deadlineDays) || 10),
+            priority: "medium",
           };
-          if (chainage) fields.chainage = chainage;
+          if (chainage.trim()) fields.chainage = chainage.trim();
           await enqueueOfflineJob({
             type: "create",
-            photoUri: photo.uri,
+            photoUri: uri,
             fields,
           });
           router.replace("/home");

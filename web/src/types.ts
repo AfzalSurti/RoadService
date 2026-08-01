@@ -103,3 +103,38 @@ export type TokenResponse = {
   user_id: number;
   full_name: string;
 };
+
+export type RateItem = {
+  id: number;
+  project_id: number;
+  item_no: string;
+  description: string;
+  unit: string;
+  boq_quantity: number;
+  rate: number;
+  boq_amount: number;
+  executed_quantity: number;
+  executed_amount: number;
+  progress_pct?: number | null;
+  remarks?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RateItemSurveyor = {
+  id: number;
+  project_id: number;
+  item_no: string;
+  description: string;
+  unit: string;
+  executed_quantity: number;
+};
+
+export type ProjectRateSummary = {
+  project_id: number;
+  project_name: string;
+  total_boq_amount: number;
+  total_executed_amount: number;
+  progress_pct: number | null;
+  items: RateItem[];
+};

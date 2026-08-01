@@ -11,6 +11,8 @@ from app.models import (  # noqa: F401 — register metadata
     IssueStatusHistory,
     Notification,
     Project,
+    QuantityEntry,
+    RateItem,
     User,
 )
 

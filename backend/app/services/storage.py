@@ -18,6 +18,16 @@ def _configure_cloudinary() -> None:
     )
 
 
+def _save_local(content: bytes, prefix: str, filename: str = "photo.jpg") -> str:
+    upload_root = Path(settings.upload_dir)
+    upload_root.mkdir(parents=True, exist_ok=True)
+    ext = Path(filename).suffix or ".jpg"
+    name = f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{ext}"
+    path = upload_root / name
+    path.write_bytes(content)
+    return name
+
+
 def _upload_bytes(content: bytes, prefix: str, filename: str = "photo.jpg") -> str:
     if settings.cloudinary_enabled:
         _configure_cloudinary()
@@ -29,20 +39,14 @@ def _upload_bytes(content: bytes, prefix: str, filename: str = "photo.jpg") -> s
                 resource_type="image",
                 overwrite=True,
             )
+            url = result.get("secure_url") or result.get("url")
+            if url:
+                return url
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail=f"Cloudinary upload failed: {exc}") from exc
-        url = result.get("secure_url") or result.get("url")
-        if not url:
-            raise HTTPException(status_code=502, detail="Cloudinary returned no URL")
-        return url
+            # Invalid API secret / network — keep the app usable with local files
+            print(f"Cloudinary upload failed, using local storage: {exc}")
 
-    upload_root = Path(settings.upload_dir)
-    upload_root.mkdir(parents=True, exist_ok=True)
-    ext = Path(filename).suffix or ".jpg"
-    name = f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{ext}"
-    path = upload_root / name
-    path.write_bytes(content)
-    return name
+    return _save_local(content, prefix, filename)
 
 
 async def save_upload(file: UploadFile, prefix: str) -> str:

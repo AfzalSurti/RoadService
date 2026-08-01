@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import * as v from "../lib/validation";
-import type { Project, User } from "../types";
+import type { Project, ProjectRateSummary, User } from "../types";
 
 const emptyForm = {
   name: "",
@@ -14,9 +15,14 @@ const emptyForm = {
   surveyor_id: "",
 };
 
+function money(n: number) {
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function ProjectsPage() {
   const { token, isReadonly } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
   const [contractors, setContractors] = useState<User[]>([]);
   const [surveyors, setSurveyors] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +37,25 @@ export function ProjectsPage() {
       api.users(token, "contractor"),
       api.users(token, "surveyor"),
     ])
-      .then(([p, c, s]) => {
+      .then(async ([p, c, s]) => {
         setProjects(p);
         setContractors(c);
         setSurveyors(s);
+        const entries = await Promise.all(
+          p.map(async (proj) => {
+            try {
+              const sum = await api.projectRateSummary(token, proj.id);
+              return [proj.id, sum] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+        const map: Record<number, ProjectRateSummary> = {};
+        for (const e of entries) {
+          if (e) map[e[0]] = e[1];
+        }
+        setSummaries(map);
       })
       .catch((e: Error) => setError(e.message));
   };
@@ -232,22 +253,35 @@ export function ProjectsPage() {
               <th>Location</th>
               <th>Chainage</th>
               <th>Team</th>
+              <th>BOQ amount</th>
+              <th>Executed value</th>
+              <th>% progress</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {projects.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{p.name}</td>
-                <td>{p.location}</td>
-                <td>
-                  {p.chainage_from || "—"} – {p.chainage_to || "—"}
-                </td>
-                <td>
-                  {p.contractors.length} contractors · {p.surveyors.length} surveyors
-                </td>
-              </tr>
-            ))}
+            {projects.map((p) => {
+              const sum = summaries[p.id];
+              return (
+                <tr key={p.id}>
+                  <td>{p.id}</td>
+                  <td>{p.name}</td>
+                  <td>{p.location}</td>
+                  <td>
+                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
+                  </td>
+                  <td>
+                    {p.contractors.length} contractors · {p.surveyors.length} surveyors
+                  </td>
+                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
+                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
+                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
+                  <td>
+                    <Link to="/rates">Rates</Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>

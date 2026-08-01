@@ -86,10 +86,17 @@ export default function HomeScreen() {
             <Text style={styles.secondaryText}>Notifications{unread ? ` (${unread})` : ""}</Text>
           </Pressable>
         </Link>
-        {role === "surveyor" ? (
+      {role === "surveyor" ? (
           <Link href="/create-issue" asChild>
             <Pressable style={styles.primary}>
               <Text style={styles.primaryText}>Report issue</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+        {role === "surveyor" ? (
+          <Link href="/quantity" asChild>
+            <Pressable style={styles.secondary}>
+              <Text style={styles.secondaryText}>Quantity</Text>
             </Pressable>
           </Link>
         ) : null}

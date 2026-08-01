@@ -39,6 +39,7 @@ export function AppLayout() {
           {role === "admin" ? (
             <>
               <NavLink to="/projects">Projects</NavLink>
+              <NavLink to="/rates">Rates</NavLink>
               <NavLink to="/users">Users</NavLink>
             </>
           ) : null}

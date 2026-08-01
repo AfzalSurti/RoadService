@@ -38,3 +38,4 @@ class Project(Base):
     contractors = relationship("User", secondary=project_contractors, back_populates="projects_as_contractor")
     surveyors = relationship("User", secondary=project_surveyors, back_populates="projects_as_surveyor")
     issues = relationship("Issue", back_populates="project")
+    rate_items = relationship("RateItem", back_populates="project", cascade="all, delete-orphan")

@@ -185,6 +185,81 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+class RateItemCreate(BaseModel):
+    project_id: int
+    item_no: str = Field(min_length=1, max_length=64)
+    description: str = Field(min_length=2)
+    unit: str = Field(min_length=1, max_length=32)
+    boq_quantity: float = Field(gt=0)
+    rate: float = Field(ge=0)
+    remarks: str | None = None
+
+
+class RateItemUpdate(BaseModel):
+    item_no: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = Field(default=None, min_length=2)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    boq_quantity: float | None = Field(default=None, gt=0)
+    rate: float | None = Field(default=None, ge=0)
+    remarks: str | None = None
+
+
+class RateItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    item_no: str
+    description: str
+    unit: str
+    boq_quantity: float
+    rate: float
+    boq_amount: float
+    executed_quantity: float
+    executed_amount: float
+    progress_pct: float | None = None
+    remarks: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RateItemSurveyorOut(BaseModel):
+    """Surveyor view — no rate / money fields."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    item_no: str
+    description: str
+    unit: str
+    executed_quantity: float
+
+
+class QuantityEntryCreate(BaseModel):
+    quantity: float = Field(gt=0)
+    note: str | None = None
+
+
+class QuantityEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    rate_item_id: int
+    project_id: int
+    quantity: float
+    amount: float
+    entered_by_id: int
+    note: str | None
+    created_at: datetime
+
+
+class ProjectRateSummary(BaseModel):
+    project_id: int
+    project_name: str
+    total_boq_amount: float
+    total_executed_amount: float
+    progress_pct: float | None
+    items: list[RateItemOut]
+
+
 class DashboardStats(BaseModel):
     total_projects: int
     total_issues: int

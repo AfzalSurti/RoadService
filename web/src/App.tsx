@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { RatesPage } from "./pages/RatesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <AdminOnly>
               <ProjectsPage />
+            </AdminOnly>
+          }
+        />
+        <Route
+          path="/rates"
+          element={
+            <AdminOnly>
+              <RatesPage />
             </AdminOnly>
           }
         />

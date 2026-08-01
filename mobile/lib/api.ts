@@ -18,13 +18,13 @@ export type Issue = {
   chainage?: string;
   before_lat: number;
   before_lng: number;
+  before_photo_path?: string;
+  completion_photo_path?: string | null;
+  verification_photo_path?: string | null;
   deadline_date: string;
   remaining_days?: number;
   assigned_contractor_id: number;
   reported_by_id: number;
-  before_photo_path?: string;
-  completion_photo_path?: string | null;
-  verification_photo_path?: string | null;
   completion_remarks?: string | null;
   rejection_history?: {
     id: number;
@@ -32,6 +32,15 @@ export type Issue = {
     comments: string | null;
     created_at: string;
   }[];
+};
+
+export type RateItemSurveyor = {
+  id: number;
+  project_id: number;
+  item_no: string;
+  description: string;
+  unit: string;
+  executed_quantity: number;
 };
 
 async function request<T>(
@@ -45,14 +54,24 @@ async function request<T>(
   }
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: unknown = res.statusText;
     try {
       const data = await res.json();
-      detail = data.detail || JSON.stringify(data);
+      detail = data.detail ?? data;
     } catch {
       /* ignore */
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    if (Array.isArray(detail)) {
+      detail = detail
+        .map((d: { loc?: unknown[]; msg?: string }) => {
+          const field = Array.isArray(d.loc) ? d.loc.filter((x) => x !== "body").join(".") : "";
+          return field ? `${field}: ${d.msg}` : d.msg || JSON.stringify(d);
+        })
+        .join("\n");
+    } else if (typeof detail !== "string") {
+      detail = JSON.stringify(detail);
+    }
+    throw new Error(String(detail) || "Request failed");
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -88,6 +107,17 @@ export const api = {
     request(`/api/v1/notifications/${id}/read`, { method: "POST", token }),
   markAllNotificationsRead: (token: string) =>
     request<{ marked: number }>("/api/v1/notifications/read-all", { method: "POST", token }),
+  rateItems: (token: string, projectId?: number) =>
+    request<RateItemSurveyor[]>(
+      `/api/v1/rates${projectId ? `?project_id=${projectId}` : ""}`,
+      { token }
+    ),
+  addQuantity: (token: string, itemId: number, body: { quantity: number; note?: string }) =>
+    request(`/api/v1/rates/${itemId}/quantity`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
   catalog: (token: string) =>
     request<{
       categories: { id: string; name: string }[];
