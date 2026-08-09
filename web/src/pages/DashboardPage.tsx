@@ -81,7 +81,27 @@ export function DashboardPage() {
               <strong>{stats.total_issues}</strong>
             </article>
             <article className="stat">
-              <span>Delayed</span>
+              <span>Invoices</span>
+              <strong>{stats.total_invoices ?? 0}</strong>
+            </article>
+            <article className="stat">
+              <span>Documents</span>
+              <strong>{stats.total_documents ?? 0}</strong>
+            </article>
+            <article className="stat">
+              <span>Vendors</span>
+              <strong>{stats.total_vendors ?? 0}</strong>
+            </article>
+            <article className="stat">
+              <span>BOQ amount ₹</span>
+              <strong>{(stats.total_boq_amount ?? 0).toLocaleString("en-IN")}</strong>
+            </article>
+            <article className="stat">
+              <span>Executed ₹</span>
+              <strong>{(stats.total_executed_amount ?? 0).toLocaleString("en-IN")}</strong>
+            </article>
+            <article className="stat">
+              <span>Delayed issues</span>
               <strong>{stats.delayed_issues}</strong>
             </article>
             <article className="stat">
