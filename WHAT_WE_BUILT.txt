@@ -68,6 +68,9 @@ How to try it
 3. Use the new menu items: Billing, Documents, Vendors
 4. Use the Light/Dark button in the top bar
 
+These upgrades are on GitHub (main branch), pushed in small steps:
+theme → billing backend → billing screens → documents/vendors → dashboard → mobile fix.
+
 
 Next possible upgrades (later)
 ------------------------------
