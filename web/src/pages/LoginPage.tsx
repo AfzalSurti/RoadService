@@ -9,6 +9,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaPin, setMfaPin] = useState("");
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,7 +37,7 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(email.trim(), password);
+      await login(email.trim(), password, mfaPin.trim() || undefined);
       navigate("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -98,6 +99,17 @@ export function LoginPage() {
                 {fieldErrors.password}
               </span>
             ) : null}
+          </label>
+          <label>
+            MFA PIN (only if enabled)
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={mfaPin}
+              onChange={(e) => setMfaPin(e.target.value)}
+              placeholder="Optional"
+            />
           </label>
           <button className="btn" type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}

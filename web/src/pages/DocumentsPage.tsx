@@ -1,24 +1,25 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { formatLabel } from "../components/StatusBadge";
 import type { PortalDocument, Project } from "../types";
 
 const CATEGORIES = ["contract", "project", "financial", "its", "statutory", "other"];
 
 export function DocumentsPage() {
-  const { token, isReadonly } = useAuth();
+  const { token, role, isReadonly } = useAuth();
   const [docs, setDocs] = useState<PortalDocument[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [selected, setSelected] = useState<PortalDocument | null>(null);
+  const [versions, setVersions] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [filterProject, setFilterProject] = useState<number | "">("");
-  const [form, setForm] = useState({
-    title: "",
-    category: "project",
-    description: "",
-    project_id: "",
-  });
+  const [form, setForm] = useState({ title: "", category: "project", description: "", project_id: "" });
   const [file, setFile] = useState<File | null>(null);
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [signText, setSignText] = useState("");
+  const [watermark, setWatermark] = useState("");
 
   const load = async () => {
     if (!token) return;
@@ -30,6 +31,7 @@ export function DocumentsPage() {
       setDocs(d);
       setProjects(p);
       setError(null);
+      if (selected) setSelected(d.find((x) => x.id === selected.id) || null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load documents");
     }
@@ -37,21 +39,29 @@ export function DocumentsPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Documents";
+    if (el) el.textContent = "Documents & Approvals";
   }, []);
 
   useEffect(() => {
     load();
   }, [token, filterProject]);
 
+  const openDoc = async (d: PortalDocument) => {
+    if (!token) return;
+    setSelected(d);
+    setWatermark(d.watermark_text || "");
+    try {
+      const v = await api.nhitGet<Record<string, unknown>[]>(token, `/documents/${d.id}/versions`);
+      setVersions(v);
+    } catch {
+      setVersions([]);
+    }
+  };
+
   const onUpload = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly || !file) {
-      setError("Choose a file to upload");
-      return;
-    }
+    if (!token || isReadonly || !file) return setError("Choose a file to upload");
     setBusy(true);
-    setError(null);
     try {
       const fd = new FormData();
       fd.append("title", form.title.trim());
@@ -70,6 +80,21 @@ export function DocumentsPage() {
     }
   };
 
+  const act = async (fn: () => Promise<unknown>) => {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await load();
+      if (selected) await openDoc(selected);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
@@ -80,18 +105,11 @@ export function DocumentsPage() {
           <form className="form-grid" onSubmit={onUpload}>
             <label>
               Title
-              <input
-                required
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
+              <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </label>
             <label>
               Category
-              <select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-              >
+              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -100,11 +118,8 @@ export function DocumentsPage() {
               </select>
             </label>
             <label>
-              Project (optional)
-              <select
-                value={form.project_id}
-                onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-              >
+              Project
+              <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}>
                 <option value="">—</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -115,18 +130,11 @@ export function DocumentsPage() {
             </label>
             <label>
               File
-              <input
-                type="file"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
+              <input type="file" required onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
             <label className="span-2">
               Description
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </label>
             <div className="span-2">
               <button className="btn" type="submit" disabled={busy}>
@@ -140,29 +148,24 @@ export function DocumentsPage() {
       <section className="panel">
         <div className="panel-head-row">
           <h2>Repository</h2>
-          <label>
-            Filter by project{" "}
-            <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value ? Number(e.target.value) : "")}
-            >
-              <option value="">All</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         </div>
         <table className="data">
           <thead>
             <tr>
               <th>Title</th>
-              <th>Category</th>
-              <th>Project</th>
-              <th>Uploaded</th>
-              <th>File</th>
+              <th>Ver</th>
+              <th>Status</th>
+              <th>Class</th>
+              <th>Checkout</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -170,30 +173,187 @@ export function DocumentsPage() {
               <tr key={d.id}>
                 <td>
                   {d.title}
-                  {d.description ? <div className="muted">{d.description}</div> : null}
+                  <div className="muted">{d.category}</div>
                 </td>
-                <td>{d.category}</td>
+                <td>v{d.current_version ?? 1}</td>
                 <td>
-                  {d.project_id
-                    ? projects.find((p) => p.id === d.project_id)?.name || `#${d.project_id}`
-                    : "—"}
+                  <span className={`badge status-${d.approval_status || "draft"}`}>
+                    {formatLabel(d.approval_status || "draft")}
+                  </span>
                 </td>
-                <td>{new Date(d.created_at).toLocaleString()}</td>
+                <td>{d.classification || "internal"}</td>
+                <td>{d.checked_out_by_id ? `User #${d.checked_out_by_id}` : "—"}</td>
                 <td>
-                  <a href={mediaUrl(d.file_path)} target="_blank" rel="noreferrer">
-                    Open
-                  </a>
+                  <button type="button" className="linkish" onClick={() => openDoc(d)}>
+                    Manage
+                  </button>
                 </td>
               </tr>
             ))}
             {!docs.length ? (
               <tr>
-                <td colSpan={5}>No documents yet.</td>
+                <td colSpan={6}>No documents yet.</td>
               </tr>
             ) : null}
           </tbody>
         </table>
       </section>
+
+      {selected ? (
+        <section className="panel">
+          <div className="panel-head-row">
+            <h2>
+              {selected.title} (v{selected.current_version ?? 1})
+            </h2>
+            <button type="button" className="linkish" onClick={() => setSelected(null)}>
+              Close
+            </button>
+          </div>
+          <p className="muted">
+            Watermark: {selected.watermark_text || "—"} · Approval: {selected.approval_status || "draft"}
+          </p>
+          <div className="btn-row">
+            <a
+              className="btn secondary"
+              href={mediaUrl(selected.file_path)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => token && api.nhitPost(token, `/documents/${selected.id}/log-download`, {})}
+            >
+              Open / download (logged)
+            </a>
+            {!isReadonly ? (
+              <>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkout`, {}))}
+                >
+                  Check-out
+                </button>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkin`, {}))}
+                >
+                  Check-in
+                </button>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    act(() =>
+                      api.nhitPost(token!, `/documents/${selected.id}/request-approval`, {
+                        note: "Please approve",
+                        signature_data: signText || undefined,
+                      })
+                    )
+                  }
+                >
+                  Request approval
+                </button>
+                {(role === "admin" || role === "government") && (
+                  <>
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        act(() =>
+                          api.nhitPost(
+                            token!,
+                            `/documents/${selected.id}/decide-approval?approve=true`,
+                            { note: "Approved", signature_data: signText || "Digitally signed" }
+                          )
+                        )
+                      }
+                    >
+                      Approve + sign
+                    </button>
+                    <button
+                      className="btn danger"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        act(() =>
+                          api.nhitPost(token!, `/documents/${selected.id}/decide-approval?approve=false`, {
+                            note: "Rejected",
+                          })
+                        )
+                      }
+                    >
+                      Reject
+                    </button>
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        act(() =>
+                          api.nhitPatch(token!, `/documents/${selected.id}/meta`, {
+                            watermark_text: watermark || "CONFIDENTIAL — RoadService",
+                            classification: "confidential",
+                          })
+                        )
+                      }
+                    >
+                      Set watermark
+                    </button>
+                  </>
+                )}
+              </>
+            ) : null}
+          </div>
+          <div className="form-grid" style={{ marginTop: "1rem" }}>
+            <label>
+              Digital signature text
+              <input value={signText} onChange={(e) => setSignText(e.target.value)} placeholder="Name / designation" />
+            </label>
+            <label>
+              Watermark text
+              <input value={watermark} onChange={(e) => setWatermark(e.target.value)} />
+            </label>
+            {!isReadonly ? (
+              <label className="span-2">
+                Upload new version
+                <input type="file" onChange={(e) => setVersionFile(e.target.files?.[0] || null)} />
+              </label>
+            ) : null}
+          </div>
+          {versionFile && token ? (
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              style={{ marginTop: 8 }}
+              onClick={() => {
+                const fd = new FormData();
+                fd.append("file", versionFile);
+                fd.append("change_note", "Updated version");
+                act(async () => {
+                  await api.nhitForm(token, `/documents/${selected.id}/new-version`, fd);
+                  setVersionFile(null);
+                });
+              }}
+            >
+              Save new version
+            </button>
+          ) : null}
+          <h3 style={{ marginTop: "1rem" }}>Version history</h3>
+          <ul className="activity-list">
+            {versions.map((v) => (
+              <li key={String(v.id)}>
+                v{String(v.version_no)} — {String(v.change_note || "update")}{" "}
+                <span className="muted">{String(v.created_at)}</span>
+              </li>
+            ))}
+            {!versions.length ? <li className="muted">No versions listed yet.</li> : null}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }

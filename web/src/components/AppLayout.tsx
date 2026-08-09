@@ -9,6 +9,8 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
+  const staff = role === "admin" || role === "contractor" || role === "government";
+  const adminGov = role === "admin" || role === "government";
 
   useEffect(() => {
     if (!token) return;
@@ -32,14 +34,19 @@ export function AppLayout() {
           <NavLink to="/dashboard" end>
             Dashboard
           </NavLink>
+          {staff ? <NavLink to="/executive">Executive</NavLink> : null}
           <NavLink to="/issues">Issues</NavLink>
-          {(role === "admin" || role === "contractor" || role === "government") && (
-            <NavLink to="/billing">Billing</NavLink>
-          )}
-          {(role === "admin" || role === "contractor" || role === "government") && (
-            <NavLink to="/documents">Documents</NavLink>
-          )}
-          {(role === "admin" || role === "government") && <NavLink to="/vendors">Vendors</NavLink>}
+          {staff ? <NavLink to="/billing">Billing</NavLink> : null}
+          {staff ? <NavLink to="/documents">Documents</NavLink> : null}
+          {staff ? <NavLink to="/attendance">Attendance</NavLink> : null}
+          {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
+          {staff ? <NavLink to="/highway-incidents">Incidents</NavLink> : null}
+          {staff ? <NavLink to="/its">ATMS/TMS/ITS</NavLink> : null}
+          {staff ? <NavLink to="/civil-assets">Civil Assets</NavLink> : null}
+          {adminGov ? <NavLink to="/integrations">Integrations</NavLink> : null}
+          {adminGov ? <NavLink to="/backup-dr">Backup/DR</NavLink> : null}
+          {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
+          {staff ? <NavLink to="/security">Security</NavLink> : null}
           <NavLink to="/notifications">
             Notifications{unread ? ` (${unread})` : ""}
           </NavLink>

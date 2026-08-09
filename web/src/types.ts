@@ -185,6 +185,13 @@ export type PortalDocument = {
   description: string | null;
   file_path: string;
   uploaded_by_id: number;
+  current_version?: number;
+  approval_status?: string;
+  classification?: string;
+  watermark_text?: string | null;
+  signature_data?: string | null;
+  checked_out_by_id?: number | null;
+  checked_out_at?: string | null;
   created_at: string;
 };
 

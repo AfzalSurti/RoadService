@@ -2,15 +2,26 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppLayout } from "./components/AppLayout";
+import { BillingPage } from "./pages/BillingPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DocumentsPage } from "./pages/DocumentsPage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
+import {
+  AttendancePage,
+  BackupDrPage,
+  CivilAssetsPage,
+  ExecutivePage,
+  HighwayIncidentsPage,
+  IntegrationsPage,
+  ItsPage,
+  SecurityPage,
+  TollPage,
+} from "./pages/NhitPages";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
-import { BillingPage } from "./pages/BillingPage";
-import { DocumentsPage } from "./pages/DocumentsPage";
 import { RatesPage } from "./pages/RatesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -57,6 +68,14 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route
+          path="/executive"
+          element={
+            <StaffPortal>
+              <ExecutivePage />
+            </StaffPortal>
+          }
+        />
         <Route path="/issues" element={<IssuesPage />} />
         <Route
           path="/billing"
@@ -72,6 +91,70 @@ export default function App() {
             <StaffPortal>
               <DocumentsPage />
             </StaffPortal>
+          }
+        />
+        <Route
+          path="/attendance"
+          element={
+            <StaffPortal>
+              <AttendancePage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/security"
+          element={
+            <StaffPortal>
+              <SecurityPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/toll"
+          element={
+            <StaffPortal>
+              <TollPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/highway-incidents"
+          element={
+            <StaffPortal>
+              <HighwayIncidentsPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/its"
+          element={
+            <StaffPortal>
+              <ItsPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/civil-assets"
+          element={
+            <StaffPortal>
+              <CivilAssetsPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <AdminOrGov>
+              <IntegrationsPage />
+            </AdminOrGov>
+          }
+        />
+        <Route
+          path="/backup-dr"
+          element={
+            <AdminOrGov>
+              <BackupDrPage />
+            </AdminOrGov>
           }
         />
         <Route

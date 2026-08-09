@@ -8,7 +8,7 @@ type AuthState = {
   fullName: string | null;
   userId: number | null;
   isReadonly: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, mfaPin?: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName,
       userId,
       isReadonly: role === "government",
-      login: async (email, password) => {
-        const data = await api.login(email, password);
+      login: async (email, password, mfaPin) => {
+        const data = await api.login(email, password, mfaPin);
         if (data.role === "surveyor") {
           throw new Error("Surveyor accounts use the mobile app only.");
         }

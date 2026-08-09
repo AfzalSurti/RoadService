@@ -66,10 +66,10 @@ async function request<T>(
 }
 
 export const api = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, mfaPin?: string) =>
     request<TokenResponse>("/api/v1/auth/login/json", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, mfa_pin: mfaPin || undefined }),
     }),
 
   me: (token: string) => request<User>("/api/v1/auth/me", { token }),
@@ -324,6 +324,28 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),
+
+  nhitPost: <T>(token: string, path: string, body?: unknown) =>
+    request<T>(`/api/v1/nhit${path}`, {
+      method: "POST",
+      token,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+
+  nhitPatch: <T>(token: string, path: string, body?: unknown) =>
+    request<T>(`/api/v1/nhit${path}`, {
+      method: "PATCH",
+      token,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+
+  nhitForm: <T>(token: string, path: string, form: FormData) =>
+    request<T>(`/api/v1/nhit${path}`, { method: "POST", token, body: form }),
+
+  seedNhitDemo: (token: string) =>
+    request<{ ok: boolean; message: string }>("/api/v1/nhit/seed-demo", { method: "POST", token }),
 };
 
 export { ApiError, API_URL };
