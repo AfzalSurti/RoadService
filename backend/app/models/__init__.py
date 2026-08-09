@@ -9,6 +9,26 @@ from app.models.enums import (
 )
 from app.models.issue import Issue, IssueRejection, IssueStatusHistory
 from app.models.notification import Notification
+from app.models.portal_ops import (
+    AttendanceRecord,
+    AuditLog,
+    BackupJob,
+    BcpItem,
+    CivilAsset,
+    DocumentApproval,
+    DocumentVersion,
+    DutyRoster,
+    ExecutiveSnapshot,
+    HighwayIncident,
+    IntegrationLink,
+    ItsDevice,
+    LeaveRequest,
+    LoginHistory,
+    Personnel,
+    ResponseVehicle,
+    TollDailyStat,
+    TollPlaza,
+)
 from app.models.project import Project, project_contractors, project_surveyors
 from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
@@ -34,4 +54,22 @@ __all__ = [
     "PaymentMode",
     "PortalDocument",
     "Vendor",
+    "AuditLog",
+    "LoginHistory",
+    "DocumentVersion",
+    "DocumentApproval",
+    "Personnel",
+    "AttendanceRecord",
+    "LeaveRequest",
+    "DutyRoster",
+    "TollPlaza",
+    "TollDailyStat",
+    "HighwayIncident",
+    "ResponseVehicle",
+    "ItsDevice",
+    "CivilAsset",
+    "IntegrationLink",
+    "BackupJob",
+    "BcpItem",
+    "ExecutiveSnapshot",
 ]

@@ -8,8 +8,10 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.billing import PortalDocument, Vendor
 from app.models.enums import UserRole
+from app.models.portal_ops import DocumentVersion
 from app.models.user import User
 from app.schemas import DocumentOut, VendorCreate, VendorOut
+from app.services.audit import write_audit
 from app.services.storage import save_upload
 
 docs_router = APIRouter(prefix="/documents", tags=["documents"])
@@ -48,8 +50,30 @@ async def upload_document(
         description=description,
         file_path=path,
         uploaded_by_id=user.id,
+        current_version=1,
+        approval_status="draft",
+        classification="internal",
+        watermark_text="CONFIDENTIAL — RoadService",
     )
     db.add(doc)
+    await db.flush()
+    db.add(
+        DocumentVersion(
+            document_id=doc.id,
+            version_no=1,
+            file_path=path,
+            change_note="Initial upload",
+            uploaded_by_id=user.id,
+        )
+    )
+    await write_audit(
+        db,
+        actor_id=user.id,
+        action="document_upload",
+        entity_type="document",
+        entity_id=str(doc.id),
+        detail=title,
+    )
     await db.commit()
     await db.refresh(doc)
     return doc

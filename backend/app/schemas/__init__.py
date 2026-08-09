@@ -16,6 +16,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    mfa_pin: str | None = None
 
 
 class UserBase(BaseModel):
@@ -42,6 +43,7 @@ class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
+    mfa_enabled: bool = False
 
 
 class ProjectCreate(BaseModel):
@@ -327,6 +329,13 @@ class DocumentOut(BaseModel):
     description: str | None
     file_path: str
     uploaded_by_id: int
+    current_version: int = 1
+    approval_status: str = "draft"
+    classification: str = "internal"
+    watermark_text: str | None = None
+    signature_data: str | None = None
+    checked_out_by_id: int | None = None
+    checked_out_at: datetime | None = None
     created_at: datetime
 
 
