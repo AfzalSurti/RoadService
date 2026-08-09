@@ -53,7 +53,9 @@ export function LoginPage() {
         <Link to="/" className="brand">
           Road<span>Service</span>
         </Link>
-        <p className="muted">Web dashboard for Government, Admin, and Contractors</p>
+        <p className="muted">
+          Web dashboard for NHIPMPL representative, GMC Experts (MIS Expert), and Contractors
+        </p>
         {error ? <div className="error">{error}</div> : null}
         <form onSubmit={onSubmit} noValidate>
           <label>

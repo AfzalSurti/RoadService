@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { DeveloperCredit } from "./DeveloperCredit";
+import { roleLabel } from "../lib/roles";
 import { useTheme } from "../theme";
 
 export function AppLayout() {
@@ -64,7 +65,7 @@ export function AppLayout() {
         <div className="sidebar-foot">
           <div className="user-chip">
             {fullName}
-            <small>{role}</small>
+            <small>{roleLabel(role)}</small>
           </div>
           <button className="linkish" type="button" onClick={toggleTheme}>
             Switch to {theme === "dark" ? "Light" : "Dark"} mode

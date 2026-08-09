@@ -79,11 +79,12 @@ New portal modules (from Portal Requirement)
 How to try it
 -------------
 1. Start backend and web app
-2. Login:
-   - admin@roadservice.app / Admin123!
+2. Login (emails unchanged; role display names updated):
+   - admin@roadservice.app / Admin123!  → GMC Experts (MIS Expert)
    - contractor@roadservice.app / Contractor123!
-   - gov@roadservice.app / Gov123!
-3. As Admin open Executive → click “Load demo NHIT data”
+   - gov@roadservice.app / Gov123!  → NHIPMPL representative
+   - surveyor@roadservice.app / Surveyor123!  → GMC representative (mobile mainly)
+3. As GMC Experts open Executive → click “Load demo NHIT data”
 4. Browse new menu items: Executive, Documents, Attendance, Toll Ops,
    Incidents, ATMS/TMS/ITS, Civil Assets, Integrations, Backup/DR, Security
 

@@ -120,7 +120,7 @@ export default function IssueDetailScreen() {
         <Text style={styles.section}>Photos</Text>
         {issue.before_photo_path ? (
           <>
-            <Text style={styles.meta}>Surveyor (before)</Text>
+            <Text style={styles.meta}>GMC representative (before)</Text>
             <Image source={{ uri: mediaUrl(issue.before_photo_path) }} style={styles.photo} />
           </>
         ) : null}

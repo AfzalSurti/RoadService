@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login: async (email, password, mfaPin) => {
         const data = await api.login(email, password, mfaPin);
         if (data.role === "surveyor") {
-          throw new Error("Surveyor accounts use the mobile app only.");
+          throw new Error("GMC representative accounts use the mobile app only.");
         }
         localStorage.setItem(
           KEY,

@@ -160,7 +160,7 @@ export function DashboardPage() {
               <th>Name</th>
               <th>Location</th>
               <th>Contractors</th>
-              <th>Surveyors</th>
+              <th>GMC representatives</th>
             </tr>
           </thead>
           <tbody>

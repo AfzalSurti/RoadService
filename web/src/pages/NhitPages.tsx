@@ -115,7 +115,7 @@ export function ExecutivePage() {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={5}>No executive data yet. Admin can load demo data.</td>
+                <td colSpan={5}>No executive data yet. GMC Experts can load demo data.</td>
               </tr>
             ) : null}
           </tbody>

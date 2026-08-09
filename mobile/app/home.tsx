@@ -4,6 +4,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "rea
 import { api, type Issue } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { flushOfflineJobs, listOfflineJobs } from "../lib/offline";
+import { roleLabel } from "../lib/roles";
 
 export default function HomeScreen() {
   const { token, role, fullName, logout } = useAuth();
@@ -66,7 +67,7 @@ export default function HomeScreen() {
         <View>
           <Text style={styles.name}>{fullName}</Text>
           <Text style={styles.role}>
-            {role}
+            {roleLabel(role)}
             {unread ? ` · ${unread} alerts` : ""}
           </Text>
         </View>
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#0a0c10", padding: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
   name: { fontWeight: "700", fontSize: 18, color: "#e8eef6" },
-  role: { textTransform: "capitalize", color: "#8b9bb0" },
+  role: { color: "#8b9bb0" },
   link: { color: "#3b9eff", fontWeight: "600" },
   row: { flexDirection: "row", gap: 8, marginBottom: 12 },
   primary: {

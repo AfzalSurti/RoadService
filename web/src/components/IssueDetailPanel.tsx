@@ -178,7 +178,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             id="rejection-box"
             className={`reject-box${highlightRejection ? " reject-box-focus" : ""}`}
           >
-            <h3>Surveyor / admin comments (rework)</h3>
+            <h3>GMC representative / GMC Experts comments (rework)</h3>
             <p>
               <strong>Reason:</strong> {latestRejection.reason}
             </p>
@@ -192,12 +192,12 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
 
         <div className="photo-stage-grid">
           <article className="photo-stage">
-            <h3>1 · Surveyor (before)</h3>
+            <h3>1 · GMC representative (before)</h3>
             <p className="muted">Captured while surveying the defect</p>
             {issue.before_photo_path ? (
-              <img src={mediaUrl(issue.before_photo_path)} alt="Surveyor before photo" />
+              <img src={mediaUrl(issue.before_photo_path)} alt="GMC representative before photo" />
             ) : (
-              <div className="photo-empty">No surveyor photo</div>
+              <div className="photo-empty">No GMC representative photo</div>
             )}
           </article>
           <article className="photo-stage">
@@ -472,7 +472,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             ) : null}
 
             {isReadonly ? (
-              <p className="muted">Government account is view-only.</p>
+              <p className="muted">NHIPMPL representative account is view-only.</p>
             ) : null}
           </div>
         )}

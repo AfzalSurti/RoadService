@@ -26,7 +26,7 @@ export default function LoginScreen() {
   return (
     <View style={styles.page}>
       <Text style={styles.brand}>RoadService</Text>
-      <Text style={styles.sub}>Contractor & Surveyor mobile</Text>
+      <Text style={styles.sub}>Contractor & GMC representative mobile</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <TextInput
         style={styles.input}

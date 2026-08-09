@@ -78,7 +78,7 @@ export function ProjectsPage() {
           ? "Description must be at least 3 characters if provided"
           : null,
       contractor_id: next.contractor_id ? null : "Select a contractor",
-      surveyor_id: next.surveyor_id ? null : "Select a surveyor",
+      surveyor_id: next.surveyor_id ? null : "Select a GMC representative",
     });
     setFieldErrors(errors);
     return errors;
@@ -216,7 +216,7 @@ export function ProjectsPage() {
               ) : null}
             </label>
             <label>
-              Surveyor
+              GMC representative
               <select
                 value={form.surveyor_id}
                 aria-invalid={Boolean(touched.surveyor_id && fieldErrors.surveyor_id)}
@@ -271,7 +271,7 @@ export function ProjectsPage() {
                     {p.chainage_from || "—"} – {p.chainage_to || "—"}
                   </td>
                   <td>
-                    {p.contractors.length} contractors · {p.surveyors.length} surveyors
+                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
                   </td>
                   <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
                   <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>

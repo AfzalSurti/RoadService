@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { PasswordInput } from "../components/PasswordInput";
+import { roleLabel } from "../lib/roles";
 import * as v from "../lib/validation";
 import type { User } from "../types";
 
@@ -136,10 +137,10 @@ export function UsersPage() {
                 onChange={(e) => setField("role", e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, role: true }))}
               >
-                <option value="admin">Admin</option>
-                <option value="government">Government</option>
+                <option value="admin">GMC Experts (MIS Expert)</option>
+                <option value="government">NHIPMPL representative</option>
                 <option value="contractor">Contractor</option>
-                <option value="surveyor">Surveyor</option>
+                <option value="surveyor">GMC representative</option>
               </select>
             </label>
             <label>
@@ -201,7 +202,7 @@ export function UsersPage() {
                 <td>{u.id}</td>
                 <td>{u.full_name}</td>
                 <td>{u.email}</td>
-                <td>{u.role}</td>
+                <td>{roleLabel(u.role)}</td>
                 <td>{u.is_active ? "Yes" : "No"}</td>
                 <td>
                   {!isReadonly ? (

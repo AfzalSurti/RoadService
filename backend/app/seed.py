@@ -15,10 +15,10 @@ from app.models.project import Project
 from app.models.user import User
 
 DEMO_USERS = [
-    ("admin@roadservice.app", "Admin User", "Admin123!", UserRole.ADMIN),
-    ("gov@roadservice.app", "Government Viewer", "Gov123!", UserRole.GOVERNMENT),
+    ("admin@roadservice.app", "GMC Experts (MIS Expert)", "Admin123!", UserRole.ADMIN),
+    ("gov@roadservice.app", "NHIPMPL representative", "Gov123!", UserRole.GOVERNMENT),
     ("contractor@roadservice.app", "Demo Contractor", "Contractor123!", UserRole.CONTRACTOR),
-    ("surveyor@roadservice.app", "Demo Surveyor", "Surveyor123!", UserRole.SURVEYOR),
+    ("surveyor@roadservice.app", "GMC representative", "Surveyor123!", UserRole.SURVEYOR),
 ]
 
 EMAIL_ALIASES = {
@@ -282,6 +282,7 @@ async def main() -> None:
         for email, name, password, role in DEMO_USERS:
             existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
             if existing:
+                existing.full_name = name
                 continue
             db.add(
                 User(

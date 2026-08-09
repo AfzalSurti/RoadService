@@ -52,7 +52,7 @@ export function LandingPage() {
             <div className="landing-float-card alt">
               <span className="badge status-verification_pending">Verification</span>
               <strong>Camera + GPS submitted</strong>
-              <small>Awaiting surveyor review</small>
+              <small>Awaiting GMC representative review</small>
             </div>
           </div>
         </div>
@@ -61,14 +61,14 @@ export function LandingPage() {
       <section className="landing-section" id="how-it-works">
         <h2>One workflow, clear ownership</h2>
         <p className="muted landing-section-lead">
-          Surveyors raise issues in the field. Contractors fix and submit proof. Admins and surveyors
-          verify. Government stays informed.
+          GMC representatives raise issues in the field. Contractors fix and submit proof. GMC Experts
+          (MIS Expert) and GMC representatives verify. NHIPMPL representatives stay informed.
         </p>
         <div className="landing-steps">
           <article>
             <span>01</span>
             <h3>Report</h3>
-            <p>Capture defect type, location, and before photos from the mobile surveyor app.</p>
+            <p>Capture defect type, location, and before photos from the GMC representative mobile app.</p>
           </article>
           <article>
             <span>02</span>
@@ -87,11 +87,11 @@ export function LandingPage() {
         <h2>Built for every role</h2>
         <div className="landing-role-grid">
           <div>
-            <h3>Admin</h3>
+            <h3>GMC Experts (MIS Expert)</h3>
             <p>Users, projects, deadlines, and full verification control.</p>
           </div>
           <div>
-            <h3>Government</h3>
+            <h3>NHIPMPL representative</h3>
             <p>Read-only dashboard, map, and reports for oversight.</p>
           </div>
           <div>
@@ -99,7 +99,7 @@ export function LandingPage() {
             <p>Web + mobile tools to execute and prove completion.</p>
           </div>
           <div>
-            <h3>Surveyor</h3>
+            <h3>GMC representative</h3>
             <p>Mobile-first reporting and on-site verification.</p>
           </div>
         </div>
