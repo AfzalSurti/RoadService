@@ -1,80 +1,105 @@
 RoadService – What we added (simple summary)
 ===========================================
 
-Date started: August 2026
+Updated: August 2026
 
 This note explains the upgrades in plain language (no technical jargon).
 
 
-1) Light and Dark look
-----------------------
-- The website had only a dark look before.
-- Now you can switch between Dark mode and Light mode.
-- The choice is remembered the next time you open the site.
+Earlier upgrades (still included)
+---------------------------------
+- Light / Dark mode
+- Billing module (Contractor → Admin recommend → Government approve)
+- Basic documents upload
+- Vendor profiles
+- Rates / BOQ, issues, notifications, mobile field app
 
 
-2) Billing module (like NHAI billing flow)
-------------------------------------------
-Roles used:
-- Contractor submits invoices
-- Admin reviews and recommends payment
-- Government / Client accepts, rejects, or asks for clarification
+New portal modules (from Portal Requirement)
+--------------------------------------------
 
-What you can do:
-- Create a new invoice with project, amount, payment type, and notes
-- See invoice lists with status cards (Pending, Approved, Rejected, Clarification)
-- View activity history for each invoice
-- Admin can recommend Provisional, Balance, or Full payment
-- Government can approve (with UPC), reject, or seek clarification
-- Contractor/Admin can reply to clarification and withdraw invoices before action
+1) Full Document & Approval
+- Version history for documents
+- Check-in / Check-out
+- Request approval / Approve / Reject
+- Digital signature text on approval
+- Watermark text + document classification
+- Download activity logging
 
+2) Attendance & Manpower
+- Personnel register
+- Daily attendance with GPS and biometric flag
+- Leave requests and approval
+- Duty roster support
+- Today’s present / pending leave summary
 
-3) Document repository
-----------------------
-- Upload and keep important project documents in one place
-- Categories such as Contract, Project, Financial, ITS, Statutory
-- See who uploaded what and when
+3) Security & Access
+- MFA PIN (optional second step at login)
+- Login history
+- Audit trail of important actions
+- Security posture notes (encryption / SSO / WAF placeholders for enterprise setup)
 
+4) Toll Operations
+- Toll plaza master (lanes, ETC, tariff notes)
+- Daily traffic, FASTag %, cash %, revenue, lane availability
+- Toll KPI cards
 
-4) Vendor management
---------------------
-- Keep a short profile for each contractor / vendor
-- Track progress notes, delays, and escalation contact
-- Linked to projects where possible
+5) Incident Management & Route Ops
+- Highway incidents (accident / breakdown / fire / medical / security)
+- 1033 source flag
+- Respond and clear workflow
+- Response vehicles list
+- Active / cleared KPIs
 
+6) ATMS / TMS / MLFF / ITS monitoring
+- Device / node register by system type
+- Online / degraded / offline status and health %
+- Last heartbeat time
 
-5) Better project / executive view
-----------------------------------
-- Projects show BOQ amount, executed value, and % progress (from Rates)
-- Dashboard keeps issue KPIs and now also points to Billing / Documents / Vendors
+7) Civil Asset Inventory
+- Bridges, pavement, culverts, furniture, etc.
+- Chainage and condition
+- Map coordinates (lat/lng) for GIS-ready view
 
+8) Integrations register
+- NHAI CCC, ERP, e-Office, Data Lake, Rajmarg Yatra, 1033, IHMCL
+- Status and “Sync now” for demo connectivity tracking
 
-6) What stayed the same
------------------------
-- Issue reporting, photos, GPS, verification (Surveyor / Contractor / Admin)
-- Rates / BOQ quantity entry by Surveyor
-- Notifications for assign / submit / reject / verification reminders
-- Mobile app for field work
+9) Backup / DR / BCP
+- Backup job schedule (incremental / full, onsite / offsite)
+- Run / test backup action
+- Business continuity checklist items
+
+10) Executive NHIT Summary
+- Stretch snapshot (length, progress, planned vs actual spend)
+- Combined view of toll + incidents + ITS health
+- Admin button: “Load demo NHIT data” to fill sample records
 
 
 How to try it
 -------------
-1. Start the backend and web app
-2. Login as:
+1. Start backend and web app
+2. Login:
    - admin@roadservice.app / Admin123!
    - contractor@roadservice.app / Contractor123!
    - gov@roadservice.app / Gov123!
-   - surveyor@roadservice.app / Surveyor123! (mobile mainly)
-3. Use the new menu items: Billing, Documents, Vendors
-4. Use the Light/Dark button in the top bar
+3. As Admin open Executive → click “Load demo NHIT data”
+4. Browse new menu items: Executive, Documents, Attendance, Toll Ops,
+   Incidents, ATMS/TMS/ITS, Civil Assets, Integrations, Backup/DR, Security
 
-These upgrades are on GitHub (main branch), pushed in small steps:
-theme → billing backend → billing screens → documents/vendors → dashboard → mobile fix.
+
+Important honesty note
+----------------------
+These modules are built as a working portal inside RoadService.
+They cover the requirement areas with real screens and workflows.
+Full live connection to real NHAI CCC / ERP / WAF / biometric devices /
+production SSO still needs organisation credentials and infrastructure
+outside this demo app.
 
 
 Next possible upgrades (later)
 ------------------------------
-- Digital signature pad on diary notes
-- Full attendance register for billing
-- Toll / ATMS / GIS incident modules from the big portal requirement file
-- Deeper ERP / NHAI system integrations
+- Live SSO (Azure AD / NIC) and hardware MFA tokens
+- Real plaza TMS feeds and ATMS video walls
+- Full GIS map layers for assets and incidents
+- Production backup agents and DR automation
