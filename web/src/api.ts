@@ -1,12 +1,15 @@
 import type {
   DashboardStats,
+  Invoice,
   Issue,
   IssueStatus,
+  PortalDocument,
   Project,
   ProjectRateSummary,
   RateItem,
   TokenResponse,
   User,
+  Vendor,
 } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
@@ -216,6 +219,111 @@ export const api = {
 
   projectRateSummary: (token: string, projectId: number) =>
     request<ProjectRateSummary>(`/api/v1/rates/summary/${projectId}`, { token }),
+
+  invoices: (token: string) => request<Invoice[]>("/api/v1/billing/invoices", { token }),
+
+  createInvoice: (
+    token: string,
+    body: {
+      project_id: number;
+      invoice_no: string;
+      invoice_date: string;
+      payment_type: string;
+      amount: number;
+      chainage_from?: string;
+      chainage_to?: string;
+      notes?: string;
+    }
+  ) =>
+    request<Invoice>("/api/v1/billing/invoices", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  recommendInvoice: (
+    token: string,
+    id: number,
+    body: {
+      payment_mode: string;
+      recommended_amount: number;
+      calculation_note?: string;
+      note?: string;
+    }
+  ) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/recommend`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  approveInvoice: (
+    token: string,
+    id: number,
+    body: { upc: string; note?: string; approved_amount?: number }
+  ) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/approve`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  rejectInvoice: (token: string, id: number, body: { note?: string }) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/reject`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  seekInvoiceClarification: (token: string, id: number, body: { note?: string }) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/seek-clarification`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  submitInvoiceClarification: (token: string, id: number, body: { note?: string }) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/clarify`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  withdrawInvoice: (token: string, id: number, body: { note?: string }) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/withdraw`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  documents: (token: string, projectId?: number) =>
+    request<PortalDocument[]>(
+      `/api/v1/documents${projectId ? `?project_id=${projectId}` : ""}`,
+      { token }
+    ),
+
+  uploadDocument: (token: string, form: FormData) =>
+    request<PortalDocument>("/api/v1/documents", { method: "POST", token, body: form }),
+
+  vendors: (token: string) => request<Vendor[]>("/api/v1/vendors", { token }),
+
+  createVendor: (
+    token: string,
+    body: {
+      name: string;
+      project_id?: number;
+      contractor_user_id?: number;
+      brief?: string;
+      progress_notes?: string;
+      delay_notes?: string;
+      escalation_matrix?: string;
+    }
+  ) =>
+    request<Vendor>("/api/v1/vendors", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
 };
 
 export { ApiError, API_URL };

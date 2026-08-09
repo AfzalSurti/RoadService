@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { useTheme } from "../theme";
 
 export function AppLayout() {
   const { token, fullName, role, isReadonly, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
 
@@ -31,6 +33,13 @@ export function AppLayout() {
             Dashboard
           </NavLink>
           <NavLink to="/issues">Issues</NavLink>
+          {(role === "admin" || role === "contractor" || role === "government") && (
+            <NavLink to="/billing">Billing</NavLink>
+          )}
+          {(role === "admin" || role === "contractor" || role === "government") && (
+            <NavLink to="/documents">Documents</NavLink>
+          )}
+          {(role === "admin" || role === "government") && <NavLink to="/vendors">Vendors</NavLink>}
           <NavLink to="/notifications">
             Notifications{unread ? ` (${unread})` : ""}
           </NavLink>
@@ -49,6 +58,9 @@ export function AppLayout() {
             {fullName}
             <small>{role}</small>
           </div>
+          <button className="linkish" type="button" onClick={toggleTheme}>
+            Switch to {theme === "dark" ? "Light" : "Dark"} mode
+          </button>
           <button
             className="linkish"
             type="button"
@@ -64,6 +76,9 @@ export function AppLayout() {
       <main className="main">
         <div className="topbar">
           <h1 id="page-title">RoadService</h1>
+          <button className="theme-toggle" type="button" onClick={toggleTheme}>
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </button>
           {isReadonly ? <span className="badge view-only">View only</span> : null}
           {unread ? <span className="badge status-verification_pending">{unread} new</span> : null}
         </div>

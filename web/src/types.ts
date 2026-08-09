@@ -94,6 +94,12 @@ export type DashboardStats = {
   timeline_compliance_pct: number | null;
   contractor_performance: { contractor_id: number; total: number; closed: number }[];
   surveyor_performance: { surveyor_id: number; reported: number }[];
+  total_invoices?: number;
+  invoices_by_status?: Record<string, number>;
+  total_documents?: number;
+  total_vendors?: number;
+  total_boq_amount?: number;
+  total_executed_amount?: number;
 };
 
 export type TokenResponse = {
@@ -137,4 +143,60 @@ export type ProjectRateSummary = {
   total_executed_amount: number;
   progress_pct: number | null;
   items: RateItem[];
+};
+
+export type InvoiceActivity = {
+  id: number;
+  invoice_id: number;
+  actor_id: number;
+  action: string;
+  note: string | null;
+  created_at: string;
+};
+
+export type Invoice = {
+  id: number;
+  project_id: number;
+  transaction_id: string;
+  invoice_no: string;
+  invoice_date: string;
+  payment_type: string;
+  payment_mode: string;
+  amount: number;
+  recommended_amount: number | null;
+  approved_amount: number | null;
+  upc: string | null;
+  chainage_from: string | null;
+  chainage_to: string | null;
+  status: string;
+  submitted_by_id: number;
+  notes: string | null;
+  calculation_json: string | null;
+  created_at: string;
+  updated_at: string;
+  activities: InvoiceActivity[];
+};
+
+export type PortalDocument = {
+  id: number;
+  project_id: number | null;
+  category: string;
+  title: string;
+  description: string | null;
+  file_path: string;
+  uploaded_by_id: number;
+  created_at: string;
+};
+
+export type Vendor = {
+  id: number;
+  project_id: number | null;
+  name: string;
+  contractor_user_id: number | null;
+  brief: string | null;
+  progress_notes: string | null;
+  delay_notes: string | null;
+  escalation_matrix: string | null;
+  created_at: string;
+  updated_at: string;
 };
