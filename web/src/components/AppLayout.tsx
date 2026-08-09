@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { DeveloperCredit } from "./DeveloperCredit";
 import { useTheme } from "../theme";
 
 export function AppLayout() {
@@ -78,6 +79,7 @@ export function AppLayout() {
           >
             Sign out
           </button>
+          <DeveloperCredit className="compact" />
         </div>
       </aside>
       <main className="main">

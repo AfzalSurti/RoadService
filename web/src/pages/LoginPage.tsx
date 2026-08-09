@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { DeveloperCredit } from "../components/DeveloperCredit";
 import { PasswordInput } from "../components/PasswordInput";
 import * as v from "../lib/validation";
 
@@ -118,6 +119,7 @@ export function LoginPage() {
         <p className="login-back">
           <Link to="/">← Back to home</Link>
         </p>
+        <DeveloperCredit />
       </div>
     </div>
   );

@@ -386,12 +386,86 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .landing-section { padding: 3rem 5vw; max-width: 1100px; margin: 0 auto; }
 .landing-footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   gap: 1rem;
   padding: 1.5rem 5vw 2.5rem;
   border-top: 1px solid var(--line);
   color: var(--muted);
+}
+.landing-footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.developer-credit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem 0.55rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.developer-credit-name {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.developer-credit-name:hover,
+.developer-credit-name:focus-visible {
+  color: #0a66c2;
+  border-bottom-color: #0a66c2;
+  transform: translateY(-1px);
+  outline: none;
+}
+.developer-credit-sep {
+  opacity: 0.7;
+  margin: 0 0.1rem;
+}
+.developer-credit-logo-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.developer-credit-logo-link:hover,
+.developer-credit-logo-link:focus-visible {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 18px rgba(15, 76, 129, 0.22);
+  outline: none;
+}
+.developer-credit-logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  display: block;
+  border-radius: 50%;
+}
+.developer-credit.compact {
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0 0;
+  font-size: 0.8rem;
+  justify-content: flex-start;
+}
+.developer-credit.compact .developer-credit-logo {
+  width: 30px;
+  height: 30px;
+}
+.login-card .developer-credit {
+  margin-top: 1.15rem;
 }
 
 .photo-stage-grid {

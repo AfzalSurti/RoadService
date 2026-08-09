@@ -1,5 +1,6 @@
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { DeveloperCredit } from "../components/DeveloperCredit";
 
 export function LandingPage() {
   const { token } = useAuth();
@@ -105,10 +106,13 @@ export function LandingPage() {
       </section>
 
       <footer className="landing-footer">
-        <div className="brand">
-          Road<span>Service</span>
+        <div className="landing-footer-top">
+          <div className="brand">
+            Road<span>Service</span>
+          </div>
+          <Link to="/login">Sign in</Link>
         </div>
-        <Link to="/login">Sign in</Link>
+        <DeveloperCredit />
       </footer>
     </div>
   );
