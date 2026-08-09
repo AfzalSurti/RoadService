@@ -24,6 +24,22 @@ class IssuePriority(str, Enum):
     CRITICAL = "critical"
 
 
+class InvoiceStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    RECOMMENDED = "recommended"
+    CLARIFICATION = "clarification"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
+class PaymentMode(str, Enum):
+    FULL = "full"
+    PROVISIONAL = "provisional"
+    BALANCE = "balance"
+
+
 # Explicit allowed transitions (from_status -> set of to_status)
 STATUS_TRANSITIONS: dict[IssueStatus, set[IssueStatus]] = {
     IssueStatus.OPEN: {IssueStatus.IN_PROGRESS},

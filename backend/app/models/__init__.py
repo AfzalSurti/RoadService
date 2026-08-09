@@ -1,6 +1,9 @@
+from app.models.billing import Invoice, InvoiceActivity, PortalDocument, Vendor
 from app.models.enums import (
+    InvoiceStatus,
     IssuePriority,
     IssueStatus,
+    PaymentMode,
     STATUS_TRANSITIONS,
     UserRole,
 )
@@ -25,4 +28,10 @@ __all__ = [
     "Notification",
     "RateItem",
     "QuantityEntry",
+    "Invoice",
+    "InvoiceActivity",
+    "InvoiceStatus",
+    "PaymentMode",
+    "PortalDocument",
+    "Vendor",
 ]

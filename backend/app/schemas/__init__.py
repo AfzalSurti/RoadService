@@ -260,6 +260,100 @@ class ProjectRateSummary(BaseModel):
     items: list[RateItemOut]
 
 
+class InvoiceActivityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    invoice_id: int
+    actor_id: int
+    action: str
+    note: str | None
+    created_at: datetime
+
+
+class InvoiceCreate(BaseModel):
+    project_id: int
+    invoice_no: str = Field(min_length=1, max_length=64)
+    invoice_date: date
+    payment_type: str = Field(min_length=1, max_length=128)
+    amount: float = Field(gt=0)
+    chainage_from: str | None = None
+    chainage_to: str | None = None
+    notes: str | None = None
+
+
+class InvoiceRecommend(BaseModel):
+    payment_mode: str = Field(description="full | provisional | balance")
+    recommended_amount: float = Field(gt=0)
+    calculation_note: str | None = None
+    note: str | None = None
+
+
+class InvoiceAction(BaseModel):
+    note: str | None = None
+    upc: str | None = None
+    approved_amount: float | None = None
+
+
+class InvoiceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    transaction_id: str
+    invoice_no: str
+    invoice_date: date
+    payment_type: str
+    payment_mode: str
+    amount: float
+    recommended_amount: float | None
+    approved_amount: float | None
+    upc: str | None
+    chainage_from: str | None
+    chainage_to: str | None
+    status: str
+    submitted_by_id: int
+    notes: str | None
+    calculation_json: str | None
+    created_at: datetime
+    updated_at: datetime
+    activities: list[InvoiceActivityOut] = []
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int | None
+    category: str
+    title: str
+    description: str | None
+    file_path: str
+    uploaded_by_id: int
+    created_at: datetime
+
+
+class VendorCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    project_id: int | None = None
+    contractor_user_id: int | None = None
+    brief: str | None = None
+    progress_notes: str | None = None
+    delay_notes: str | None = None
+    escalation_matrix: str | None = None
+
+
+class VendorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int | None
+    name: str
+    contractor_user_id: int | None
+    brief: str | None
+    progress_notes: str | None
+    delay_notes: str | None
+    escalation_matrix: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class DashboardStats(BaseModel):
     total_projects: int
     total_issues: int
@@ -269,3 +363,10 @@ class DashboardStats(BaseModel):
     timeline_compliance_pct: float | None
     contractor_performance: list[dict]
     surveyor_performance: list[dict]
+    total_invoices: int = 0
+    invoices_by_status: dict[str, int] = {}
+    total_documents: int = 0
+    total_vendors: int = 0
+    total_boq_amount: float = 0
+    total_executed_amount: float = 0
+

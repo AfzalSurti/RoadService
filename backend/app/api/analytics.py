@@ -14,9 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.billing import Invoice, PortalDocument, Vendor
 from app.models.enums import IssueStatus
 from app.models.issue import Issue
 from app.models.project import Project
+from app.models.rate import RateItem
 from app.models.user import User
 from app.schemas import DashboardStats
 from app.services.issue_service import remaining_days
@@ -72,6 +74,16 @@ async def dashboard_stats(
     ).all()
     surveyor_performance = [{"surveyor_id": sid, "reported": count} for sid, count in surveyor_rows]
 
+    total_invoices = (await db.execute(select(func.count(Invoice.id)))).scalar_one()
+    inv_rows = (await db.execute(select(Invoice.status, func.count(Invoice.id)).group_by(Invoice.status))).all()
+    invoices_by_status = {
+        (s.value if hasattr(s, "value") else str(s)): c for s, c in inv_rows
+    }
+    total_documents = (await db.execute(select(func.count(PortalDocument.id)))).scalar_one()
+    total_vendors = (await db.execute(select(func.count(Vendor.id)))).scalar_one()
+    boq_total = (await db.execute(select(func.coalesce(func.sum(RateItem.boq_amount), 0)))).scalar_one()
+    exec_total = (await db.execute(select(func.coalesce(func.sum(RateItem.executed_amount), 0)))).scalar_one()
+
     return DashboardStats(
         total_projects=total_projects,
         total_issues=total_issues,
@@ -81,6 +93,12 @@ async def dashboard_stats(
         timeline_compliance_pct=compliance,
         contractor_performance=contractor_performance,
         surveyor_performance=surveyor_performance,
+        total_invoices=total_invoices,
+        invoices_by_status=invoices_by_status,
+        total_documents=total_documents,
+        total_vendors=total_vendors,
+        total_boq_amount=float(boq_total or 0),
+        total_executed_amount=float(exec_total or 0),
     )
 
 
