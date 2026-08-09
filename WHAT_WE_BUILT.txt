@@ -1,0 +1,77 @@
+RoadService – What we added (simple summary)
+===========================================
+
+Date started: August 2026
+
+This note explains the upgrades in plain language (no technical jargon).
+
+
+1) Light and Dark look
+----------------------
+- The website had only a dark look before.
+- Now you can switch between Dark mode and Light mode.
+- The choice is remembered the next time you open the site.
+
+
+2) Billing module (like NHAI billing flow)
+------------------------------------------
+Roles used:
+- Contractor submits invoices
+- Admin reviews and recommends payment
+- Government / Client accepts, rejects, or asks for clarification
+
+What you can do:
+- Create a new invoice with project, amount, payment type, and notes
+- See invoice lists with status cards (Pending, Approved, Rejected, Clarification)
+- View activity history for each invoice
+- Admin can recommend Provisional, Balance, or Full payment
+- Government can approve (with UPC), reject, or seek clarification
+- Contractor/Admin can reply to clarification and withdraw invoices before action
+
+
+3) Document repository
+----------------------
+- Upload and keep important project documents in one place
+- Categories such as Contract, Project, Financial, ITS, Statutory
+- See who uploaded what and when
+
+
+4) Vendor management
+--------------------
+- Keep a short profile for each contractor / vendor
+- Track progress notes, delays, and escalation contact
+- Linked to projects where possible
+
+
+5) Better project / executive view
+----------------------------------
+- Projects show BOQ amount, executed value, and % progress (from Rates)
+- Dashboard keeps issue KPIs and now also points to Billing / Documents / Vendors
+
+
+6) What stayed the same
+-----------------------
+- Issue reporting, photos, GPS, verification (Surveyor / Contractor / Admin)
+- Rates / BOQ quantity entry by Surveyor
+- Notifications for assign / submit / reject / verification reminders
+- Mobile app for field work
+
+
+How to try it
+-------------
+1. Start the backend and web app
+2. Login as:
+   - admin@roadservice.app / Admin123!
+   - contractor@roadservice.app / Contractor123!
+   - gov@roadservice.app / Gov123!
+   - surveyor@roadservice.app / Surveyor123! (mobile mainly)
+3. Use the new menu items: Billing, Documents, Vendors
+4. Use the Light/Dark button in the top bar
+
+
+Next possible upgrades (later)
+------------------------------
+- Digital signature pad on diary notes
+- Full attendance register for billing
+- Toll / ATMS / GIS incident modules from the big portal requirement file
+- Deeper ERP / NHAI system integrations
