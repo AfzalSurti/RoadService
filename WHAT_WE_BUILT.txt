@@ -102,6 +102,15 @@ Contractor Billing (NHAI Summary of Invoice)
 - Saves into billing invoices and shows on the Billing list workflow
 
 
+Later portal upgrades (Aug 2026)
+--------------------------------
+- Reports: fill required details → Download Excel → Import Excel (data from file)
+- Vendors: Work Order + LOA uploads, type of work, dates, DLP, remarks
+- Map: click coloured issue pin → status + defect/rejection history panel
+- MPR: 3 package folders + form (physical/financial/ratings/pending/critical/remarks) + PDF import linked to vendor
+- BOQ: Add item shows only CA rate fields; executed/% progress comes from Record qty entries
+
+
 Important honesty note
 ----------------------
 These modules are built as a working portal inside RoadService.
