@@ -1,10 +1,10 @@
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.billing import Invoice, PortalDocument, Vendor
-from app.models.enums import IssueStatus
+from app.models.enums import IssuePriority, IssueStatus
 from app.models.issue import Issue
 from app.models.project import Project
 from app.models.rate import RateItem
@@ -24,6 +24,21 @@ from app.schemas import DashboardStats
 from app.services.issue_service import remaining_days
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+ISSUE_HEADERS = [
+    "ID",
+    "Project",
+    "Type",
+    "Category",
+    "Priority",
+    "Status",
+    "Chainage",
+    "Deadline",
+    "Remaining Days",
+    "Reporter",
+    "Contractor",
+    "Created",
+]
 
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -106,41 +121,150 @@ async def dashboard_stats(
 async def export_excel(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
+    project_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    package_name: str | None = None,
+    report_title: str | None = None,
+    prepared_by: str | None = None,
+    remarks: str | None = None,
 ):
-    issues = (
-        await db.execute(select(Issue).order_by(Issue.id))
-    ).scalars().all()
+    stmt = select(Issue).order_by(Issue.id)
+    if project_id is not None:
+        stmt = stmt.where(Issue.project_id == project_id)
+    if date_from is not None:
+        stmt = stmt.where(Issue.created_at >= datetime.combine(date_from, datetime.min.time()))
+    if date_to is not None:
+        stmt = stmt.where(Issue.created_at <= datetime.combine(date_to, datetime.max.time()))
+    issues = (await db.execute(stmt)).scalars().all()
+
+    project_name = ""
+    if project_id is not None:
+        proj = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        project_name = proj.name if proj else str(project_id)
+
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Issues"
-    headers = [
-        "ID", "Project", "Type", "Category", "Priority", "Status", "Chainage",
-        "Deadline", "Remaining Days", "Reporter", "Contractor", "Created",
-    ]
-    ws.append(headers)
+    meta = wb.active
+    meta.title = "Report Details"
+    meta.append(["Field", "Value"])
+    meta.append(["Report Title", report_title or "RoadService Issues Report"])
+    meta.append(["Project ID", project_id or ""])
+    meta.append(["Project Name", project_name])
+    meta.append(["Package / Stretch", package_name or ""])
+    meta.append(["Period From", date_from.isoformat() if date_from else ""])
+    meta.append(["Period To", date_to.isoformat() if date_to else ""])
+    meta.append(["Prepared By", prepared_by or ""])
+    meta.append(["Remarks", remarks or ""])
+    meta.append(["Generated On", date.today().isoformat()])
+    meta.append(["Row Count", len(issues)])
+
+    ws = wb.create_sheet("Issues")
+    ws.append(ISSUE_HEADERS)
     for i in issues:
-        ws.append([
-            i.id,
-            i.project_id,
-            i.issue_type,
-            i.work_category,
-            i.priority.value,
-            i.status.value,
-            i.chainage,
-            i.deadline_date.isoformat(),
-            remaining_days(i.deadline_date),
-            i.reported_by_id,
-            i.assigned_contractor_id,
-            i.created_at.isoformat() if i.created_at else "",
-        ])
+        ws.append(
+            [
+                i.id,
+                i.project_id,
+                i.issue_type,
+                i.work_category,
+                i.priority.value if hasattr(i.priority, "value") else i.priority,
+                i.status.value if hasattr(i.status, "value") else i.status,
+                i.chainage,
+                i.deadline_date.isoformat() if i.deadline_date else "",
+                remaining_days(i.deadline_date) if i.deadline_date else "",
+                i.reported_by_id,
+                i.assigned_contractor_id,
+                i.created_at.isoformat() if i.created_at else "",
+            ]
+        )
+
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
+    fname = f"roadservice_report_{date.today()}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="issues_{date.today()}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
+
+
+@router.post("/import/excel")
+async def import_excel(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload an Excel .xlsx file")
+    raw = await file.read()
+    try:
+        wb = load_workbook(BytesIO(raw), data_only=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Invalid Excel file: {exc}") from exc
+
+    ws = wb["Issues"] if "Issues" in wb.sheetnames else wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(status_code=400, detail="Excel sheet is empty")
+
+    headers = [str(h).strip() if h is not None else "" for h in rows[0]]
+    idx = {h: i for i, h in enumerate(headers)}
+    required = ["ID", "Status", "Priority"]
+    missing = [h for h in required if h not in idx]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Excel must include columns: {', '.join(required)}. Missing: {', '.join(missing)}",
+        )
+
+    updated = 0
+    skipped = 0
+    errors: list[str] = []
+    for row_no, row in enumerate(rows[1:], start=2):
+        if not row or all(c is None or str(c).strip() == "" for c in row):
+            continue
+        try:
+            issue_id = int(row[idx["ID"]])
+        except (TypeError, ValueError):
+            skipped += 1
+            errors.append(f"Row {row_no}: invalid ID")
+            continue
+        issue = (await db.execute(select(Issue).where(Issue.id == issue_id))).scalar_one_or_none()
+        if not issue:
+            skipped += 1
+            errors.append(f"Row {row_no}: issue #{issue_id} not found")
+            continue
+
+        status_raw = str(row[idx["Status"]] or "").strip().lower().replace(" ", "_")
+        priority_raw = str(row[idx["Priority"]] or "").strip().lower()
+        try:
+            if status_raw:
+                issue.status = IssueStatus(status_raw)
+            if priority_raw:
+                issue.priority = IssuePriority(priority_raw)
+        except ValueError as exc:
+            skipped += 1
+            errors.append(f"Row {row_no}: {exc}")
+            continue
+
+        if "Type" in idx and row[idx["Type"]]:
+            issue.issue_type = str(row[idx["Type"]]).strip()
+        if "Category" in idx and row[idx["Category"]]:
+            issue.work_category = str(row[idx["Category"]]).strip()
+        if "Chainage" in idx and row[idx["Chainage"]] is not None:
+            issue.chainage = str(row[idx["Chainage"]]).strip()
+        updated += 1
+
+    await db.commit()
+    return {
+        "ok": True,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:20],
+        "imported_by": user.full_name,
+        "filename": file.filename,
+    }
 
 
 @router.get("/export/pdf")

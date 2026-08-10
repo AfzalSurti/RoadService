@@ -157,12 +157,45 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  exportExcel: async (token: string) => {
-    const res = await fetch(`${API_URL}/api/v1/analytics/export/excel`, {
+  exportExcel: async (
+    token: string,
+    params?: {
+      project_id?: number;
+      date_from?: string;
+      date_to?: string;
+      package_name?: string;
+      report_title?: string;
+      prepared_by?: string;
+      remarks?: string;
+    }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.project_id != null) q.set("project_id", String(params.project_id));
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.package_name) q.set("package_name", params.package_name);
+    if (params?.report_title) q.set("report_title", params.report_title);
+    if (params?.prepared_by) q.set("prepared_by", params.prepared_by);
+    if (params?.remarks) q.set("remarks", params.remarks);
+    const qs = q.toString();
+    const res = await fetch(`${API_URL}/api/v1/analytics/export/excel${qs ? `?${qs}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new ApiError("Export failed", res.status);
     return res.blob();
+  },
+
+  importExcel: async (token: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{
+      ok: boolean;
+      updated: number;
+      skipped: number;
+      errors: string[];
+      imported_by: string;
+      filename: string;
+    }>("/api/v1/analytics/import/excel", { method: "POST", token, body: fd });
   },
 
   exportPdf: async (token: string) => {
