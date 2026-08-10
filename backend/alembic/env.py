@@ -16,6 +16,7 @@ from app.models import (  # noqa: F401 — register metadata
     DutyRoster,
     ExecutiveSnapshot,
     HighwayIncident,
+    DocumentFolder,
     Invoice,
     InvoiceActivity,
     IntegrationLink,

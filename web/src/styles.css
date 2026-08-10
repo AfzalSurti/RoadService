@@ -485,13 +485,48 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   width: 30px;
   height: 30px;
 }
-.billing-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+.docs-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
   gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
+  align-items: start;
+}
+.docs-sidebar { position: sticky; top: 0.5rem; max-height: calc(100vh - 120px); overflow: auto; }
+.folder-tree { list-style: none; margin: 0; padding: 0; }
+.folder-tree ul { list-style: none; margin: 0.15rem 0 0; padding: 0; }
+.folder-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 0.4rem 0.45rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.folder-item:hover,
+.folder-item.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.folder-caret { width: 1rem; color: var(--muted); font-size: 0.75rem; }
+.folder-caret.spacer { visibility: hidden; }
+.folder-icon { width: 1.1rem; }
+.folder-name { flex: 1; min-width: 0; }
+.folder-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+@media (max-width: 900px) {
+  .docs-layout { grid-template-columns: 1fr; }
+  .docs-sidebar { position: static; max-height: none; }
 }
 .billing-status-grid {
   display: grid;

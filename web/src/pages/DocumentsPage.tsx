@@ -1,37 +1,146 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
-import type { PortalDocument, Project } from "../types";
+import type { DocumentFolder, PortalDocument } from "../types";
 
-const CATEGORIES = ["contract", "project", "financial", "its", "statutory", "other"];
+function findFolder(nodes: DocumentFolder[], id: number | null): DocumentFolder | null {
+  if (id == null) return null;
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const hit = findFolder(n.children || [], id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function FolderTree({
+  nodes,
+  selectedId,
+  expanded,
+  onToggle,
+  onSelect,
+  depth = 0,
+}: {
+  nodes: DocumentFolder[];
+  selectedId: number | null;
+  expanded: Set<number>;
+  onToggle: (id: number) => void;
+  onSelect: (f: DocumentFolder) => void;
+  depth?: number;
+}) {
+  return (
+    <ul className="folder-tree" style={{ paddingLeft: depth ? 14 : 0 }}>
+      {nodes.map((f) => {
+        const hasKids = (f.children || []).length > 0;
+        const open = expanded.has(f.id);
+        const icon =
+          f.folder_type === "stretch" ? "📁" : f.folder_type === "discipline" ? "📂" : "📄";
+        return (
+          <li key={f.id}>
+            <button
+              type="button"
+              className={`folder-item${selectedId === f.id ? " active" : ""}`}
+              onClick={() => {
+                onSelect(f);
+                if (hasKids) onToggle(f.id);
+              }}
+            >
+              {hasKids ? (
+                <span className="folder-caret">{open ? "▾" : "▸"}</span>
+              ) : (
+                <span className="folder-caret spacer" />
+              )}
+              <span className="folder-icon">{icon}</span>
+              <span className="folder-name">{f.name}</span>
+              {f.folder_type === "doctype" ? (
+                <span className="folder-count">{f.document_count || 0}</span>
+              ) : null}
+            </button>
+            {hasKids && open ? (
+              <FolderTree
+                nodes={f.children}
+                selectedId={selectedId}
+                expanded={expanded}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                depth={depth + 1}
+              />
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function DocumentsPage() {
   const { token, role, isReadonly } = useAuth();
+  const [folders, setFolders] = useState<DocumentFolder[]>([]);
   const [docs, setDocs] = useState<PortalDocument[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
   const [selected, setSelected] = useState<PortalDocument | null>(null);
   const [versions, setVersions] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [filterProject, setFilterProject] = useState<number | "">("");
-  const [form, setForm] = useState({ title: "", category: "project", description: "", project_id: "" });
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [form, setForm] = useState({ title: "", description: "" });
   const [file, setFile] = useState<File | null>(null);
   const [versionFile, setVersionFile] = useState<File | null>(null);
   const [signText, setSignText] = useState("");
   const [watermark, setWatermark] = useState("");
 
+  const selectedFolder = useMemo(
+    () => findFolder(folders, selectedFolderId),
+    [folders, selectedFolderId]
+  );
+  const canUploadHere = selectedFolder?.folder_type === "doctype";
+
+  const breadcrumb = useMemo(() => {
+    if (!selectedFolder) return [] as string[];
+    const path: string[] = [];
+    const walk = (nodes: DocumentFolder[], target: number, trail: string[]): boolean => {
+      for (const n of nodes) {
+        const next = [...trail, n.name];
+        if (n.id === target) {
+          path.push(...next);
+          return true;
+        }
+        if (walk(n.children || [], target, next)) return true;
+      }
+      return false;
+    };
+    walk(folders, selectedFolder.id, []);
+    return path;
+  }, [folders, selectedFolder]);
+
+  const loadFolders = async () => {
+    if (!token) return;
+    const tree = await api.documentFolders(token);
+    setFolders(tree);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const s of tree) next.add(s.id);
+      return next;
+    });
+  };
+
+  const loadDocs = async (folderId: number | null) => {
+    if (!token || folderId == null) {
+      setDocs([]);
+      return;
+    }
+    const d = await api.documents(token, undefined, folderId);
+    setDocs(d);
+    if (selected) setSelected(d.find((x) => x.id === selected.id) || null);
+  };
+
   const load = async () => {
     if (!token) return;
     try {
-      const [d, p] = await Promise.all([
-        api.documents(token, filterProject ? Number(filterProject) : undefined),
-        api.projects(token),
-      ]);
-      setDocs(d);
-      setProjects(p);
+      await loadFolders();
+      await loadDocs(selectedFolderId);
       setError(null);
-      if (selected) setSelected(d.find((x) => x.id === selected.id) || null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load documents");
     }
@@ -44,7 +153,11 @@ export function DocumentsPage() {
 
   useEffect(() => {
     load();
-  }, [token, filterProject]);
+  }, [token]);
+
+  useEffect(() => {
+    loadDocs(selectedFolderId).catch((e: Error) => setError(e.message));
+  }, [selectedFolderId, token]);
 
   const openDoc = async (d: PortalDocument) => {
     if (!token) return;
@@ -60,19 +173,24 @@ export function DocumentsPage() {
 
   const onUpload = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly || !file) return setError("Choose a file to upload");
+    if (!token || isReadonly || !file || !canUploadHere || !selectedFolder) {
+      return setError("Open a document-type folder (Contract / Drawing / EOT) and choose a file");
+    }
     setBusy(true);
+    setError(null);
     try {
       const fd = new FormData();
-      fd.append("title", form.title.trim());
-      fd.append("category", form.category);
+      fd.append("title", form.title.trim() || file.name);
+      fd.append("category", selectedFolder.name);
+      fd.append("folder_id", String(selectedFolder.id));
+      if (selectedFolder.project_id) fd.append("project_id", String(selectedFolder.project_id));
       if (form.description.trim()) fd.append("description", form.description.trim());
-      if (form.project_id) fd.append("project_id", form.project_id);
       fd.append("file", file);
       await api.uploadDocument(token, fd);
-      setForm({ title: "", category: "project", description: "", project_id: "" });
+      setForm({ title: "", description: "" });
       setFile(null);
       await load();
+      await loadDocs(selectedFolder.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -99,261 +217,290 @@ export function DocumentsPage() {
     <>
       {error ? <div className="error">{error}</div> : null}
 
-      {!isReadonly ? (
-        <section className="panel">
-          <h2>Upload document</h2>
-          <form className="form-grid" onSubmit={onUpload}>
-            <label>
-              Title
-              <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </label>
-            <label>
-              Category
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Project
-              <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}>
-                <option value="">—</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              File
-              <input type="file" required onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label>
-            <label className="span-2">
-              Description
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </label>
-            <div className="span-2">
-              <button className="btn" type="submit" disabled={busy}>
-                Upload
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
-
-      <section className="panel">
-        <div className="panel-head-row">
-          <h2>Repository</h2>
-          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Ver</th>
-              <th>Status</th>
-              <th>Class</th>
-              <th>Checkout</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {docs.map((d) => (
-              <tr key={d.id}>
-                <td>
-                  {d.title}
-                  <div className="muted">{d.category}</div>
-                </td>
-                <td>v{d.current_version ?? 1}</td>
-                <td>
-                  <span className={`badge status-${d.approval_status || "draft"}`}>
-                    {formatLabel(d.approval_status || "draft")}
-                  </span>
-                </td>
-                <td>{d.classification || "internal"}</td>
-                <td>{d.checked_out_by_id ? `User #${d.checked_out_by_id}` : "—"}</td>
-                <td>
-                  <button type="button" className="linkish" onClick={() => openDoc(d)}>
-                    Manage
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!docs.length ? (
-              <tr>
-                <td colSpan={6}>No documents yet.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </section>
-
-      {selected ? (
-        <section className="panel">
+      <div className="docs-layout">
+        <aside className="panel docs-sidebar">
           <div className="panel-head-row">
-            <h2>
-              {selected.title} (v{selected.current_version ?? 1})
-            </h2>
-            <button type="button" className="linkish" onClick={() => setSelected(null)}>
-              Close
-            </button>
+            <h2>Folders</h2>
+            {role === "admin" ? (
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={async () => {
+                  if (!token) return;
+                  await api.seedDocumentFolders(token);
+                  await load();
+                }}
+              >
+                Setup folders
+              </button>
+            ) : null}
           </div>
-          <p className="muted">
-            Watermark: {selected.watermark_text || "—"} · Approval: {selected.approval_status || "draft"}
+          <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
+            Stretch → Civil / Toll-ATMS-TMS → Contract / Drawing / EOT
           </p>
-          <div className="btn-row">
-            <a
-              className="btn secondary"
-              href={mediaUrl(selected.file_path)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => token && api.nhitPost(token, `/documents/${selected.id}/log-download`, {})}
-            >
-              Open / download (logged)
-            </a>
-            {!isReadonly ? (
-              <>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkout`, {}))}
-                >
-                  Check-out
+          {folders.length ? (
+            <FolderTree
+              nodes={folders}
+              selectedId={selectedFolderId}
+              expanded={expanded}
+              onToggle={(id) =>
+                setExpanded((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                })
+              }
+              onSelect={(f) => setSelectedFolderId(f.id)}
+            />
+          ) : (
+            <p className="muted">No folders yet. Admin can click Setup folders.</p>
+          )}
+        </aside>
+
+        <div className="docs-main">
+          <section className="panel">
+            <div className="panel-head-row">
+              <div>
+                <h2>Repository</h2>
+                <p className="muted" style={{ margin: 0 }}>
+                  {breadcrumb.length ? breadcrumb.join(" / ") : "Select a folder on the left"}
+                </p>
+              </div>
+            </div>
+
+            {canUploadHere && !isReadonly ? (
+              <form className="form-grid" onSubmit={onUpload} style={{ marginBottom: "1rem" }}>
+                <label>
+                  Title
+                  <input
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    placeholder="Optional — defaults to file name"
+                  />
+                </label>
+                <label>
+                  File
+                  <input type="file" required onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                </label>
+                <label className="span-2">
+                  Description
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </label>
+                <div className="span-2">
+                  <button className="btn" type="submit" disabled={busy}>
+                    Upload into this folder
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="muted">
+                {selectedFolder
+                  ? "Open a leaf folder (Contract agreement / Drawing / Extension time) to upload files."
+                  : "Browse the three stretch folders on the left."}
+              </p>
+            )}
+
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Ver</th>
+                  <th>Status</th>
+                  <th>Class</th>
+                  <th>Checkout</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      {d.title}
+                      <div className="muted">{d.category}</div>
+                    </td>
+                    <td>v{d.current_version ?? 1}</td>
+                    <td>
+                      <span className={`badge status-${d.approval_status || "draft"}`}>
+                        {formatLabel(d.approval_status || "draft")}
+                      </span>
+                    </td>
+                    <td>{d.classification || "internal"}</td>
+                    <td>{d.checked_out_by_id ? `User #${d.checked_out_by_id}` : "—"}</td>
+                    <td>
+                      <button type="button" className="linkish" onClick={() => openDoc(d)}>
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!docs.length ? (
+                  <tr>
+                    <td colSpan={6}>
+                      {canUploadHere ? "No documents in this folder yet." : "Select a document-type folder."}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </section>
+
+          {selected ? (
+            <section className="panel">
+              <div className="panel-head-row">
+                <h2>
+                  {selected.title} (v{selected.current_version ?? 1})
+                </h2>
+                <button type="button" className="linkish" onClick={() => setSelected(null)}>
+                  Close
                 </button>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkin`, {}))}
+              </div>
+              <div className="btn-row">
+                <a
+                  className="btn secondary"
+                  href={mediaUrl(selected.file_path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => token && api.nhitPost(token, `/documents/${selected.id}/log-download`, {})}
                 >
-                  Check-in
-                </button>
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    act(() =>
-                      api.nhitPost(token!, `/documents/${selected.id}/request-approval`, {
-                        note: "Please approve",
-                        signature_data: signText || undefined,
-                      })
-                    )
-                  }
-                >
-                  Request approval
-                </button>
-                {(role === "admin" || role === "government") && (
+                  Open / download
+                </a>
+                {!isReadonly ? (
                   <>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkout`, {}))}
+                    >
+                      Check-out
+                    </button>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => act(() => api.nhitPost(token!, `/documents/${selected.id}/checkin`, {}))}
+                    >
+                      Check-in
+                    </button>
                     <button
                       className="btn"
                       type="button"
                       disabled={busy}
                       onClick={() =>
                         act(() =>
-                          api.nhitPost(
-                            token!,
-                            `/documents/${selected.id}/decide-approval?approve=true`,
-                            { note: "Approved", signature_data: signText || "Digitally signed" }
-                          )
-                        )
-                      }
-                    >
-                      Approve + sign
-                    </button>
-                    <button
-                      className="btn danger"
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        act(() =>
-                          api.nhitPost(token!, `/documents/${selected.id}/decide-approval?approve=false`, {
-                            note: "Rejected",
+                          api.nhitPost(token!, `/documents/${selected.id}/request-approval`, {
+                            note: "Please approve",
+                            signature_data: signText || undefined,
                           })
                         )
                       }
                     >
-                      Reject
+                      Request approval
                     </button>
-                    <button
-                      className="btn secondary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        act(() =>
-                          api.nhitPatch(token!, `/documents/${selected.id}/meta`, {
-                            watermark_text: watermark || "CONFIDENTIAL — RoadService",
-                            classification: "confidential",
-                          })
-                        )
-                      }
-                    >
-                      Set watermark
-                    </button>
+                    {(role === "admin" || role === "government") && (
+                      <>
+                        <button
+                          className="btn"
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            act(() =>
+                              api.nhitPost(token!, `/documents/${selected.id}/decide-approval?approve=true`, {
+                                note: "Approved",
+                                signature_data: signText || "Digitally signed",
+                              })
+                            )
+                          }
+                        >
+                          Approve + sign
+                        </button>
+                        <button
+                          className="btn danger"
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            act(() =>
+                              api.nhitPost(token!, `/documents/${selected.id}/decide-approval?approve=false`, {
+                                note: "Rejected",
+                              })
+                            )
+                          }
+                        >
+                          Reject
+                        </button>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            act(() =>
+                              api.nhitPatch(token!, `/documents/${selected.id}/meta`, {
+                                watermark_text: watermark || "CONFIDENTIAL — RoadService",
+                                classification: "confidential",
+                              })
+                            )
+                          }
+                        >
+                          Set watermark
+                        </button>
+                      </>
+                    )}
                   </>
-                )}
-              </>
-            ) : null}
-          </div>
-          <div className="form-grid" style={{ marginTop: "1rem" }}>
-            <label>
-              Digital signature text
-              <input value={signText} onChange={(e) => setSignText(e.target.value)} placeholder="Name / designation" />
-            </label>
-            <label>
-              Watermark text
-              <input value={watermark} onChange={(e) => setWatermark(e.target.value)} />
-            </label>
-            {!isReadonly ? (
-              <label className="span-2">
-                Upload new version
-                <input type="file" onChange={(e) => setVersionFile(e.target.files?.[0] || null)} />
-              </label>
-            ) : null}
-          </div>
-          {versionFile && token ? (
-            <button
-              className="btn"
-              type="button"
-              disabled={busy}
-              style={{ marginTop: 8 }}
-              onClick={() => {
-                const fd = new FormData();
-                fd.append("file", versionFile);
-                fd.append("change_note", "Updated version");
-                act(async () => {
-                  await api.nhitForm(token, `/documents/${selected.id}/new-version`, fd);
-                  setVersionFile(null);
-                });
-              }}
-            >
-              Save new version
-            </button>
+                ) : null}
+              </div>
+              <div className="form-grid" style={{ marginTop: "1rem" }}>
+                <label>
+                  Digital signature text
+                  <input value={signText} onChange={(e) => setSignText(e.target.value)} />
+                </label>
+                <label>
+                  Watermark text
+                  <input value={watermark} onChange={(e) => setWatermark(e.target.value)} />
+                </label>
+                {!isReadonly ? (
+                  <label className="span-2">
+                    Upload new version
+                    <input type="file" onChange={(e) => setVersionFile(e.target.files?.[0] || null)} />
+                  </label>
+                ) : null}
+              </div>
+              {versionFile && token ? (
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={busy}
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.append("file", versionFile);
+                    fd.append("change_note", "Updated version");
+                    act(async () => {
+                      await api.nhitForm(token, `/documents/${selected.id}/new-version`, fd);
+                      setVersionFile(null);
+                    });
+                  }}
+                >
+                  Save new version
+                </button>
+              ) : null}
+              <h3 style={{ marginTop: "1rem" }}>Version history</h3>
+              <ul className="activity-list">
+                {versions.map((v) => (
+                  <li key={String(v.id)}>
+                    v{String(v.version_no)} — {String(v.change_note || "update")}{" "}
+                    <span className="muted">{String(v.created_at)}</span>
+                  </li>
+                ))}
+                {!versions.length ? <li className="muted">No versions listed yet.</li> : null}
+              </ul>
+            </section>
           ) : null}
-          <h3 style={{ marginTop: "1rem" }}>Version history</h3>
-          <ul className="activity-list">
-            {versions.map((v) => (
-              <li key={String(v.id)}>
-                v{String(v.version_no)} — {String(v.change_note || "update")}{" "}
-                <span className="muted">{String(v.created_at)}</span>
-              </li>
-            ))}
-            {!versions.length ? <li className="muted">No versions listed yet.</li> : null}
-          </ul>
-        </section>
-      ) : null}
+        </div>
+      </div>
     </>
   );
 }

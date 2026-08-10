@@ -1,5 +1,6 @@
 import type {
   DashboardStats,
+  DocumentFolder,
   Invoice,
   Issue,
   IssueStatus,
@@ -300,11 +301,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  documents: (token: string, projectId?: number) =>
-    request<PortalDocument[]>(
-      `/api/v1/documents${projectId ? `?project_id=${projectId}` : ""}`,
-      { token }
-    ),
+  documents: (token: string, projectId?: number, folderId?: number) => {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("project_id", String(projectId));
+    if (folderId != null) qs.set("folder_id", String(folderId));
+    const q = qs.toString();
+    return request<PortalDocument[]>(`/api/v1/documents${q ? `?${q}` : ""}`, { token });
+  },
+
+  documentFolders: (token: string) =>
+    request<DocumentFolder[]>(`/api/v1/documents/folders`, { token }),
+
+  seedDocumentFolders: (token: string) =>
+    request<{ ok: boolean; message: string }>("/api/v1/documents/folders/seed", {
+      method: "POST",
+      token,
+    }),
 
   uploadDocument: (token: string, form: FormData) =>
     request<PortalDocument>("/api/v1/documents", { method: "POST", token, body: form }),

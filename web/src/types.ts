@@ -189,6 +189,7 @@ export type Invoice = {
 export type PortalDocument = {
   id: number;
   project_id: number | null;
+  folder_id?: number | null;
   category: string;
   title: string;
   description: string | null;
@@ -202,6 +203,18 @@ export type PortalDocument = {
   checked_out_by_id?: number | null;
   checked_out_at?: string | null;
   created_at: string;
+};
+
+export type DocumentFolder = {
+  id: number;
+  name: string;
+  folder_type: string;
+  parent_id: number | null;
+  project_id: number | null;
+  sort_order: number;
+  created_at: string;
+  children: DocumentFolder[];
+  document_count: number;
 };
 
 export type Vendor = {

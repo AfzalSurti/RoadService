@@ -338,6 +338,7 @@ class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     project_id: int | None
+    folder_id: int | None = None
     category: str
     title: str
     description: str | None
@@ -351,6 +352,22 @@ class DocumentOut(BaseModel):
     checked_out_by_id: int | None = None
     checked_out_at: datetime | None = None
     created_at: datetime
+
+
+class DocumentFolderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    folder_type: str
+    parent_id: int | None
+    project_id: int | None
+    sort_order: int
+    created_at: datetime
+    children: list["DocumentFolderOut"] = []
+    document_count: int = 0
+
+
+DocumentFolderOut.model_rebuild()
 
 
 class VendorCreate(BaseModel):

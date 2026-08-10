@@ -1,4 +1,4 @@
-from app.models.billing import Invoice, InvoiceActivity, PortalDocument, Vendor
+from app.models.billing import DocumentFolder, Invoice, InvoiceActivity, PortalDocument, Vendor
 from app.models.enums import (
     InvoiceStatus,
     IssuePriority,
@@ -53,6 +53,7 @@ __all__ = [
     "InvoiceStatus",
     "PaymentMode",
     "PortalDocument",
+    "DocumentFolder",
     "Vendor",
     "AuditLog",
     "LoginHistory",

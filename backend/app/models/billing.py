@@ -76,6 +76,7 @@ class PortalDocument(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    folder_id: Mapped[int | None] = mapped_column(ForeignKey("document_folders.id", ondelete="SET NULL"), nullable=True, index=True)
     category: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -92,6 +93,26 @@ class PortalDocument(Base):
 
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])
     checked_out_by = relationship("User", foreign_keys=[checked_out_by_id])
+    project = relationship("Project")
+    folder = relationship("DocumentFolder", back_populates="documents")
+
+
+class DocumentFolder(Base):
+    __tablename__ = "document_folders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    folder_type: Mapped[str] = mapped_column(String(32), nullable=False)  # stretch|discipline|doctype
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_folders.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    parent = relationship("DocumentFolder", remote_side=[id], back_populates="children")
+    children = relationship("DocumentFolder", back_populates="parent", cascade="all, delete-orphan")
+    documents = relationship("PortalDocument", back_populates="folder")
     project = relationship("Project")
 
 
