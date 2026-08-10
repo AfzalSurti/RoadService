@@ -233,6 +233,14 @@ export type Vendor = {
   progress_notes: string | null;
   delay_notes: string | null;
   escalation_matrix: string | null;
+  work_order_path?: string | null;
+  loa_path?: string | null;
+  type_of_work?: string | null;
+  work_order_date?: string | null;
+  commencement_date?: string | null;
+  time_limit_completion?: string | null;
+  defects_liability_period?: string | null;
+  remarks?: string | null;
   created_at: string;
   updated_at: string;
 };

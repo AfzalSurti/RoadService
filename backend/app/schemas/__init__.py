@@ -401,6 +401,14 @@ class VendorCreate(BaseModel):
     progress_notes: str | None = None
     delay_notes: str | None = None
     escalation_matrix: str | None = None
+    type_of_work: str | None = None
+    work_order_date: date | None = None
+    commencement_date: date | None = None
+    time_limit_completion: str | None = None
+    defects_liability_period: str | None = None
+    remarks: str | None = None
+    work_order_path: str | None = None
+    loa_path: str | None = None
 
 
 class VendorOut(BaseModel):
@@ -413,6 +421,14 @@ class VendorOut(BaseModel):
     progress_notes: str | None
     delay_notes: str | None
     escalation_matrix: str | None
+    work_order_path: str | None = None
+    loa_path: str | None = None
+    type_of_work: str | None = None
+    work_order_date: date | None = None
+    commencement_date: date | None = None
+    time_limit_completion: str | None = None
+    defects_liability_period: str | None = None
+    remarks: str | None = None
     created_at: datetime
     updated_at: datetime
 

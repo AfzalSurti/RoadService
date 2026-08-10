@@ -384,22 +384,11 @@ export const api = {
 
   vendors: (token: string) => request<Vendor[]>("/api/v1/vendors", { token }),
 
-  createVendor: (
-    token: string,
-    body: {
-      name: string;
-      project_id?: number;
-      contractor_user_id?: number;
-      brief?: string;
-      progress_notes?: string;
-      delay_notes?: string;
-      escalation_matrix?: string;
-    }
-  ) =>
+  createVendor: (token: string, form: FormData) =>
     request<Vendor>("/api/v1/vendors", {
       method: "POST",
       token,
-      body: JSON.stringify(body),
+      body: form,
     }),
 
   nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),

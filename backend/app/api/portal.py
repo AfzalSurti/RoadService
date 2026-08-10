@@ -231,11 +231,55 @@ async def list_vendors(
 
 @vendors_router.post("", response_model=VendorOut, status_code=201)
 async def create_vendor(
-    body: VendorCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    name: Annotated[str, Form()],
+    project_id: Annotated[int | None, Form()] = None,
+    contractor_user_id: Annotated[int | None, Form()] = None,
+    brief: Annotated[str | None, Form()] = None,
+    progress_notes: Annotated[str | None, Form()] = None,
+    delay_notes: Annotated[str | None, Form()] = None,
+    escalation_matrix: Annotated[str | None, Form()] = None,
+    type_of_work: Annotated[str | None, Form()] = None,
+    work_order_date: Annotated[str | None, Form()] = None,
+    commencement_date: Annotated[str | None, Form()] = None,
+    time_limit_completion: Annotated[str | None, Form()] = None,
+    defects_liability_period: Annotated[str | None, Form()] = None,
+    remarks: Annotated[str | None, Form()] = None,
+    work_order_file: UploadFile | None = File(None),
+    loa_file: UploadFile | None = File(None),
 ):
-    vendor = Vendor(**body.model_dump())
+    from datetime import date as date_cls
+
+    def _parse_date(v: str | None) -> date_cls | None:
+        if not v or not str(v).strip():
+            return None
+        return date_cls.fromisoformat(str(v).strip()[:10])
+
+    work_order_path = None
+    loa_path = None
+    if work_order_file and work_order_file.filename:
+        work_order_path = await save_upload(work_order_file, "vendor_wo")
+    if loa_file and loa_file.filename:
+        loa_path = await save_upload(loa_file, "vendor_loa")
+
+    vendor = Vendor(
+        name=name.strip(),
+        project_id=project_id,
+        contractor_user_id=contractor_user_id,
+        brief=brief,
+        progress_notes=progress_notes,
+        delay_notes=delay_notes,
+        escalation_matrix=escalation_matrix,
+        type_of_work=type_of_work,
+        work_order_date=_parse_date(work_order_date),
+        commencement_date=_parse_date(commencement_date),
+        time_limit_completion=time_limit_completion,
+        defects_liability_period=defects_liability_period,
+        remarks=remarks,
+        work_order_path=work_order_path,
+        loa_path=loa_path,
+    )
     db.add(vendor)
     await db.commit()
     await db.refresh(vendor)
@@ -252,7 +296,7 @@ async def update_vendor(
     vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
-    for k, v in body.model_dump().items():
+    for k, v in body.model_dump(exclude_unset=True).items():
         setattr(vendor, k, v)
     await db.commit()
     await db.refresh(vendor)
