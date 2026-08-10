@@ -85,7 +85,8 @@ export function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [form, setForm] = useState({ title: "", description: "" });
-  const [file, setFile] = useState<File | null>(null);
+  const [uploadMode, setUploadMode] = useState<"file" | "folder">("file");
+  const [files, setFiles] = useState<File[]>([]);
   const [versionFile, setVersionFile] = useState<File | null>(null);
   const [signText, setSignText] = useState("");
   const [watermark, setWatermark] = useState("");
@@ -173,24 +174,38 @@ export function DocumentsPage() {
 
   const onUpload = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly || !file || !canUploadHere || !selectedFolder) {
-      return setError("Open a document-type folder (Contract / Drawing / EOT) and choose a file");
+    if (!token || isReadonly || !files.length || !canUploadHere || !selectedFolder) {
+      return setError("Open a document-type folder (Contract / Drawing / EOT) and choose a file or folder");
     }
     setBusy(true);
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("title", form.title.trim() || file.name);
-      fd.append("category", selectedFolder.name);
-      fd.append("folder_id", String(selectedFolder.id));
-      if (selectedFolder.project_id) fd.append("project_id", String(selectedFolder.project_id));
-      if (form.description.trim()) fd.append("description", form.description.trim());
-      fd.append("file", file);
-      await api.uploadDocument(token, fd);
+      let uploaded = 0;
+      for (const file of files) {
+        const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const title =
+          files.length === 1 && form.title.trim()
+            ? form.title.trim()
+            : rel.replace(/\\/g, "/").split("/").pop() || file.name;
+        const descParts = [
+          form.description.trim(),
+          uploadMode === "folder" && rel.includes("/") ? `Folder path: ${rel}` : "",
+        ].filter(Boolean);
+        const fd = new FormData();
+        fd.append("title", title);
+        fd.append("category", selectedFolder.name);
+        fd.append("folder_id", String(selectedFolder.id));
+        if (selectedFolder.project_id) fd.append("project_id", String(selectedFolder.project_id));
+        if (descParts.length) fd.append("description", descParts.join("\n"));
+        fd.append("file", file);
+        await api.uploadDocument(token, fd);
+        uploaded += 1;
+      }
       setForm({ title: "", description: "" });
-      setFile(null);
+      setFiles([]);
       await load();
       await loadDocs(selectedFolder.id);
+      if (uploaded > 1) setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -272,34 +287,100 @@ export function DocumentsPage() {
             {canUploadHere && !isReadonly ? (
               <form className="form-grid" onSubmit={onUpload} style={{ marginBottom: "1rem" }}>
                 <label>
-                  Title
-                  <input
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Optional — defaults to file name"
-                  />
+                  Upload type
+                  <select
+                    value={uploadMode}
+                    onChange={(e) => {
+                      setUploadMode(e.target.value as "file" | "folder");
+                      setFiles([]);
+                    }}
+                  >
+                    <option value="file">Single / multiple files</option>
+                    <option value="folder">Entire folder</option>
+                  </select>
                 </label>
                 <label>
-                  File
-                  <input type="file" required onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                  {uploadMode === "folder" ? "Folder" : "File(s)"}
+                  {uploadMode === "folder" ? (
+                    <input
+                      key="folder-input"
+                      type="file"
+                      required
+                      multiple
+                      ref={(el) => {
+                        if (!el) return;
+                        el.setAttribute("webkitdirectory", "");
+                        el.setAttribute("directory", "");
+                      }}
+                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                    />
+                  ) : (
+                    <input
+                      key="file-input"
+                      type="file"
+                      required
+                      multiple
+                      onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                    />
+                  )}
                 </label>
+                {uploadMode === "file" ? (
+                  <label>
+                    Title
+                    <input
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      placeholder="Optional — defaults to file name"
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    Selected
+                    <input
+                      readOnly
+                      value={
+                        files.length
+                          ? `${files.length} file(s) from folder`
+                          : "Choose a folder to upload all files inside"
+                      }
+                    />
+                  </label>
+                )}
                 <label className="span-2">
                   Description
                   <textarea
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder={
+                      uploadMode === "folder"
+                        ? "Optional note applied to each uploaded file"
+                        : undefined
+                    }
                   />
                 </label>
+                {files.length > 0 ? (
+                  <p className="muted span-2" style={{ margin: 0 }}>
+                    Ready to upload {files.length} file{files.length === 1 ? "" : "s"} into this folder
+                    {uploadMode === "folder" && files[0]
+                      ? ` (${((files[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "").split("/")[0] || "selected folder"})`
+                      : ""}
+                    .
+                  </p>
+                ) : null}
                 <div className="span-2">
-                  <button className="btn" type="submit" disabled={busy}>
-                    Upload into this folder
+                  <button className="btn" type="submit" disabled={busy || !files.length}>
+                    {busy
+                      ? "Uploading…"
+                      : uploadMode === "folder"
+                        ? `Upload folder (${files.length || 0})`
+                        : `Upload into this folder${files.length > 1 ? ` (${files.length})` : ""}`}
                   </button>
                 </div>
               </form>
             ) : (
               <p className="muted">
                 {selectedFolder
-                  ? "Open a leaf folder (Contract agreement / Drawing / Extension time) to upload files."
+                  ? "Open a leaf folder (Contract agreement / Drawing / Extension time) to upload files or a folder."
                   : "Browse the three stretch folders on the left."}
               </p>
             )}
