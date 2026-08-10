@@ -26,6 +26,7 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RatesPage } from "./pages/RatesPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { StaffDetailsPage } from "./pages/StaffDetailsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { VendorsPage } from "./pages/VendorsPage";
 
@@ -70,6 +71,7 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/staff-details" element={<StaffDetailsPage />} />
         <Route
           path="/executive"
           element={

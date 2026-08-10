@@ -111,6 +111,15 @@ Later portal upgrades (Aug 2026)
 - BOQ: Add item shows only CA rate fields; executed/% progress comes from Record qty entries
 
 
+Staff Details (Organisation structures)
+---------------------------------------
+- Menu: Staff Details (all logins can view)
+- GMC MIS Expert (admin): add/edit GMC staff only
+- NHIPMPL representative (government): add/edit NHIMPL/NHIPMPL staff only
+- Contractor: add/edit only their own contractor staff
+- Fields: Project Name, Position, Name, Date of Joining, Mobile, Alternate mobile (optional), Email
+
+
 Important honesty note
 ----------------------
 These modules are built as a working portal inside RoadService.

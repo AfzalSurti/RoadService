@@ -264,3 +264,26 @@ export type MprReport = {
   created_at: string;
   updated_at: string;
 };
+
+export type OrgStaffDetail = {
+  id: number;
+  organization: string;
+  organization_label: string;
+  project_name: string;
+  position: string;
+  name: string;
+  date_of_joining: string;
+  mobile_no: string;
+  alternate_mobile_no: string | null;
+  email_id: string;
+  owner_user_id: number;
+  created_by_id: number;
+  can_edit: boolean;
+};
+
+export type StaffMeta = {
+  my_organization: string | null;
+  my_organization_label: string;
+  can_add: boolean;
+  organizations: { id: string; label: string }[];
+};

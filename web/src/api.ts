@@ -5,10 +5,12 @@ import type {
   Issue,
   IssueStatus,
   MprReport,
+  OrgStaffDetail,
   PortalDocument,
   Project,
   ProjectRateSummary,
   RateItem,
+  StaffMeta,
   TokenResponse,
   User,
   Vendor,
@@ -408,6 +410,54 @@ export const api = {
 
   createMpr: (token: string, form: FormData) =>
     request<MprReport>("/api/v1/mpr", { method: "POST", token, body: form }),
+
+  staffMeta: (token: string) => request<StaffMeta>("/api/v1/staff-details/meta", { token }),
+
+  staffDetails: (token: string, organization?: string) =>
+    request<OrgStaffDetail[]>(
+      `/api/v1/staff-details${organization ? `?organization=${encodeURIComponent(organization)}` : ""}`,
+      { token }
+    ),
+
+  createStaffDetail: (
+    token: string,
+    body: {
+      project_name: string;
+      position: string;
+      name: string;
+      date_of_joining: string;
+      mobile_no: string;
+      alternate_mobile_no?: string;
+      email_id: string;
+    }
+  ) =>
+    request<OrgStaffDetail>("/api/v1/staff-details", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  updateStaffDetail: (
+    token: string,
+    id: number,
+    body: {
+      project_name: string;
+      position: string;
+      name: string;
+      date_of_joining: string;
+      mobile_no: string;
+      alternate_mobile_no?: string;
+      email_id: string;
+    }
+  ) =>
+    request<OrgStaffDetail>(`/api/v1/staff-details/${id}`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  deleteStaffDetail: (token: string, id: number) =>
+    request<{ ok: boolean }>(`/api/v1/staff-details/${id}`, { method: "DELETE", token }),
 
   nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),
 

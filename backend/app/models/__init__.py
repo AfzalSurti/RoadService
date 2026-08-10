@@ -25,6 +25,7 @@ from app.models.portal_ops import (
     LeaveRequest,
     LoginHistory,
     MonthlyProgressReport,
+    OrgStaffDetail,
     Personnel,
     ResponseVehicle,
     TollDailyStat,
