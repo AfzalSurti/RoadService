@@ -238,10 +238,38 @@ export const api = {
       faro?: string;
       bill_from?: string;
       bill_to?: string;
+      project_title?: string;
+      authority_engineer?: string;
+      contractor_name?: string;
+      contract_price?: number;
+      summary?: Record<string, unknown>;
+      signature_name?: string;
     }
   ) =>
     request<Invoice>("/api/v1/billing/invoices", {
       method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  billingSummaryTemplate: (token: string) =>
+    request<Record<string, unknown>>("/api/v1/billing/summary-template", { token }),
+
+  updateInvoiceSummary: (
+    token: string,
+    id: number,
+    body: {
+      project_title?: string;
+      authority_engineer?: string;
+      contractor_name?: string;
+      contract_price?: number;
+      summary: Record<string, unknown>;
+      signature_name?: string;
+      amount?: number;
+    }
+  ) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/summary`, {
+      method: "PUT",
       token,
       body: JSON.stringify(body),
     }),

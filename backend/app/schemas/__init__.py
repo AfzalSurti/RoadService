@@ -285,6 +285,22 @@ class InvoiceCreate(BaseModel):
     faro: str | None = None
     bill_from: date | None = None
     bill_to: date | None = None
+    project_title: str | None = None
+    authority_engineer: str | None = None
+    contractor_name: str | None = None
+    contract_price: float | None = None
+    summary: dict | None = None
+    signature_name: str | None = None
+
+
+class InvoiceSummaryUpdate(BaseModel):
+    project_title: str | None = None
+    authority_engineer: str | None = None
+    contractor_name: str | None = None
+    contract_price: float | None = None
+    summary: dict
+    signature_name: str | None = None
+    amount: float | None = None
 
 
 class InvoiceRecommend(BaseModel):
@@ -329,6 +345,13 @@ class InvoiceOut(BaseModel):
     submitted_by_id: int
     notes: str | None
     calculation_json: str | None
+    project_title: str | None = None
+    authority_engineer: str | None = None
+    contractor_name: str | None = None
+    contract_price: float | None = None
+    summary: dict | None = None
+    signature_name: str | None = None
+    signature_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     activities: list[InvoiceActivityOut] = []

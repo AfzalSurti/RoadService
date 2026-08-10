@@ -87,6 +87,19 @@ How to try it
 3. As GMC Experts open Executive → click “Load demo NHIT data”
 4. Browse new menu items: Executive, Documents, Attendance, Toll Ops,
    Incidents, ATMS/TMS/ITS, Civil Assets, Integrations, Backup/DR, Security
+5. As Contractor open “Contractor Billing” for NHAI Summary of Invoice
+   (demands, GST, recoveries, AE/IE · PIU · FA-PIU columns, digital sign)
+
+
+Contractor Billing (NHAI Summary of Invoice)
+--------------------------------------------
+- Contractor login menu: Contractor Billing
+- Fill project header (title, AE/IE, contractor, contract price, date)
+- Section (A) Demands: work done, GST, advances
+- Section (B) Recoveries: retention, GST TDS, labour cess, withheld, etc.
+- Auto totals: payable (A−B), C+D+E+F+G, balance claim %
+- Three review columns: AE/IE, PIU, FA-PIU (copy AE → PIU/FA helper)
+- Saves into billing invoices and shows on the Billing list workflow
 
 
 Important honesty note

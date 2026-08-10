@@ -485,6 +485,111 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   width: 30px;
   height: 30px;
 }
+.soi-sheet { overflow: auto; }
+.soi-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--line);
+}
+.soi-table input {
+  width: 100%;
+  min-width: 90px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--ink);
+}
+.soi-section td {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.soi-total td {
+  background: color-mix(in srgb, var(--ok, #16a34a) 10%, transparent);
+}
+.soi-sign-box {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--surface) 90%, #fef08a);
+}
+.soi-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+  margin-bottom: 1rem;
+}
+.soi-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.soi-meta input,
+.soi-meta select {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--ink);
+}
+.soi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  min-width: 960px;
+}
+.soi-table th,
+.soi-table td {
+  border: 1px solid var(--line);
+  padding: 0.4rem 0.5rem;
+  vertical-align: middle;
+}
+.soi-table th {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  text-align: center;
+  font-weight: 600;
+}
+.soi-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.soi-table .sr { width: 3.2rem; text-align: center; }
+.soi-table .desc { min-width: 240px; }
+.soi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  align-items: center;
+}
+.soi-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.soi-list-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: inherit;
+}
+.soi-list-item:hover,
+.soi-list-item.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
 .docs-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) 1fr;

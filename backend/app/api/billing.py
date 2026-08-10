@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated
 
@@ -13,7 +13,15 @@ from app.models.billing import Invoice, InvoiceActivity
 from app.models.enums import InvoiceStatus, PaymentMode, UserRole
 from app.models.project import Project
 from app.models.user import User
-from app.schemas import InvoiceAction, InvoiceActivityOut, InvoiceCreate, InvoiceOut, InvoiceRecommend
+from app.schemas import (
+    InvoiceAction,
+    InvoiceActivityOut,
+    InvoiceCreate,
+    InvoiceOut,
+    InvoiceRecommend,
+    InvoiceSummaryUpdate,
+)
+from app.services.invoice_summary import default_summary, dumps_summary, loads_summary
 from app.services.issue_service import notify
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -37,6 +45,7 @@ def _status_detail(status: InvoiceStatus | str) -> str:
 
 
 def _out(inv: Invoice) -> InvoiceOut:
+    summary = loads_summary(inv.summary_json)
     return InvoiceOut(
         id=inv.id,
         project_id=inv.project_id,
@@ -64,6 +73,13 @@ def _out(inv: Invoice) -> InvoiceOut:
         submitted_by_id=inv.submitted_by_id,
         notes=inv.notes,
         calculation_json=inv.calculation_json,
+        project_title=inv.project_title,
+        authority_engineer=inv.authority_engineer,
+        contractor_name=inv.contractor_name,
+        contract_price=float(inv.contract_price) if inv.contract_price is not None else None,
+        summary=summary,
+        signature_name=inv.signature_name,
+        signature_at=inv.signature_at,
         created_at=inv.created_at,
         updated_at=inv.updated_at,
         activities=[
@@ -139,6 +155,11 @@ async def create_invoice(
 
     count = (await db.execute(select(func.count(Invoice.id)))).scalar_one() + 1
     txn = f"RS/{project.id:04d}/{count:05d}"
+    summary = dumps_summary(body.summary) if body.summary is not None else dumps_summary(default_summary())
+    parsed = loads_summary(summary)
+    amount = body.amount
+    if body.summary is not None:
+        amount = float(parsed.get("totals", {}).get("absolute_amount") or body.amount)
     inv = Invoice(
         project_id=body.project_id,
         transaction_id=txn,
@@ -146,13 +167,20 @@ async def create_invoice(
         invoice_date=body.invoice_date or date.today(),
         payment_type=body.payment_type.strip(),
         payment_mode=PaymentMode.FULL,
-        amount=_dec(body.amount),
+        amount=_dec(amount),
         chainage_from=body.chainage_from,
         chainage_to=body.chainage_to,
         piu=(body.piu or project.location or None),
         faro=body.faro,
         bill_from=body.bill_from,
         bill_to=body.bill_to,
+        project_title=body.project_title or project.name,
+        authority_engineer=body.authority_engineer,
+        contractor_name=body.contractor_name or user.full_name,
+        contract_price=_dec(body.contract_price) if body.contract_price is not None else None,
+        summary_json=summary,
+        signature_name=body.signature_name,
+        signature_at=datetime.now(timezone.utc) if body.signature_name else None,
         status=InvoiceStatus.SUBMITTED,
         status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
@@ -165,6 +193,51 @@ async def create_invoice(
     admins = (await db.execute(select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True)))).scalars().all()
     for admin in admins:
         await notify(db, admin.id, "New invoice submitted", f"{txn} needs review.", None)
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.get("/summary-template")
+async def summary_template(
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR, UserRole.GOVERNMENT))],
+):
+    s = default_summary()
+    from app.services.invoice_summary import compute_totals
+
+    s["totals"] = compute_totals(s)
+    return s
+
+
+@router.put("/invoices/{invoice_id}/summary", response_model=InvoiceOut)
+async def update_invoice_summary(
+    invoice_id: int,
+    body: InvoiceSummaryUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+):
+    inv = await _load(db, invoice_id)
+    if user.role == UserRole.CONTRACTOR and inv.submitted_by_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your invoice")
+    if inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION, InvoiceStatus.DRAFT):
+        raise HTTPException(status_code=400, detail="Summary locked after recommendation/approval")
+
+    summary = dumps_summary(body.summary)
+    parsed = loads_summary(summary)
+    inv.summary_json = summary
+    if body.project_title is not None:
+        inv.project_title = body.project_title
+    if body.authority_engineer is not None:
+        inv.authority_engineer = body.authority_engineer
+    if body.contractor_name is not None:
+        inv.contractor_name = body.contractor_name
+    if body.contract_price is not None:
+        inv.contract_price = _dec(body.contract_price)
+    abs_amt = float(parsed.get("totals", {}).get("absolute_amount") or 0)
+    inv.amount = _dec(body.amount if body.amount is not None else abs_amt or inv.amount)
+    if body.signature_name:
+        inv.signature_name = body.signature_name
+        inv.signature_at = datetime.now(timezone.utc)
+    await _add_activity(db, inv, user, "summary_updated", "NHAI Summary of Invoice updated")
     await db.commit()
     return _out(await _load(db, inv.id))
 

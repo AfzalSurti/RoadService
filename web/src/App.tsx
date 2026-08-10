@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppLayout } from "./components/AppLayout";
 import { BillingPage } from "./pages/BillingPage";
+import { ContractorBillingPage } from "./pages/ContractorBillingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { IssuesPage } from "./pages/IssuesPage";
@@ -82,6 +83,14 @@ export default function App() {
           element={
             <StaffPortal>
               <BillingPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/contractor-billing"
+          element={
+            <StaffPortal>
+              <ContractorBillingPage />
             </StaffPortal>
           }
         />

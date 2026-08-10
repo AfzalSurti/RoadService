@@ -42,6 +42,13 @@ class Invoice(Base):
     submitted_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     calculation_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authority_engineer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contractor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contract_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

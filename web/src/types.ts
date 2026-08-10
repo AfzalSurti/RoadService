@@ -181,6 +181,13 @@ export type Invoice = {
   submitted_by_id: number;
   notes: string | null;
   calculation_json: string | null;
+  project_title?: string | null;
+  authority_engineer?: string | null;
+  contractor_name?: string | null;
+  contract_price?: number | null;
+  summary?: Record<string, unknown> | null;
+  signature_name?: string | null;
+  signature_at?: string | null;
   created_at: string;
   updated_at: string;
   activities: InvoiceActivity[];
