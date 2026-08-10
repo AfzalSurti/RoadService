@@ -105,9 +105,9 @@ export default function App() {
         <Route
           path="/attendance"
           element={
-            <StaffPortal>
+            <AdminOrGov>
               <AttendancePage />
-            </StaffPortal>
+            </AdminOrGov>
           }
         />
         <Route

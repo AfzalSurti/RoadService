@@ -475,7 +475,7 @@ async def setup_mfa(
 @router.get("/personnel")
 async def list_personnel(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
     return [_orm_dict(r) for r in (await db.execute(select(Personnel).order_by(Personnel.id.desc()))).scalars().all()]
 
@@ -497,7 +497,7 @@ async def create_personnel(
 @router.get("/attendance")
 async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
     return [_orm_dict(r) for r in (await db.execute(select(AttendanceRecord).order_by(AttendanceRecord.id.desc()).limit(200))).scalars().all()]
 
@@ -506,7 +506,7 @@ async def list_attendance(
 async def mark_attendance(
     body: AttendanceIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     row = AttendanceRecord(**body.model_dump())
     db.add(row)
@@ -519,7 +519,7 @@ async def mark_attendance(
 @router.get("/leaves")
 async def list_leaves(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
     return [_orm_dict(r) for r in (await db.execute(select(LeaveRequest).order_by(LeaveRequest.id.desc()))).scalars().all()]
 
@@ -528,7 +528,7 @@ async def list_leaves(
 async def create_leave(
     body: LeaveIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     row = LeaveRequest(**body.model_dump())
     db.add(row)
@@ -556,7 +556,7 @@ async def decide_leave(
 @router.get("/rosters")
 async def list_rosters(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
     return [_orm_dict(r) for r in (await db.execute(select(DutyRoster).order_by(DutyRoster.id.desc()))).scalars().all()]
 
