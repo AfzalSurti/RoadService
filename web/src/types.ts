@@ -287,3 +287,32 @@ export type StaffMeta = {
   can_add: boolean;
   organizations: { id: string; label: string }[];
 };
+
+export type PortalQueryComment = {
+  id: number;
+  ticket_id: number;
+  actor_id: number;
+  note: string;
+  action: string;
+  created_at: string;
+};
+
+export type PortalQueryTicket = {
+  id: number;
+  ticket_no: string;
+  project_id: number | null;
+  module_area: string;
+  subject: string;
+  description: string;
+  priority: string;
+  status: string;
+  raised_by_id: number;
+  assigned_to_id: number | null;
+  resolution_note: string | null;
+  resolved_by_id: number | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  can_resolve: boolean;
+  comments?: PortalQueryComment[];
+};

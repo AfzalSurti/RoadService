@@ -6,7 +6,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analytics, auth, billing, catalog, issues, notifications, nhit, portal, projects, rates, staff_details, users
+from app.api import (
+    analytics,
+    auth,
+    billing,
+    catalog,
+    issues,
+    notifications,
+    nhit,
+    portal,
+    projects,
+    queries,
+    rates,
+    staff_details,
+    users,
+)
 from app.core.config import settings
 from app.jobs.verification import (
     flip_stale_completed_to_verification_pending,
@@ -67,6 +81,7 @@ app.include_router(portal.docs_router, prefix="/api/v1")
 app.include_router(portal.vendors_router, prefix="/api/v1")
 app.include_router(portal.mpr_router, prefix="/api/v1")
 app.include_router(staff_details.router, prefix="/api/v1")
+app.include_router(queries.router, prefix="/api/v1")
 app.include_router(nhit.router, prefix="/api/v1")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)

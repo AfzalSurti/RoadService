@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Annotated
 
@@ -128,7 +128,24 @@ async def export_excel(
     report_title: str | None = None,
     prepared_by: str | None = None,
     remarks: str | None = None,
+    period_type: str | None = None,
 ):
+    today = date.today()
+    period = (period_type or "custom").strip().lower()
+    if period == "daily":
+        date_from = today
+        date_to = today
+        if not report_title:
+            report_title = f"Daily Issues Report — {today.isoformat()}"
+    elif period == "weekly":
+        # Monday–Sunday of current week (ISO)
+        date_from = today - timedelta(days=today.weekday())
+        date_to = date_from + timedelta(days=6)
+        if not report_title:
+            report_title = f"Weekly Issues Report — {date_from.isoformat()} to {date_to.isoformat()}"
+    else:
+        period = "custom"
+
     stmt = select(Issue).order_by(Issue.id)
     if project_id is not None:
         stmt = stmt.where(Issue.project_id == project_id)
@@ -147,6 +164,7 @@ async def export_excel(
     meta = wb.active
     meta.title = "Report Details"
     meta.append(["Field", "Value"])
+    meta.append(["Report Type", period.title()])
     meta.append(["Report Title", report_title or "RoadService Issues Report"])
     meta.append(["Project ID", project_id or ""])
     meta.append(["Project Name", project_name])
@@ -155,8 +173,26 @@ async def export_excel(
     meta.append(["Period To", date_to.isoformat() if date_to else ""])
     meta.append(["Prepared By", prepared_by or ""])
     meta.append(["Remarks", remarks or ""])
-    meta.append(["Generated On", date.today().isoformat()])
+    meta.append(["Generated On", today.isoformat()])
     meta.append(["Row Count", len(issues)])
+
+    # Summary sheet for daily/weekly MIS
+    summary = wb.create_sheet("Summary")
+    summary.append(["Status", "Count"])
+    status_counts: dict[str, int] = {}
+    for i in issues:
+        key = i.status.value if hasattr(i.status, "value") else str(i.status)
+        status_counts[key] = status_counts.get(key, 0) + 1
+    for k, v in sorted(status_counts.items()):
+        summary.append([k, v])
+    summary.append([])
+    summary.append(["Total issues", len(issues)])
+    delayed = sum(
+        1
+        for i in issues
+        if i.deadline_date and remaining_days(i.deadline_date) < 0 and (i.status.value if hasattr(i.status, "value") else str(i.status)) != "closed"
+    )
+    summary.append(["Delayed (open)", delayed])
 
     ws = wb.create_sheet("Issues")
     ws.append(ISSUE_HEADERS)
@@ -181,7 +217,8 @@ async def export_excel(
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"roadservice_report_{date.today()}.xlsx"
+    suffix = period if period != "custom" else today.isoformat()
+    fname = f"roadservice_{period}_report_{suffix}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

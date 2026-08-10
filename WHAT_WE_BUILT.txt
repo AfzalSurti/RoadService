@@ -120,6 +120,13 @@ Staff Details (Organisation structures)
 - Fields: Project Name, Position, Name, Date of Joining, Mobile, Alternate mobile (optional), Email
 
 
+Query Raise (portal operations tickets)
+---------------------------------------
+- Menu: Query Raise — raise tickets for billing / documents / toll / ITS / etc.
+- Workflow: Open → Take up (In progress) → Resolve (with resolution note)
+- Raise: GMC, NHIPMPL, Contractor · Resolve: GMC / NHIPMPL · Reopen + comments supported
+
+
 Important honesty note
 ----------------------
 These modules are built as a working portal inside RoadService.

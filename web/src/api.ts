@@ -7,6 +7,7 @@ import type {
   MprReport,
   OrgStaffDetail,
   PortalDocument,
+  PortalQueryTicket,
   Project,
   ProjectRateSummary,
   RateItem,
@@ -170,6 +171,7 @@ export const api = {
       report_title?: string;
       prepared_by?: string;
       remarks?: string;
+      period_type?: "daily" | "weekly" | "custom";
     }
   ) => {
     const q = new URLSearchParams();
@@ -180,6 +182,7 @@ export const api = {
     if (params?.report_title) q.set("report_title", params.report_title);
     if (params?.prepared_by) q.set("prepared_by", params.prepared_by);
     if (params?.remarks) q.set("remarks", params.remarks);
+    if (params?.period_type) q.set("period_type", params.period_type);
     const qs = q.toString();
     const res = await fetch(`${API_URL}/api/v1/analytics/export/excel${qs ? `?${qs}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -458,6 +461,71 @@ export const api = {
 
   deleteStaffDetail: (token: string, id: number) =>
     request<{ ok: boolean }>(`/api/v1/staff-details/${id}`, { method: "DELETE", token }),
+
+  queryMeta: (token: string) =>
+    request<{ module_areas: string[]; priorities: string[]; statuses: string[] }>(
+      "/api/v1/queries/meta",
+      { token }
+    ),
+
+  queries: (token: string, status?: string, moduleArea?: string) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set("status", status);
+    if (moduleArea) qs.set("module_area", moduleArea);
+    const q = qs.toString();
+    return request<PortalQueryTicket[]>(`/api/v1/queries${q ? `?${q}` : ""}`, { token });
+  },
+
+  getQuery: (token: string, id: number) =>
+    request<PortalQueryTicket>(`/api/v1/queries/${id}`, { token }),
+
+  raiseQuery: (
+    token: string,
+    body: {
+      subject: string;
+      description: string;
+      module_area: string;
+      priority?: string;
+      project_id?: number;
+    }
+  ) =>
+    request<PortalQueryTicket>("/api/v1/queries", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  startQuery: (token: string, id: number, note?: string) =>
+    request<PortalQueryTicket>(`/api/v1/queries/${id}/start`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ status: "in_progress", note }),
+    }),
+
+  resolveQuery: (
+    token: string,
+    id: number,
+    body: { resolution_note: string; status?: string }
+  ) =>
+    request<PortalQueryTicket>(`/api/v1/queries/${id}/resolve`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  reopenQuery: (token: string, id: number, body: { note: string }) =>
+    request<PortalQueryTicket>(`/api/v1/queries/${id}/reopen`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  commentQuery: (token: string, id: number, body: { note: string }) =>
+    request<PortalQueryTicket>(`/api/v1/queries/${id}/comments`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
 
   nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),
 

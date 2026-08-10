@@ -27,6 +27,8 @@ from app.models.portal_ops import (
     MonthlyProgressReport,
     OrgStaffDetail,
     Personnel,
+    PortalQueryComment,
+    PortalQueryTicket,
     ResponseVehicle,
     TollDailyStat,
     TollPlaza,
