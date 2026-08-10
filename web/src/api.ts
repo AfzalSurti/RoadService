@@ -4,6 +4,7 @@ import type {
   Invoice,
   Issue,
   IssueStatus,
+  MprReport,
   PortalDocument,
   Project,
   ProjectRateSummary,
@@ -390,6 +391,12 @@ export const api = {
       token,
       body: form,
     }),
+
+  listMpr: (token: string, projectId?: number) =>
+    request<MprReport[]>(`/api/v1/mpr${projectId ? `?project_id=${projectId}` : ""}`, { token }),
+
+  createMpr: (token: string, form: FormData) =>
+    request<MprReport>("/api/v1/mpr", { method: "POST", token, body: form }),
 
   nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),
 

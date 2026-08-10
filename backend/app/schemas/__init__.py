@@ -433,6 +433,27 @@ class VendorOut(BaseModel):
     updated_at: datetime
 
 
+class MprOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    vendor_id: int | None
+    folder_id: int | None
+    package_name: str
+    report_month: date
+    physical_progress: str | None
+    financial_progress: str | None
+    rating_performance: str | None
+    timely_execution: str | None
+    pending_activity: str | None
+    critical_observation: str | None
+    last_remarks: str | None
+    pdf_path: str | None
+    submitted_by_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class DashboardStats(BaseModel):
     total_projects: int
     total_issues: int

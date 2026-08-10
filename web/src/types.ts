@@ -244,3 +244,23 @@ export type Vendor = {
   created_at: string;
   updated_at: string;
 };
+
+export type MprReport = {
+  id: number;
+  project_id: number;
+  vendor_id: number | null;
+  folder_id: number | null;
+  package_name: string;
+  report_month: string;
+  physical_progress: string | null;
+  financial_progress: string | null;
+  rating_performance: string | null;
+  timely_execution: string | null;
+  pending_activity: string | null;
+  critical_observation: string | null;
+  last_remarks: string | null;
+  pdf_path: string | null;
+  submitted_by_id: number | null;
+  created_at: string;
+  updated_at: string;
+};

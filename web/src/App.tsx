@@ -10,6 +10,7 @@ import { IssuesPage } from "./pages/IssuesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
+import { MprPage } from "./pages/MprPage";
 import {
   AttendancePage,
   BackupDrPage,
@@ -99,6 +100,14 @@ export default function App() {
           element={
             <StaffPortal>
               <DocumentsPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/mpr"
+          element={
+            <StaffPortal>
+              <MprPage />
             </StaffPortal>
           }
         />

@@ -8,15 +8,16 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.billing import DocumentFolder, PortalDocument, Vendor
 from app.models.enums import UserRole
-from app.models.portal_ops import DocumentVersion
+from app.models.portal_ops import DocumentVersion, MonthlyProgressReport
 from app.models.project import Project
 from app.models.user import User
-from app.schemas import DocumentFolderOut, DocumentOut, VendorCreate, VendorOut
+from app.schemas import DocumentFolderOut, DocumentOut, MprOut, VendorCreate, VendorOut
 from app.services.audit import write_audit
 from app.services.storage import save_upload
 
 docs_router = APIRouter(prefix="/documents", tags=["documents"])
 vendors_router = APIRouter(prefix="/vendors", tags=["vendors"])
+mpr_router = APIRouter(prefix="/mpr", tags=["mpr"])
 
 STRETCHES = [
     "Jabalpur - Lakhnadon",
@@ -28,54 +29,100 @@ DOC_TYPES = [
     "Contract agreement",
     "Drawing (Approved, As Built Drawing)",
     "Extension time (EOT)",
+    "Monthly Progress Report (MPR)",
 ]
 
 
 async def _ensure_folder_tree(db: AsyncSession) -> None:
+    """Create stretch → discipline → doctype tree; also backfill missing doctypes (e.g. MPR)."""
     existing = (await db.execute(select(func.count(DocumentFolder.id)))).scalar_one()
-    if existing:
+
+    if not existing:
+        for s_idx, stretch in enumerate(STRETCHES):
+            project = (await db.execute(select(Project).where(Project.name == stretch))).scalar_one_or_none()
+            if not project:
+                project = Project(
+                    name=stretch,
+                    location=stretch,
+                    description=f"Corridor stretch folder project: {stretch}",
+                    chainage_from="0+000",
+                    chainage_to="0+000",
+                )
+                db.add(project)
+                await db.flush()
+
+            stretch_folder = DocumentFolder(
+                name=stretch,
+                folder_type="stretch",
+                parent_id=None,
+                project_id=project.id,
+                sort_order=s_idx,
+            )
+            db.add(stretch_folder)
+            await db.flush()
+
+            for d_idx, discipline in enumerate(DISCIPLINES):
+                disc_folder = DocumentFolder(
+                    name=discipline,
+                    folder_type="discipline",
+                    parent_id=stretch_folder.id,
+                    project_id=project.id,
+                    sort_order=d_idx,
+                )
+                db.add(disc_folder)
+                await db.flush()
+                for t_idx, doc_type in enumerate(DOC_TYPES):
+                    db.add(
+                        DocumentFolder(
+                            name=doc_type,
+                            folder_type="doctype",
+                            parent_id=disc_folder.id,
+                            project_id=project.id,
+                            sort_order=t_idx,
+                        )
+                    )
+        await db.commit()
         return
 
-    for s_idx, stretch in enumerate(STRETCHES):
-        project = (await db.execute(select(Project).where(Project.name == stretch))).scalar_one_or_none()
-        if not project:
-            project = Project(
-                name=stretch,
-                location=stretch,
-                description=f"Corridor stretch folder project: {stretch}",
-                chainage_from="0+000",
-                chainage_to="0+000",
+    # Backfill MPR (and any missing doctypes) under Civil Related for each package stretch
+    for stretch in STRETCHES:
+        stretch_folder = (
+            await db.execute(
+                select(DocumentFolder).where(
+                    DocumentFolder.name == stretch,
+                    DocumentFolder.folder_type == "stretch",
+                )
             )
-            db.add(project)
-            await db.flush()
-
-        stretch_folder = DocumentFolder(
-            name=stretch,
-            folder_type="stretch",
-            parent_id=None,
-            project_id=project.id,
-            sort_order=s_idx,
-        )
-        db.add(stretch_folder)
-        await db.flush()
-
-        for d_idx, discipline in enumerate(DISCIPLINES):
-            disc_folder = DocumentFolder(
-                name=discipline,
-                folder_type="discipline",
-                parent_id=stretch_folder.id,
-                project_id=project.id,
-                sort_order=d_idx,
+        ).scalar_one_or_none()
+        if not stretch_folder:
+            continue
+        civil = (
+            await db.execute(
+                select(DocumentFolder).where(
+                    DocumentFolder.parent_id == stretch_folder.id,
+                    DocumentFolder.name == "Civil Related",
+                    DocumentFolder.folder_type == "discipline",
+                )
             )
-            db.add(disc_folder)
-            await db.flush()
-            for t_idx, doc_type in enumerate(DOC_TYPES):
+        ).scalar_one_or_none()
+        if not civil:
+            continue
+        for t_idx, doc_type in enumerate(DOC_TYPES):
+            found = (
+                await db.execute(
+                    select(DocumentFolder).where(
+                        DocumentFolder.parent_id == civil.id,
+                        DocumentFolder.name == doc_type,
+                    )
+                )
+            ).scalar_one_or_none()
+            if not found:
                 db.add(
                     DocumentFolder(
                         name=doc_type,
                         folder_type="doctype",
-                        parent_id=disc_folder.id,
-                        project_id=project.id,
+                        parent_id=civil.id,
+                        project_id=stretch_folder.project_id,
                         sort_order=t_idx,
                     )
                 )
@@ -224,7 +271,7 @@ async def upload_document(
 @vendors_router.get("", response_model=list[VendorOut])
 async def list_vendors(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
 ):
     return (await db.execute(select(Vendor).order_by(Vendor.id.desc()))).scalars().all()
 
@@ -284,6 +331,144 @@ async def create_vendor(
     await db.commit()
     await db.refresh(vendor)
     return vendor
+
+
+@mpr_router.get("", response_model=list[MprOut])
+async def list_mpr(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    project_id: int | None = None,
+    vendor_id: int | None = None,
+):
+    await _ensure_folder_tree(db)
+    stmt = select(MonthlyProgressReport).order_by(MonthlyProgressReport.id.desc())
+    if project_id is not None:
+        stmt = stmt.where(MonthlyProgressReport.project_id == project_id)
+    if vendor_id is not None:
+        stmt = stmt.where(MonthlyProgressReport.vendor_id == vendor_id)
+    return (await db.execute(stmt)).scalars().all()
+
+
+@mpr_router.post("", response_model=MprOut, status_code=201)
+async def create_mpr(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    package_name: Annotated[str, Form()],
+    project_id: Annotated[int, Form()],
+    report_month: Annotated[str, Form()],
+    vendor_id: Annotated[int | None, Form()] = None,
+    physical_progress: Annotated[str | None, Form()] = None,
+    financial_progress: Annotated[str | None, Form()] = None,
+    rating_performance: Annotated[str | None, Form()] = None,
+    timely_execution: Annotated[str | None, Form()] = None,
+    pending_activity: Annotated[str | None, Form()] = None,
+    critical_observation: Annotated[str | None, Form()] = None,
+    last_remarks: Annotated[str | None, Form()] = None,
+    pdf_file: UploadFile | None = File(None),
+):
+    from datetime import date as date_cls
+
+    await _ensure_folder_tree(db)
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+    if not project:
+        raise HTTPException(404, "Project / package not found")
+    if vendor_id:
+        vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+
+    # Link to package MPR folder under Civil Related
+    stretch = (
+        await db.execute(
+            select(DocumentFolder).where(
+                DocumentFolder.project_id == project_id,
+                DocumentFolder.folder_type == "stretch",
+            )
+        )
+    ).scalar_one_or_none()
+    folder_id = None
+    if stretch:
+        civil = (
+            await db.execute(
+                select(DocumentFolder).where(
+                    DocumentFolder.parent_id == stretch.id,
+                    DocumentFolder.name == "Civil Related",
+                )
+            )
+        ).scalar_one_or_none()
+        if civil:
+            mpr_folder = (
+                await db.execute(
+                    select(DocumentFolder).where(
+                        DocumentFolder.parent_id == civil.id,
+                        DocumentFolder.name == "Monthly Progress Report (MPR)",
+                    )
+                )
+            ).scalar_one_or_none()
+            if mpr_folder:
+                folder_id = mpr_folder.id
+
+    pdf_path = None
+    if pdf_file and pdf_file.filename:
+        pdf_path = await save_upload(pdf_file, "mpr_pdf")
+
+    month = date_cls.fromisoformat(report_month.strip()[:10])
+    row = MonthlyProgressReport(
+        project_id=project_id,
+        vendor_id=vendor_id,
+        folder_id=folder_id,
+        package_name=package_name.strip() or project.name,
+        report_month=month,
+        physical_progress=physical_progress,
+        financial_progress=financial_progress,
+        rating_performance=rating_performance,
+        timely_execution=timely_execution,
+        pending_activity=pending_activity,
+        critical_observation=critical_observation,
+        last_remarks=last_remarks,
+        pdf_path=pdf_path,
+        submitted_by_id=user.id,
+    )
+    db.add(row)
+    await db.flush()
+
+    if folder_id and pdf_path:
+        doc = PortalDocument(
+            project_id=project_id,
+            folder_id=folder_id,
+            category="Monthly Progress Report (MPR)",
+            title=f"MPR {package_name} {month.isoformat()}",
+            description=last_remarks,
+            file_path=pdf_path,
+            uploaded_by_id=user.id,
+            current_version=1,
+            approval_status="draft",
+            classification="internal",
+            watermark_text="CONFIDENTIAL — RoadService",
+        )
+        db.add(doc)
+        await db.flush()
+        db.add(
+            DocumentVersion(
+                document_id=doc.id,
+                version_no=1,
+                file_path=pdf_path,
+                change_note="MPR PDF import",
+                uploaded_by_id=user.id,
+            )
+        )
+
+    await write_audit(
+        db,
+        actor_id=user.id,
+        action="mpr_create",
+        entity_type="mpr",
+        entity_id=str(row.id),
+        detail=package_name,
+    )
+    await db.commit()
+    await db.refresh(row)
+    return row
 
 
 @vendors_router.patch("/{vendor_id}", response_model=VendorOut)

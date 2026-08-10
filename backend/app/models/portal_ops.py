@@ -287,3 +287,29 @@ class ExecutiveSnapshot(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class MonthlyProgressReport(Base):
+    """Package-wise Monthly Progress Report linked to vendor/agency."""
+
+    __tablename__ = "monthly_progress_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    vendor_id: Mapped[int | None] = mapped_column(ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True)
+    folder_id: Mapped[int | None] = mapped_column(ForeignKey("document_folders.id", ondelete="SET NULL"), nullable=True)
+    package_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    report_month: Mapped[date] = mapped_column(Date, nullable=False)
+    physical_progress: Mapped[str | None] = mapped_column(Text, nullable=True)
+    financial_progress: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rating_performance: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timely_execution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_activity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    critical_observation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    submitted_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
