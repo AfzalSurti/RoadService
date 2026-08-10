@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -25,11 +26,34 @@ const COLORS: Record<string, string> = {
   closed: "#16a34a",
 };
 
+function StatCard({
+  label,
+  value,
+  to,
+  hint,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  hint?: string;
+}) {
+  return (
+    <Link className="stat" to={to} title={`Open ${label}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <span className="stat-hint">{hint || "Open details →"}</span>
+    </Link>
+  );
+}
+
 export function DashboardPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const projectsPath = role === "admin" ? "/projects" : "/executive";
+  const ratesPath = role === "admin" ? "/rates" : "/executive";
+  const vendorsPath = role === "admin" || role === "government" ? "/vendors" : "/dashboard";
 
   useEffect(() => {
     if (!token) return;
@@ -72,44 +96,35 @@ export function DashboardPage() {
       {stats ? (
         <>
           <section className="stat-grid">
-            <article className="stat">
-              <span>Projects</span>
-              <strong>{stats.total_projects}</strong>
-            </article>
-            <article className="stat">
-              <span>Total issues</span>
-              <strong>{stats.total_issues}</strong>
-            </article>
-            <article className="stat">
-              <span>Invoices</span>
-              <strong>{stats.total_invoices ?? 0}</strong>
-            </article>
-            <article className="stat">
-              <span>Documents</span>
-              <strong>{stats.total_documents ?? 0}</strong>
-            </article>
-            <article className="stat">
-              <span>Vendors</span>
-              <strong>{stats.total_vendors ?? 0}</strong>
-            </article>
-            <article className="stat">
-              <span>BOQ amount ₹</span>
-              <strong>{(stats.total_boq_amount ?? 0).toLocaleString("en-IN")}</strong>
-            </article>
-            <article className="stat">
-              <span>Executed ₹</span>
-              <strong>{(stats.total_executed_amount ?? 0).toLocaleString("en-IN")}</strong>
-            </article>
-            <article className="stat">
-              <span>Delayed issues</span>
-              <strong>{stats.delayed_issues}</strong>
-            </article>
-            <article className="stat">
-              <span>Compliance</span>
-              <strong>
-                {stats.timeline_compliance_pct != null ? `${stats.timeline_compliance_pct}%` : "—"}
-              </strong>
-            </article>
+            <StatCard label="Projects" value={stats.total_projects} to={projectsPath} hint="Open Projects →" />
+            <StatCard label="Total issues" value={stats.total_issues} to="/issues" hint="Open Issues →" />
+            <StatCard label="Invoices" value={stats.total_invoices ?? 0} to="/billing" hint="Open Billing →" />
+            <StatCard label="Documents" value={stats.total_documents ?? 0} to="/documents" hint="Open Documents →" />
+            <StatCard label="Vendors" value={stats.total_vendors ?? 0} to={vendorsPath} hint="Open Vendors →" />
+            <StatCard
+              label="BOQ amount ₹"
+              value={(stats.total_boq_amount ?? 0).toLocaleString("en-IN")}
+              to={ratesPath}
+              hint="Open Rates / BOQ →"
+            />
+            <StatCard
+              label="Executed ₹"
+              value={(stats.total_executed_amount ?? 0).toLocaleString("en-IN")}
+              to={ratesPath}
+              hint="Open Rates / BOQ →"
+            />
+            <StatCard
+              label="Delayed issues"
+              value={stats.delayed_issues}
+              to="/issues"
+              hint="Open Issues →"
+            />
+            <StatCard
+              label="Compliance"
+              value={stats.timeline_compliance_pct != null ? `${stats.timeline_compliance_pct}%` : "—"}
+              to="/reports"
+              hint="Open Reports →"
+            />
           </section>
 
           <section className="charts">

@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
+import { roleLabel } from "../lib/roles";
 
 type Row = Record<string, unknown>;
 
@@ -16,12 +18,45 @@ function usePageTitle(title: string) {
   }, [title]);
 }
 
+function StatCard({
+  label,
+  value,
+  to,
+  hint,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  hint?: string;
+}) {
+  return (
+    <Link className="stat" to={to} title={`Open ${label}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <span className="stat-hint">{hint || "Open details →"}</span>
+    </Link>
+  );
+}
+
 export function ExecutivePage() {
   const { token, role } = useAuth();
   const [overview, setOverview] = useState<Row | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    stretch_name: "",
+    key_features: "",
+    total_length_km: "",
+    physical_progress_pct: "",
+    planned_expenditure: "",
+    actual_expenditure: "",
+    toll_plazas_count: "",
+    avg_lane_availability: "100",
+    notes: "",
+  });
   usePageTitle("Executive NHIT Summary");
+  const canFill = role === "admin" || role === "government";
 
   const load = async () => {
     if (!token) return;
@@ -42,9 +77,93 @@ export function ExecutivePage() {
     load();
   }, [token]);
 
+  const onCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token || !canFill) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.nhitPost(token, "/executive", {
+        stretch_name: form.stretch_name.trim(),
+        key_features: form.key_features.trim() || undefined,
+        total_length_km: form.total_length_km ? Number(form.total_length_km) : undefined,
+        physical_progress_pct: Number(form.physical_progress_pct || 0),
+        planned_expenditure: Number(form.planned_expenditure || 0),
+        actual_expenditure: Number(form.actual_expenditure || 0),
+        toll_plazas_count: Number(form.toll_plazas_count || 0),
+        avg_lane_availability: Number(form.avg_lane_availability || 100),
+        notes: form.notes.trim() || undefined,
+      });
+      setForm({
+        stretch_name: "",
+        key_features: "",
+        total_length_km: "",
+        physical_progress_pct: "",
+        planned_expenditure: "",
+        actual_expenditure: "",
+        toll_plazas_count: "",
+        avg_lane_availability: "100",
+        notes: "",
+      });
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+
+      <section className="panel">
+        <h2>Who fills this data?</h2>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Top boxes are mostly auto-calculated from other modules. Stretch table rows are entered here
+          by <strong>{roleLabel("admin")}</strong> or <strong>{roleLabel("government")}</strong>.
+        </p>
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Box / field</th>
+              <th>Filled from module</th>
+              <th>Who enters it</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Stretches / Progress / Planned ₹ / Actual ₹ / Lane avail.</td>
+              <td>
+                <Link to="/executive">Executive</Link> (stretch snapshot form below)
+              </td>
+              <td>{roleLabel("admin")} / {roleLabel("government")}</td>
+            </tr>
+            <tr>
+              <td>Active incidents</td>
+              <td>
+                <Link to="/highway-incidents">Incidents</Link>
+              </td>
+              <td>{roleLabel("admin")} / {roleLabel("government")} / Contractor</td>
+            </tr>
+            <tr>
+              <td>ITS not online</td>
+              <td>
+                <Link to="/its">ATMS/TMS/ITS</Link>
+              </td>
+              <td>{roleLabel("admin")}</td>
+            </tr>
+            <tr>
+              <td>Toll plazas count (in stretch) / traffic revenue context</td>
+              <td>
+                <Link to="/toll">Toll Ops</Link> + Executive form
+              </td>
+              <td>{roleLabel("admin")} / {roleLabel("government")}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       {role === "admin" ? (
         <div className="btn-row" style={{ marginBottom: "1rem" }}>
           <button
@@ -60,34 +179,130 @@ export function ExecutivePage() {
           </button>
         </div>
       ) : null}
+
       {overview ? (
         <section className="stat-grid">
-          <article className="stat">
-            <span>Stretches</span>
-            <strong>{String(overview.stretches)}</strong>
-          </article>
-          <article className="stat">
-            <span>Avg physical progress</span>
-            <strong>{Number(overview.avg_physical_progress || 0).toFixed(1)}%</strong>
-          </article>
-          <article className="stat">
-            <span>Planned ₹</span>
-            <strong>{money(Number(overview.planned_expenditure || 0))}</strong>
-          </article>
-          <article className="stat">
-            <span>Actual ₹</span>
-            <strong>{money(Number(overview.actual_expenditure || 0))}</strong>
-          </article>
-          <article className="stat">
-            <span>Active incidents</span>
-            <strong>{String(overview.active_incidents)}</strong>
-          </article>
-          <article className="stat">
-            <span>ITS not online</span>
-            <strong>{String(overview.its_not_online)}</strong>
-          </article>
+          <StatCard label="Stretches" value={String(overview.stretches)} to="/executive" hint="Stretch table below →" />
+          <StatCard
+            label="Avg physical progress"
+            value={`${Number(overview.avg_physical_progress || 0).toFixed(1)}%`}
+            to="/executive"
+            hint="Stretch table below →"
+          />
+          <StatCard
+            label="Planned ₹"
+            value={money(Number(overview.planned_expenditure || 0))}
+            to="/executive"
+            hint="Stretch table below →"
+          />
+          <StatCard
+            label="Actual ₹"
+            value={money(Number(overview.actual_expenditure || 0))}
+            to="/executive"
+            hint="Stretch table below →"
+          />
+          <StatCard
+            label="Active incidents"
+            value={String(overview.active_incidents)}
+            to="/highway-incidents"
+            hint="Open Incidents →"
+          />
+          <StatCard
+            label="ITS not online"
+            value={String(overview.its_not_online)}
+            to="/its"
+            hint="Open ATMS/TMS/ITS →"
+          />
         </section>
       ) : null}
+
+      {canFill ? (
+        <section className="panel">
+          <h2>Add stretch snapshot (fills top boxes + table)</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Entered by {roleLabel("admin")} or {roleLabel("government")}.
+          </p>
+          <form className="form-grid" onSubmit={onCreate}>
+            <label>
+              Stretch name
+              <input
+                required
+                value={form.stretch_name}
+                onChange={(e) => setForm({ ...form, stretch_name: e.target.value })}
+              />
+            </label>
+            <label>
+              Length (km)
+              <input
+                type="number"
+                step="0.1"
+                value={form.total_length_km}
+                onChange={(e) => setForm({ ...form, total_length_km: e.target.value })}
+              />
+            </label>
+            <label>
+              Physical progress %
+              <input
+                type="number"
+                step="0.1"
+                value={form.physical_progress_pct}
+                onChange={(e) => setForm({ ...form, physical_progress_pct: e.target.value })}
+              />
+            </label>
+            <label>
+              Toll plazas count
+              <input
+                type="number"
+                value={form.toll_plazas_count}
+                onChange={(e) => setForm({ ...form, toll_plazas_count: e.target.value })}
+              />
+            </label>
+            <label>
+              Planned expenditure ₹
+              <input
+                type="number"
+                value={form.planned_expenditure}
+                onChange={(e) => setForm({ ...form, planned_expenditure: e.target.value })}
+              />
+            </label>
+            <label>
+              Actual expenditure ₹
+              <input
+                type="number"
+                value={form.actual_expenditure}
+                onChange={(e) => setForm({ ...form, actual_expenditure: e.target.value })}
+              />
+            </label>
+            <label>
+              Avg lane availability %
+              <input
+                type="number"
+                step="0.1"
+                value={form.avg_lane_availability}
+                onChange={(e) => setForm({ ...form, avg_lane_availability: e.target.value })}
+              />
+            </label>
+            <label>
+              Key features
+              <input
+                value={form.key_features}
+                onChange={(e) => setForm({ ...form, key_features: e.target.value })}
+                placeholder="6-lane, ETC, ATMS…"
+              />
+            </label>
+            <label className="span-2">
+              Notes
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </label>
+            <div className="span-2">
+              <button className="btn" type="submit" disabled={busy}>
+                Save stretch snapshot
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
       <section className="panel">
         <h2>Stretch snapshots</h2>
         <table className="data">
@@ -115,7 +330,7 @@ export function ExecutivePage() {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={5}>No executive data yet. GMC Experts can load demo data.</td>
+                <td colSpan={5}>No executive data yet. Use the form above or Load demo NHIT data.</td>
               </tr>
             ) : null}
           </tbody>
