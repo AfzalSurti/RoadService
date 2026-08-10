@@ -127,6 +127,13 @@ Query Raise (portal operations tickets)
 - Raise: GMC, NHIPMPL, Contractor · Resolve: GMC / NHIPMPL · Reopen + comments supported
 
 
+RFI + mobile site work
+----------------------
+- Web RFI module (contractor + GMC/NHIPMPL): raise / answer / close
+- Mobile contractor: Site work only — rectify defects raised by GMC + Raise RFI
+- Mobile surveyor: report defects + answer RFIs + quantity
+
+
 Important honesty note
 ----------------------
 These modules are built as a working portal inside RoadService.

@@ -316,3 +316,24 @@ export type PortalQueryTicket = {
   can_resolve: boolean;
   comments?: PortalQueryComment[];
 };
+
+export type SiteRfi = {
+  id: number;
+  rfi_no: string;
+  project_id: number;
+  related_issue_id: number | null;
+  subject: string;
+  description: string;
+  chainage: string | null;
+  priority: string;
+  status: string;
+  raised_by_id: number;
+  answer_text: string | null;
+  answered_by_id: number | null;
+  answered_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  can_answer: boolean;
+  can_close: boolean;
+};

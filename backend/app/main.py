@@ -18,6 +18,7 @@ from app.api import (
     projects,
     queries,
     rates,
+    rfis,
     staff_details,
     users,
 )
@@ -82,6 +83,7 @@ app.include_router(portal.vendors_router, prefix="/api/v1")
 app.include_router(portal.mpr_router, prefix="/api/v1")
 app.include_router(staff_details.router, prefix="/api/v1")
 app.include_router(queries.router, prefix="/api/v1")
+app.include_router(rfis.router, prefix="/api/v1")
 app.include_router(nhit.router, prefix="/api/v1")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)

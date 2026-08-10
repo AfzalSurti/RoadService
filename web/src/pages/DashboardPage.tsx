@@ -102,6 +102,7 @@ export function DashboardPage() {
             <StatCard label="Documents" value={stats.total_documents ?? 0} to="/documents" hint="Open Documents →" />
             <StatCard label="Staff details" value="GMC · NHIPMPL · Contractor" to="/staff-details" hint="Organisation professionals →" />
             <StatCard label="Query Raise" value="Tickets" to="/queries" hint="Raise / resolve portal queries →" />
+            <StatCard label="RFI" value="Site clarifications" to="/rfi" hint="Raise / answer RFIs →" />
             <StatCard label="Vendors" value={stats.total_vendors ?? 0} to={vendorsPath} hint="Open Vendors →" />
             <StatCard
               label="BOQ amount ₹"

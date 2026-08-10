@@ -11,6 +11,7 @@ import type {
   Project,
   ProjectRateSummary,
   RateItem,
+  SiteRfi,
   StaffMeta,
   TokenResponse,
   User,
@@ -526,6 +527,40 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  rfis: (token: string, status?: string) =>
+    request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${encodeURIComponent(status)}` : ""}`, {
+      token,
+    }),
+
+  getRfi: (token: string, id: number) => request<SiteRfi>(`/api/v1/rfis/${id}`, { token }),
+
+  raiseRfi: (
+    token: string,
+    body: {
+      project_id: number;
+      subject: string;
+      description: string;
+      chainage?: string;
+      priority?: string;
+      related_issue_id?: number;
+    }
+  ) =>
+    request<SiteRfi>("/api/v1/rfis", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  answerRfi: (token: string, id: number, body: { answer_text: string }) =>
+    request<SiteRfi>(`/api/v1/rfis/${id}/answer`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  closeRfi: (token: string, id: number) =>
+    request<SiteRfi>(`/api/v1/rfis/${id}/close`, { method: "POST", token }),
 
   nhitGet: <T>(token: string, path: string) => request<T>(`/api/v1/nhit${path}`, { token }),
 

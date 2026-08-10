@@ -27,6 +27,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { QueriesPage } from "./pages/QueriesPage";
 import { RatesPage } from "./pages/RatesPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { RfiPage } from "./pages/RfiPage";
 import { StaffDetailsPage } from "./pages/StaffDetailsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { VendorsPage } from "./pages/VendorsPage";
@@ -78,6 +79,14 @@ export default function App() {
           element={
             <StaffPortal>
               <QueriesPage />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/rfi"
+          element={
+            <StaffPortal>
+              <RfiPage />
             </StaffPortal>
           }
         />

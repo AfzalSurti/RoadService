@@ -29,6 +29,7 @@ from app.models.portal_ops import (
     Personnel,
     PortalQueryComment,
     PortalQueryTicket,
+    SiteRfi,
     ResponseVehicle,
     TollDailyStat,
     TollPlaza,

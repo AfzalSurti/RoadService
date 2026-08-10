@@ -43,6 +43,33 @@ export type RateItemSurveyor = {
   executed_quantity: number;
 };
 
+export type Project = {
+  id: number;
+  name: string;
+  location?: string | null;
+};
+
+export type SiteRfi = {
+  id: number;
+  rfi_no: string;
+  project_id: number;
+  related_issue_id: number | null;
+  subject: string;
+  description: string;
+  chainage: string | null;
+  priority: string;
+  status: string;
+  raised_by_id: number;
+  answer_text: string | null;
+  answered_by_id: number | null;
+  answered_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  can_answer: boolean;
+  can_close: boolean;
+};
+
 async function request<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
@@ -86,7 +113,7 @@ export const api = {
   issues: (token: string, status?: string) =>
     request<Issue[]>(`/api/v1/issues${status ? `?status=${status}` : ""}`, { token }),
   issue: (token: string, id: number) => request<Issue>(`/api/v1/issues/${id}`, { token }),
-  projects: (token: string) => request<any[]>("/api/v1/projects", { token }),
+  projects: (token: string) => request<Project[]>("/api/v1/projects", { token }),
   startIssue: (token: string, id: number) =>
     request<Issue>(`/api/v1/issues/${id}/start`, { method: "POST", token }),
   createIssue: (token: string, form: FormData) =>
@@ -123,6 +150,33 @@ export const api = {
       categories: { id: string; name: string }[];
       types: { id: string; label: string; category_id: string }[];
     }>("/api/v1/catalog/defects", { token }),
+
+  rfis: (token: string, status?: string) =>
+    request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${status}` : ""}`, { token }),
+  raiseRfi: (
+    token: string,
+    body: {
+      project_id: number;
+      subject: string;
+      description: string;
+      chainage?: string;
+      priority?: string;
+      related_issue_id?: number;
+    }
+  ) =>
+    request<SiteRfi>("/api/v1/rfis", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+  answerRfi: (token: string, id: number, body: { answer_text: string }) =>
+    request<SiteRfi>(`/api/v1/rfis/${id}/answer`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+  closeRfi: (token: string, id: number) =>
+    request<SiteRfi>(`/api/v1/rfis/${id}/close`, { method: "POST", token }),
 };
 
 export { API_URL };

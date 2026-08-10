@@ -370,3 +370,28 @@ class PortalQueryComment(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False)
     action: Mapped[str] = mapped_column(String(32), default="comment", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SiteRfi(Base):
+    """Request for Information raised from site (contractor / field)."""
+
+    __tablename__ = "site_rfis"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rfi_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    related_issue_id: Mapped[int | None] = mapped_column(ForeignKey("issues.id", ondelete="SET NULL"), nullable=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority: Mapped[str] = mapped_column(String(32), default="medium", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)  # open|answered|closed
+    raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answered_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

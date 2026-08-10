@@ -62,12 +62,13 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.page}>
-      <Stack.Screen options={{ title: "Issues" }} />
+      <Stack.Screen options={{ title: role === "contractor" ? "Site work" : "Issues" }} />
       <View style={styles.header}>
         <View>
           <Text style={styles.name}>{fullName}</Text>
           <Text style={styles.role}>
             {roleLabel(role)}
+            {role === "contractor" ? " · Rectify site defects" : ""}
             {unread ? ` · ${unread} alerts` : ""}
           </Text>
         </View>
@@ -87,21 +88,34 @@ export default function HomeScreen() {
             <Text style={styles.secondaryText}>Notifications{unread ? ` (${unread})` : ""}</Text>
           </Pressable>
         </Link>
-      {role === "surveyor" ? (
-          <Link href="/create-issue" asChild>
+        {role === "contractor" || role === "surveyor" ? (
+          <Link href="/rfi" asChild>
             <Pressable style={styles.primary}>
-              <Text style={styles.primaryText}>Report issue</Text>
+              <Text style={styles.primaryText}>RFI</Text>
             </Pressable>
           </Link>
         ) : null}
-        {role === "surveyor" ? (
+      </View>
+      {role === "surveyor" ? (
+        <View style={styles.row}>
+          <Link href="/create-issue" asChild>
+            <Pressable style={styles.primary}>
+              <Text style={styles.primaryText}>Report defect / issue</Text>
+            </Pressable>
+          </Link>
           <Link href="/quantity" asChild>
             <Pressable style={styles.secondary}>
               <Text style={styles.secondaryText}>Quantity</Text>
             </Pressable>
           </Link>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
+      {role === "contractor" ? (
+        <Text style={styles.hint}>
+          Site only: when GMC raises a defect, Start work / Start rework → Submit rectification. Use
+          RFI for site clarifications.
+        </Text>
+      ) : null}
 
       {pendingOffline ? (
         <Text style={styles.offline}>
@@ -138,14 +152,14 @@ export default function HomeScreen() {
             </Link>
             {role === "contractor" ? (
               <View style={styles.actions}>
-                {(item.status === "open" || item.status === "under_review") && (
+                {(item.status === "under_review" || item.status === "open") && (
                   <Pressable
                     style={styles.miniBtn}
                     disabled={busyId === item.id}
                     onPress={() => oneTapStart(item)}
                   >
                     <Text style={styles.miniText}>
-                      {item.status === "under_review" ? "Start rework" : "Start work"}
+                      {item.status === "under_review" ? "Start rework / rectify" : "Start rectification"}
                     </Text>
                   </Pressable>
                 )}
@@ -154,7 +168,7 @@ export default function HomeScreen() {
                     style={styles.miniBtn}
                     onPress={() => router.push(`/issue/${item.id}?action=submit`)}
                   >
-                    <Text style={styles.miniText}>Submit</Text>
+                    <Text style={styles.miniText}>Submit rectification</Text>
                   </Pressable>
                 )}
                 {item.status === "under_review" && (
@@ -162,7 +176,7 @@ export default function HomeScreen() {
                     style={[styles.miniBtn, styles.ghostBtn]}
                     onPress={() => router.push(`/issue/${item.id}?action=rejection`)}
                   >
-                    <Text style={styles.ghostText}>View comments</Text>
+                    <Text style={styles.ghostText}>View rejection notes</Text>
                   </Pressable>
                 )}
               </View>
@@ -212,6 +226,7 @@ const styles = StyleSheet.create({
   meta: { color: "#8b9bb0", marginBottom: 4 },
   error: { color: "#fb7185", marginBottom: 8 },
   offline: { color: "#fbbf24", marginBottom: 8 },
+  hint: { color: "#8b9bb0", marginBottom: 10, fontSize: 13, lineHeight: 18 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   miniBtn: {
     backgroundColor: "#3b9eff",
