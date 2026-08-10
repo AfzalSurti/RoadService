@@ -18,7 +18,7 @@ function money(n: number) {
 }
 
 export function RatesPage() {
-  const { token, isReadonly } = useAuth();
+  const { token, role, isReadonly } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<number | "">("");
   const [items, setItems] = useState<RateItem[]>([]);
@@ -27,6 +27,10 @@ export function RatesPage() {
   const [form, setForm] = useState(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
   const [busy, setBusy] = useState(false);
+  const [qtyItemId, setQtyItemId] = useState<number | null>(null);
+  const [qtyValue, setQtyValue] = useState("");
+  const [qtyNote, setQtyNote] = useState("");
+  const canEnterQty = !isReadonly && (role === "admin" || role === "surveyor" || role === "contractor");
 
   const load = async () => {
     if (!token || !projectId) {
@@ -142,20 +146,27 @@ export function RatesPage() {
         </div>
 
         {projectId ? (
-          <div className="stat-grid" style={{ marginTop: "1rem" }}>
-            <div className="stat">
-              <span>Total BOQ amount</span>
-              <strong>₹ {money(totals.boq)}</strong>
+          <>
+            <div className="stat-grid" style={{ marginTop: "1rem" }}>
+              <div className="stat">
+                <span>Total BOQ amount</span>
+                <strong>₹ {money(totals.boq)}</strong>
+              </div>
+              <div className="stat">
+                <span>Executed value</span>
+                <strong>₹ {money(totals.exec)}</strong>
+              </div>
+              <div className="stat">
+                <span>% progress</span>
+                <strong>{totals.pct == null ? "—" : `${totals.pct}%`}</strong>
+              </div>
             </div>
-            <div className="stat">
-              <span>Executed value</span>
-              <strong>₹ {money(totals.exec)}</strong>
-            </div>
-            <div className="stat">
-              <span>% progress</span>
-              <strong>{totals.pct == null ? "—" : `${totals.pct}%`}</strong>
-            </div>
-          </div>
+            <p className="muted" style={{ marginTop: "0.75rem" }}>
+              Highlighted executed / value / % progress columns are <strong>not typed in Add BOQ item</strong>.
+              They come from quantity entries (Record qty below, or mobile field entry): cumulative qty × rate
+              updates value of work done and % progress automatically.
+            </p>
+          </>
         ) : null}
 
         <div className="table-scroll">
@@ -198,18 +209,33 @@ export function RatesPage() {
                   <td>{i.progress_pct == null ? "—" : `${i.progress_pct}%`}</td>
                   <td>{i.remarks || "—"}</td>
                   {!isReadonly ? (
-                    <td>
-                      <button
-                        className="btn ghost"
-                        type="button"
-                        onClick={async () => {
-                          if (!token || !confirm(`Delete item ${i.item_no}?`)) return;
-                          await api.deleteRateItem(token, i.id);
-                          load();
-                        }}
-                      >
-                        Delete
-                      </button>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {canEnterQty ? (
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          onClick={() => {
+                            setQtyItemId(i.id);
+                            setQtyValue("");
+                            setQtyNote("");
+                          }}
+                        >
+                          Record qty
+                        </button>
+                      ) : null}{" "}
+                      {role === "admin" ? (
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          onClick={async () => {
+                            if (!token || !confirm(`Delete item ${i.item_no}?`)) return;
+                            await api.deleteRateItem(token, i.id);
+                            load();
+                          }}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </td>
                   ) : null}
                 </tr>
@@ -230,7 +256,10 @@ export function RatesPage() {
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h2>Add BOQ item</h2>
-            <p className="muted">Amount is calculated automatically: Quantity × Rate</p>
+            <p className="muted">
+              Fill only CA rate fields below. Amount = Quantity × Rate. Executed quantity and % progress
+              are filled later via Record qty (not in this form).
+            </p>
             <form className="form-grid" onSubmit={onCreate} noValidate>
               <label>
                 BOQ item no
@@ -311,6 +340,65 @@ export function RatesPage() {
               </div>
             </form>
           </div>
+        </div>
+      ) : null}
+
+      {qtyItemId != null ? (
+        <div className="modal-backdrop" onClick={() => setQtyItemId(null)}>
+          <form
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!token || !qtyValue || Number(qtyValue) <= 0) {
+                setError("Enter a quantity greater than 0");
+                return;
+              }
+              setBusy(true);
+              setError(null);
+              try {
+                await api.addQuantity(token, qtyItemId, {
+                  quantity: Number(qtyValue),
+                  note: qtyNote.trim() || undefined,
+                });
+                setQtyItemId(null);
+                await load();
+              } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Quantity save failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <h2>Record executed quantity</h2>
+            <p className="muted">
+              This updates Quantity executed, Value of work done, and % progress for the BOQ item.
+            </p>
+            <div className="form-grid">
+              <label>
+                This entry quantity
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={qtyValue}
+                  onChange={(e) => setQtyValue(e.target.value)}
+                />
+              </label>
+              <label>
+                Note
+                <input value={qtyNote} onChange={(e) => setQtyNote(e.target.value)} />
+              </label>
+            </div>
+            <div className="btn-row" style={{ marginTop: "1rem" }}>
+              <button className="btn" type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save quantity"}
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setQtyItemId(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
     </>

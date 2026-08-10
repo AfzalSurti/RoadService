@@ -206,7 +206,7 @@ async def add_quantity(
     item_id: int,
     body: QuantityEntryCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.SURVEYOR, UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.SURVEYOR, UserRole.ADMIN, UserRole.CONTRACTOR))],
 ):
     item = (await db.execute(select(RateItem).where(RateItem.id == item_id))).scalar_one_or_none()
     if not item:
@@ -215,6 +215,8 @@ async def add_quantity(
     project = await _get_project(db, item.project_id)
     if user.role == UserRole.SURVEYOR and not any(s.id == user.id for s in project.surveyors):
         raise HTTPException(status_code=403, detail="Surveyor not assigned to this project")
+    if user.role == UserRole.CONTRACTOR and not any(c.id == user.id for c in project.contractors):
+        raise HTTPException(status_code=403, detail="Contractor not assigned to this project")
 
     qty = _dec(body.quantity)
     amount = (qty * item.rate).quantize(Decimal("0.01"))

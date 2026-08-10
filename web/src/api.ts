@@ -249,6 +249,17 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  addQuantity: (
+    token: string,
+    itemId: number,
+    body: { quantity: number; note?: string }
+  ) =>
+    request<{ id: number; quantity: number; amount: number }>(`/api/v1/rates/${itemId}/quantity`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
   deleteRateItem: (token: string, id: number) =>
     request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),
 
