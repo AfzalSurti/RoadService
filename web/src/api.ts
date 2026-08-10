@@ -233,6 +233,10 @@ export const api = {
       chainage_from?: string;
       chainage_to?: string;
       notes?: string;
+      piu?: string;
+      faro?: string;
+      bill_from?: string;
+      bill_to?: string;
     }
   ) =>
     request<Invoice>("/api/v1/billing/invoices", {
@@ -260,7 +264,7 @@ export const api = {
   approveInvoice: (
     token: string,
     id: number,
-    body: { upc: string; note?: string; approved_amount?: number }
+    body: { upc: string; note?: string; approved_amount?: number; voucher_no?: string }
   ) =>
     request<Invoice>(`/api/v1/billing/invoices/${id}/approve`, {
       method: "POST",

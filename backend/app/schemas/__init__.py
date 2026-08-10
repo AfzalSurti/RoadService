@@ -281,6 +281,10 @@ class InvoiceCreate(BaseModel):
     chainage_from: str | None = None
     chainage_to: str | None = None
     notes: str | None = None
+    piu: str | None = None
+    faro: str | None = None
+    bill_from: date | None = None
+    bill_to: date | None = None
 
 
 class InvoiceRecommend(BaseModel):
@@ -294,6 +298,7 @@ class InvoiceAction(BaseModel):
     note: str | None = None
     upc: str | None = None
     approved_amount: float | None = None
+    voucher_no: str | None = None
 
 
 class InvoiceOut(BaseModel):
@@ -309,8 +314,17 @@ class InvoiceOut(BaseModel):
     recommended_amount: float | None
     approved_amount: float | None
     upc: str | None
+    piu: str | None = None
+    faro: str | None = None
     chainage_from: str | None
     chainage_to: str | None
+    bill_from: date | None = None
+    bill_to: date | None = None
+    recommended_ae_amount: float | None = None
+    recommended_piu_amount: float | None = None
+    net_amount_released: float | None = None
+    voucher_no: str | None = None
+    status_detail: str | None = None
     status: str
     submitted_by_id: int
     notes: str | None

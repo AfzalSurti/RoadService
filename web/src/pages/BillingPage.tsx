@@ -9,6 +9,24 @@ function money(n: number | null | undefined) {
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtDate(v?: string | null) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString("en-GB");
+}
+
+type StatusFilter = "all" | "pending" | "approve" | "reject" | "clarify";
+
+function matchesFilter(inv: Invoice, filter: StatusFilter) {
+  if (filter === "all") return true;
+  if (filter === "pending") return inv.status === "submitted" || inv.status === "recommended";
+  if (filter === "approve") return inv.status === "approved";
+  if (filter === "reject") return inv.status === "rejected";
+  if (filter === "clarify") return inv.status === "clarification";
+  return true;
+}
+
 export function BillingPage() {
   const { token, role, isReadonly } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -17,14 +35,22 @@ export function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
   const [form, setForm] = useState({
     project_id: "",
     invoice_no: "",
     invoice_date: new Date().toISOString().slice(0, 10),
-    payment_type: "Running Account Bill",
+    payment_type: "Stage Payment Statement for Works",
     amount: "",
     chainage_from: "",
     chainage_to: "",
+    piu: "",
+    faro: "",
+    bill_from: "",
+    bill_to: "",
     notes: "",
   });
   const [recommend, setRecommend] = useState({
@@ -33,7 +59,7 @@ export function BillingPage() {
     calculation_note: "",
     note: "",
   });
-  const [approve, setApprove] = useState({ upc: "", note: "", approved_amount: "" });
+  const [approve, setApprove] = useState({ upc: "", note: "", approved_amount: "", voucher_no: "" });
   const [actionNote, setActionNote] = useState("");
 
   const load = async () => {
@@ -54,7 +80,7 @@ export function BillingPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Billing";
+    if (el) el.textContent = "Contractor — Invoice Processing";
   }, []);
 
   useEffect(() => {
@@ -62,10 +88,41 @@ export function BillingPage() {
   }, [token]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const inv of invoices) c[inv.status] = (c[inv.status] || 0) + 1;
-    return c;
+    return {
+      pending: invoices.filter((i) => i.status === "submitted" || i.status === "recommended").length,
+      approve: invoices.filter((i) => i.status === "approved").length,
+      reject: invoices.filter((i) => i.status === "rejected").length,
+      clarify: invoices.filter((i) => i.status === "clarification").length,
+    };
   }, [invoices]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return invoices.filter((inv) => {
+      if (!matchesFilter(inv, filter)) return false;
+      if (!q) return true;
+      const project = projects.find((p) => p.id === inv.project_id)?.name || "";
+      return [
+        inv.transaction_id,
+        inv.invoice_no,
+        inv.upc,
+        inv.piu,
+        inv.faro,
+        inv.payment_type,
+        inv.status_detail,
+        project,
+      ]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [invoices, filter, search, projects]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search, pageSize]);
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -82,16 +139,24 @@ export function BillingPage() {
         chainage_from: form.chainage_from || undefined,
         chainage_to: form.chainage_to || undefined,
         notes: form.notes || undefined,
+        piu: form.piu || undefined,
+        faro: form.faro || undefined,
+        bill_from: form.bill_from || undefined,
+        bill_to: form.bill_to || undefined,
       });
       setShowCreate(false);
       setForm({
         project_id: "",
         invoice_no: "",
         invoice_date: new Date().toISOString().slice(0, 10),
-        payment_type: "Running Account Bill",
+        payment_type: "Stage Payment Statement for Works",
         amount: "",
         chainage_from: "",
         chainage_to: "",
+        piu: "",
+        faro: "",
+        bill_from: "",
+        bill_to: "",
         notes: "",
       });
       await load();
@@ -116,67 +181,252 @@ export function BillingPage() {
     }
   };
 
+  const exportExcel = () => {
+    const headers = [
+      "Transaction ID",
+      "UPC",
+      "PIU",
+      "FARO",
+      "Payment Type",
+      "Invoice No",
+      "Invoice Date",
+      "Amount",
+      "Submission Date",
+      "Bill From",
+      "Bill To",
+      "Recommended AE/IE",
+      "Recommended PIU",
+      "Net Released",
+      "Status",
+      "Voucher",
+    ];
+    const lines = filtered.map((inv) =>
+      [
+        inv.transaction_id,
+        inv.upc || "",
+        inv.piu || "",
+        inv.faro || "",
+        inv.payment_type,
+        inv.invoice_no,
+        inv.invoice_date,
+        inv.amount,
+        inv.created_at,
+        inv.bill_from || "",
+        inv.bill_to || "",
+        inv.recommended_ae_amount ?? "",
+        inv.recommended_piu_amount ?? "",
+        inv.net_amount_released ?? "",
+        inv.status_detail || inv.status,
+        inv.voucher_no || "",
+      ]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(",")
+    );
+    const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "invoices.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const rows = filtered
+      .map(
+        (inv) =>
+          `<tr>
+            <td>${inv.transaction_id}</td>
+            <td>${inv.invoice_no}</td>
+            <td>${money(inv.amount)}</td>
+            <td>${inv.status_detail || inv.status}</td>
+            <td>${inv.upc || "—"}</td>
+          </tr>`
+      )
+      .join("");
+    w.document.write(`<!doctype html><html><head><title>Invoices</title>
+      <style>body{font-family:Arial;padding:16px}table{border-collapse:collapse;width:100%}
+      th,td{border:1px solid #ccc;padding:6px;font-size:12px}th{background:#eee}</style></head>
+      <body><h2>Contractor Invoice Processing</h2>
+      <table><thead><tr><th>Txn</th><th>Invoice</th><th>Amount</th><th>Status</th><th>UPC</th></tr></thead>
+      <tbody>${rows || "<tr><td colspan=5>No rows</td></tr>"}</tbody></table>
+      <script>window.print()</script></body></html>`);
+    w.document.close();
+  };
+
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
 
-      <section className="stat-grid">
-        {["submitted", "recommended", "clarification", "approved", "rejected", "withdrawn"].map((s) => (
-          <article className="stat" key={s}>
-            <span>{formatLabel(s)}</span>
-            <strong>{counts[s] || 0}</strong>
-          </article>
-        ))}
-      </section>
-
-      <section className="panel">
-        <div className="panel-head-row">
-          <h2>Invoices</h2>
+      <div className="billing-toolbar">
+        <div>
+          <div className="muted">Home / Finance / Contractor — Invoice Processing</div>
+          <h2 style={{ margin: "0.2rem 0 0" }}>Invoice Processing</h2>
+        </div>
+        <div className="btn-row">
           {(role === "admin" || role === "contractor") && !isReadonly ? (
             <button className="btn" type="button" onClick={() => setShowCreate(true)}>
               New invoice
             </button>
           ) : null}
+          <button className="btn secondary" type="button" onClick={() => setFilter("all")}>
+            FILTER
+          </button>
+        </div>
+      </div>
+
+      <section className="billing-status-grid">
+        <button
+          type="button"
+          className={`billing-status-card pending${filter === "pending" ? " active" : ""}`}
+          onClick={() => setFilter(filter === "pending" ? "all" : "pending")}
+        >
+          <span>PENDING</span>
+          <strong>{counts.pending}</strong>
+        </button>
+        <button
+          type="button"
+          className={`billing-status-card approve${filter === "approve" ? " active" : ""}`}
+          onClick={() => setFilter(filter === "approve" ? "all" : "approve")}
+        >
+          <span>APPROVE</span>
+          <strong>{counts.approve}</strong>
+        </button>
+        <button
+          type="button"
+          className={`billing-status-card reject${filter === "reject" ? " active" : ""}`}
+          onClick={() => setFilter(filter === "reject" ? "all" : "reject")}
+        >
+          <span>REJECT</span>
+          <strong>{counts.reject}</strong>
+        </button>
+        <button
+          type="button"
+          className={`billing-status-card clarify${filter === "clarify" ? " active" : ""}`}
+          onClick={() => setFilter(filter === "clarify" ? "all" : "clarify")}
+        >
+          <span>SEEK CLARIFICATION</span>
+          <strong>{counts.clarify}</strong>
+        </button>
+      </section>
+
+      <section className="panel">
+        <div className="billing-table-tools">
+          <div className="btn-row">
+            <button className="btn ghost" type="button" onClick={exportPdf}>
+              PDF
+            </button>
+            <button className="btn ghost" type="button" onClick={exportExcel}>
+              Excel
+            </button>
+            <label className="muted">
+              Show{" "}
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                {[10, 25, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>{" "}
+              entries
+            </label>
+          </div>
+          <label>
+            Search{" "}
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Txn / UPC / PIU / invoice…"
+            />
+          </label>
         </div>
 
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Txn</th>
-              <th>Invoice</th>
-              <th>Project</th>
-              <th>Amount ₹</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr key={inv.id} className={selected?.id === inv.id ? "selected-row" : undefined}>
-                <td>{inv.transaction_id}</td>
-                <td>
-                  {inv.invoice_no}
-                  <div className="muted">{inv.invoice_date}</div>
-                </td>
-                <td>{projects.find((p) => p.id === inv.project_id)?.name || `#${inv.project_id}`}</td>
-                <td>{money(inv.amount)}</td>
-                <td>
-                  <span className={`badge status-${inv.status}`}>{formatLabel(inv.status)}</span>
-                </td>
-                <td>
-                  <button type="button" className="linkish" onClick={() => setSelected(inv)}>
-                    Open
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!invoices.length ? (
+        <div className="table-scroll billing-wide-table">
+          <table className="data">
+            <thead>
               <tr>
-                <td colSpan={6}>No invoices yet.</td>
+                <th>View</th>
+                <th>Current Status of Invoice</th>
+                <th>Transaction ID</th>
+                <th>UPC</th>
+                <th>PIU</th>
+                <th>FARO</th>
+                <th>Payment Type</th>
+                <th>Invoice No.</th>
+                <th>Invoice Date</th>
+                <th>Invoice Amount (INR)</th>
+                <th>Invoice Submission Date</th>
+                <th>Bill Duration From</th>
+                <th>Bill Duration To</th>
+                <th>Recommended Amount By AE/IE (INR)</th>
+                <th>Recommended Amount By PIU (INR)</th>
+                <th>Net Amount Released (INR)</th>
+                <th>Voucher</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pageRows.map((inv) => (
+                <tr key={inv.id} className={selected?.id === inv.id ? "selected-row" : undefined}>
+                  <td>
+                    <button type="button" className="btn ghost" onClick={() => setSelected(inv)}>
+                      View
+                    </button>
+                  </td>
+                  <td>{inv.status_detail || formatLabel(inv.status)}</td>
+                  <td>{inv.transaction_id}</td>
+                  <td>{inv.upc || "—"}</td>
+                  <td>{inv.piu || projects.find((p) => p.id === inv.project_id)?.location || "—"}</td>
+                  <td>{inv.faro || "—"}</td>
+                  <td>{inv.payment_type}</td>
+                  <td>{inv.invoice_no}</td>
+                  <td>{fmtDate(inv.invoice_date)}</td>
+                  <td>{money(inv.amount)}</td>
+                  <td>{fmtDate(inv.created_at)}</td>
+                  <td>{fmtDate(inv.bill_from)}</td>
+                  <td>{fmtDate(inv.bill_to)}</td>
+                  <td>{money(inv.recommended_ae_amount ?? inv.recommended_amount)}</td>
+                  <td>{money(inv.recommended_piu_amount ?? inv.recommended_amount)}</td>
+                  <td>
+                    {inv.net_amount_released != null
+                      ? money(inv.net_amount_released)
+                      : inv.status === "approved"
+                        ? money(inv.approved_amount)
+                        : "Yet to receive"}
+                  </td>
+                  <td>{inv.voucher_no || "0"}</td>
+                </tr>
+              ))}
+              {!pageRows.length ? (
+                <tr>
+                  <td colSpan={17}>No invoices yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="billing-table-foot">
+          <span className="muted">
+            Showing {filtered.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+            {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries
+          </span>
+          <div className="btn-row">
+            <button className="btn ghost" type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </button>
+            <span className="badge">{page}</span>
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
 
       {selected ? (
@@ -189,6 +439,7 @@ export function BillingPage() {
               Close
             </button>
           </div>
+          <p className="muted">{selected.status_detail}</p>
           <div className="detail-grid">
             <div>
               <strong>Status</strong>
@@ -199,38 +450,40 @@ export function BillingPage() {
               <div>{selected.payment_type}</div>
             </div>
             <div>
-              <strong>Mode</strong>
-              <div>{formatLabel(selected.payment_mode)}</div>
+              <strong>PIU / FARO</strong>
+              <div>
+                {selected.piu || "—"} / {selected.faro || "—"}
+              </div>
             </div>
             <div>
               <strong>Amount</strong>
               <div>₹ {money(selected.amount)}</div>
             </div>
             <div>
-              <strong>Recommended</strong>
-              <div>₹ {money(selected.recommended_amount)}</div>
+              <strong>Recommended AE/IE</strong>
+              <div>₹ {money(selected.recommended_ae_amount ?? selected.recommended_amount)}</div>
             </div>
             <div>
-              <strong>Approved</strong>
-              <div>₹ {money(selected.approved_amount)}</div>
+              <strong>Recommended PIU</strong>
+              <div>₹ {money(selected.recommended_piu_amount ?? selected.recommended_amount)}</div>
             </div>
             <div>
-              <strong>UPC</strong>
-              <div>{selected.upc || "—"}</div>
+              <strong>Net released</strong>
+              <div>₹ {money(selected.net_amount_released ?? selected.approved_amount)}</div>
             </div>
             <div>
-              <strong>Chainage</strong>
+              <strong>UPC / Voucher</strong>
               <div>
-                {selected.chainage_from || "—"} → {selected.chainage_to || "—"}
+                {selected.upc || "—"} / {selected.voucher_no || "—"}
+              </div>
+            </div>
+            <div>
+              <strong>Bill duration</strong>
+              <div>
+                {fmtDate(selected.bill_from)} → {fmtDate(selected.bill_to)}
               </div>
             </div>
           </div>
-          {selected.notes ? <p className="muted">{selected.notes}</p> : null}
-          {selected.calculation_json ? (
-            <p>
-              <strong>Calculation note:</strong> {selected.calculation_json}
-            </p>
-          ) : null}
 
           <h3 style={{ marginTop: "1.25rem" }}>Activity</h3>
           <ul className="activity-list">
@@ -249,7 +502,7 @@ export function BillingPage() {
               {role === "admin" &&
               (selected.status === "submitted" || selected.status === "clarification") ? (
                 <div className="panel nested">
-                  <h3>Recommend payment</h3>
+                  <h3>Recommend payment (AE/IE)</h3>
                   <div className="form-grid">
                     <label>
                       Mode
@@ -277,13 +530,6 @@ export function BillingPage() {
                         onChange={(e) => setRecommend({ ...recommend, calculation_note: e.target.value })}
                       />
                     </label>
-                    <label className="span-2">
-                      Remark
-                      <input
-                        value={recommend.note}
-                        onChange={(e) => setRecommend({ ...recommend, note: e.target.value })}
-                      />
-                    </label>
                   </div>
                   <button
                     className="btn"
@@ -308,13 +554,17 @@ export function BillingPage() {
 
               {role === "government" && selected.status === "recommended" ? (
                 <div className="panel nested">
-                  <h3>Client decision</h3>
+                  <h3>Client decision (NHIPMPL)</h3>
                   <div className="form-grid">
                     <label>
                       UPC
+                      <input value={approve.upc} onChange={(e) => setApprove({ ...approve, upc: e.target.value })} />
+                    </label>
+                    <label>
+                      Voucher no
                       <input
-                        value={approve.upc}
-                        onChange={(e) => setApprove({ ...approve, upc: e.target.value })}
+                        value={approve.voucher_no}
+                        onChange={(e) => setApprove({ ...approve, voucher_no: e.target.value })}
                       />
                     </label>
                     <label>
@@ -325,12 +575,9 @@ export function BillingPage() {
                         placeholder={String(selected.recommended_amount ?? selected.amount)}
                       />
                     </label>
-                    <label className="span-2">
+                    <label>
                       Note
-                      <input
-                        value={approve.note}
-                        onChange={(e) => setApprove({ ...approve, note: e.target.value })}
-                      />
+                      <input value={approve.note} onChange={(e) => setApprove({ ...approve, note: e.target.value })} />
                     </label>
                   </div>
                   <div className="btn-row">
@@ -343,6 +590,7 @@ export function BillingPage() {
                         run(() =>
                           api.approveInvoice(token, selected.id, {
                             upc: approve.upc.trim(),
+                            voucher_no: approve.voucher_no || undefined,
                             note: approve.note || undefined,
                             approved_amount: approve.approved_amount
                               ? Number(approve.approved_amount)
@@ -361,7 +609,7 @@ export function BillingPage() {
                         token &&
                         run(() =>
                           api.seekInvoiceClarification(token, selected.id, {
-                            note: approve.note || actionNote || "Clarification required",
+                            note: approve.note || "Clarification required",
                           })
                         )
                       }
@@ -376,7 +624,7 @@ export function BillingPage() {
                         token &&
                         run(() =>
                           api.rejectInvoice(token, selected.id, {
-                            note: approve.note || actionNote || "Rejected",
+                            note: approve.note || "Rejected",
                           })
                         )
                       }
@@ -384,50 +632,6 @@ export function BillingPage() {
                       Reject
                     </button>
                   </div>
-                </div>
-              ) : null}
-
-              {(role === "admin" || role === "government") &&
-              selected.status !== "approved" &&
-              selected.status !== "rejected" &&
-              selected.status !== "withdrawn" ? (
-                <div className="btn-row">
-                  <input
-                    placeholder="Action note"
-                    value={actionNote}
-                    onChange={(e) => setActionNote(e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  {role === "admin" ? (
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        token &&
-                        run(() =>
-                          api.seekInvoiceClarification(token, selected.id, {
-                            note: actionNote || "Clarification required",
-                          })
-                        )
-                      }
-                    >
-                      Seek clarification
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn danger"
-                    disabled={busy}
-                    onClick={() =>
-                      token &&
-                      run(() =>
-                        api.rejectInvoice(token, selected.id, { note: actionNote || "Rejected" })
-                      )
-                    }
-                  >
-                    Reject
-                  </button>
                 </div>
               ) : null}
 
@@ -478,11 +682,7 @@ export function BillingPage() {
 
       {showCreate ? (
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
-          <form
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={onCreate}
-          >
+          <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onCreate}>
             <h2>New invoice</h2>
             <div className="form-grid">
               <label>
@@ -537,6 +737,30 @@ export function BillingPage() {
                 />
               </label>
               <label>
+                PIU
+                <input value={form.piu} onChange={(e) => setForm({ ...form, piu: e.target.value })} />
+              </label>
+              <label>
+                FARO / RO
+                <input value={form.faro} onChange={(e) => setForm({ ...form, faro: e.target.value })} />
+              </label>
+              <label>
+                Bill from
+                <input
+                  type="date"
+                  value={form.bill_from}
+                  onChange={(e) => setForm({ ...form, bill_from: e.target.value })}
+                />
+              </label>
+              <label>
+                Bill to
+                <input
+                  type="date"
+                  value={form.bill_to}
+                  onChange={(e) => setForm({ ...form, bill_to: e.target.value })}
+                />
+              </label>
+              <label>
                 Chainage from
                 <input
                   value={form.chainage_from}
@@ -552,10 +776,7 @@ export function BillingPage() {
               </label>
               <label className="span-2">
                 Notes / diary
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </label>
             </div>
             <div className="btn-row">

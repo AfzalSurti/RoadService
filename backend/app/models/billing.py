@@ -25,8 +25,17 @@ class Invoice(Base):
     recommended_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     approved_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     upc: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    piu: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    faro: Mapped[str | None] = mapped_column(String(128), nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
     chainage_to: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bill_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    bill_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    recommended_ae_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    recommended_piu_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    net_amount_released: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    voucher_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status_detail: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[InvoiceStatus] = mapped_column(
         pg_enum(InvoiceStatus, "invoice_status"), default=InvoiceStatus.SUBMITTED, nullable=False
     )

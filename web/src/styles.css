@@ -485,6 +485,78 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   width: 30px;
   height: 30px;
 }
+.billing-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.billing-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+.billing-status-card {
+  border: 0;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.billing-status-card span {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.95;
+}
+.billing-status-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.8rem;
+  font-family: var(--display);
+}
+.billing-status-card.pending { background: #2563eb; }
+.billing-status-card.approve { background: #16a34a; }
+.billing-status-card.reject { background: #dc2626; }
+.billing-status-card.clarify { background: #ca8a04; }
+.billing-status-card:hover { transform: translateY(-2px); }
+.billing-status-card.active { outline: 3px solid color-mix(in srgb, #fff 55%, transparent); }
+.billing-table-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+.billing-table-tools input,
+.billing-table-tools select {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--ink);
+}
+.billing-wide-table { max-height: 520px; }
+.billing-wide-table table { min-width: 1600px; }
+.billing-table-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+@media (max-width: 900px) {
+  .billing-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .login-card .developer-credit {
   margin-top: 1.15rem;
 }

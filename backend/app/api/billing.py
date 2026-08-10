@@ -23,6 +23,19 @@ def _dec(v: float | Decimal) -> Decimal:
     return Decimal(str(v))
 
 
+def _status_detail(status: InvoiceStatus | str) -> str:
+    key = status.value if hasattr(status, "value") else str(status)
+    return {
+        "submitted": "Send for Scrutiny to F&A / AE-IE (1st Signatory)",
+        "recommended": "Recommended by AE/IE — awaiting NHIPMPL acceptance",
+        "clarification": "Seek Clarification",
+        "approved": "Payment Credited / Approved with UPC",
+        "rejected": "Rejected by AE/IE or Client",
+        "withdrawn": "Invoice Withdrawn",
+        "draft": "Draft",
+    }.get(key, key)
+
+
 def _out(inv: Invoice) -> InvoiceOut:
     return InvoiceOut(
         id=inv.id,
@@ -36,8 +49,17 @@ def _out(inv: Invoice) -> InvoiceOut:
         recommended_amount=float(inv.recommended_amount) if inv.recommended_amount is not None else None,
         approved_amount=float(inv.approved_amount) if inv.approved_amount is not None else None,
         upc=inv.upc,
+        piu=inv.piu,
+        faro=inv.faro,
         chainage_from=inv.chainage_from,
         chainage_to=inv.chainage_to,
+        bill_from=inv.bill_from,
+        bill_to=inv.bill_to,
+        recommended_ae_amount=float(inv.recommended_ae_amount) if inv.recommended_ae_amount is not None else None,
+        recommended_piu_amount=float(inv.recommended_piu_amount) if inv.recommended_piu_amount is not None else None,
+        net_amount_released=float(inv.net_amount_released) if inv.net_amount_released is not None else None,
+        voucher_no=inv.voucher_no,
+        status_detail=inv.status_detail or _status_detail(inv.status),
         status=inv.status.value if hasattr(inv.status, "value") else str(inv.status),
         submitted_by_id=inv.submitted_by_id,
         notes=inv.notes,
@@ -127,7 +149,12 @@ async def create_invoice(
         amount=_dec(body.amount),
         chainage_from=body.chainage_from,
         chainage_to=body.chainage_to,
+        piu=(body.piu or project.location or None),
+        faro=body.faro,
+        bill_from=body.bill_from,
+        bill_to=body.bill_to,
         status=InvoiceStatus.SUBMITTED,
+        status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
         notes=body.notes,
     )
@@ -178,7 +205,10 @@ async def recommend_invoice(
         base = inv.transaction_id.replace("_P", "").replace("_F", "").replace("_B", "")
         inv.transaction_id = f"{base}_F"
     inv.calculation_json = body.calculation_note
+    inv.recommended_ae_amount = inv.recommended_amount
+    inv.recommended_piu_amount = inv.recommended_amount
     inv.status = InvoiceStatus.RECOMMENDED
+    inv.status_detail = _status_detail(InvoiceStatus.RECOMMENDED)
     await _add_activity(
         db,
         inv,
@@ -202,6 +232,7 @@ async def seek_clarification(
 ):
     inv = await _load(db, invoice_id)
     inv.status = InvoiceStatus.CLARIFICATION
+    inv.status_detail = _status_detail(InvoiceStatus.CLARIFICATION)
     await _add_activity(db, inv, user, "seek_clarification", body.note or "Clarification sought")
     target_id = inv.submitted_by_id
     if user.role == UserRole.GOVERNMENT:
@@ -232,6 +263,7 @@ async def submit_clarification(
     if inv.status != InvoiceStatus.CLARIFICATION:
         raise HTTPException(status_code=400, detail="Invoice is not awaiting clarification")
     inv.status = InvoiceStatus.SUBMITTED if user.role == UserRole.CONTRACTOR else InvoiceStatus.RECOMMENDED
+    inv.status_detail = _status_detail(inv.status)
     await _add_activity(db, inv, user, "clarification_submitted", body.note or "Clarification submitted")
     await db.commit()
     return _out(await _load(db, inv.id))
@@ -252,6 +284,9 @@ async def approve_invoice(
     inv.status = InvoiceStatus.APPROVED
     inv.upc = body.upc
     inv.approved_amount = _dec(body.approved_amount) if body.approved_amount is not None else inv.recommended_amount
+    inv.net_amount_released = inv.approved_amount
+    inv.voucher_no = body.voucher_no or inv.voucher_no
+    inv.status_detail = _status_detail(InvoiceStatus.APPROVED)
     await _add_activity(db, inv, user, "approved", body.note or f"Approved with UPC {body.upc}")
     await notify(db, inv.submitted_by_id, "Invoice approved", f"{inv.transaction_id} approved.", None)
     await db.commit()
@@ -267,6 +302,7 @@ async def reject_invoice(
 ):
     inv = await _load(db, invoice_id)
     inv.status = InvoiceStatus.REJECTED
+    inv.status_detail = _status_detail(InvoiceStatus.REJECTED)
     await _add_activity(db, inv, user, "rejected", body.note or "Invoice rejected")
     await notify(db, inv.submitted_by_id, "Invoice rejected", f"{inv.transaction_id} was rejected.", None)
     await db.commit()
@@ -286,6 +322,7 @@ async def withdraw_invoice(
     if inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION):
         raise HTTPException(status_code=400, detail="Cannot withdraw after processing has started")
     inv.status = InvoiceStatus.WITHDRAWN
+    inv.status_detail = _status_detail(InvoiceStatus.WITHDRAWN)
     await _add_activity(db, inv, user, "withdrawn", body.note or "Invoice withdrawn")
     await db.commit()
     return _out(await _load(db, inv.id))

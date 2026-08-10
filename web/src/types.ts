@@ -166,8 +166,17 @@ export type Invoice = {
   recommended_amount: number | null;
   approved_amount: number | null;
   upc: string | null;
+  piu?: string | null;
+  faro?: string | null;
   chainage_from: string | null;
   chainage_to: string | null;
+  bill_from?: string | null;
+  bill_to?: string | null;
+  recommended_ae_amount?: number | null;
+  recommended_piu_amount?: number | null;
+  net_amount_released?: number | null;
+  voucher_no?: string | null;
+  status_detail?: string | null;
   status: string;
   submitted_by_id: number;
   notes: string | null;
