@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
 import type { Invoice, Project } from "../types";
@@ -266,11 +266,6 @@ export function BillingPage() {
           <h2 style={{ margin: "0.2rem 0 0" }}>Invoice Processing</h2>
         </div>
         <div className="btn-row">
-          {(role === "admin" || role === "contractor") && !isReadonly ? (
-            <button className="btn" type="button" onClick={() => setShowCreate(true)}>
-              New invoice
-            </button>
-          ) : null}
           <button className="btn secondary" type="button" onClick={() => setFilter("all")}>
             FILTER
           </button>
@@ -338,7 +333,7 @@ export function BillingPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Txn / UPC / PIU / invoice…"
+              placeholder="Txn / invoice no / status…"
             />
           </label>
         </div>
@@ -350,9 +345,6 @@ export function BillingPage() {
                 <th>View</th>
                 <th>Current Status of Invoice</th>
                 <th>Transaction ID</th>
-                <th>UPC</th>
-                <th>PIU</th>
-                <th>FARO</th>
                 <th>Payment Type</th>
                 <th>Invoice No.</th>
                 <th>Invoice Date</th>
@@ -360,10 +352,11 @@ export function BillingPage() {
                 <th>Invoice Submission Date</th>
                 <th>Bill Duration From</th>
                 <th>Bill Duration To</th>
-                <th>Recommended Amount By AE/IE (INR)</th>
-                <th>Recommended Amount By PIU (INR)</th>
+                <th>Recommended Amount by GMC (INR)</th>
+                <th>Recommended Amount By NHIPMPL (INR)</th>
                 <th>Net Amount Released (INR)</th>
                 <th>Voucher</th>
+                <th>Final bill PDF</th>
               </tr>
             </thead>
             <tbody>
@@ -376,9 +369,6 @@ export function BillingPage() {
                   </td>
                   <td>{inv.status_detail || formatLabel(inv.status)}</td>
                   <td>{inv.transaction_id}</td>
-                  <td>{inv.upc || "—"}</td>
-                  <td>{inv.piu || projects.find((p) => p.id === inv.project_id)?.location || "—"}</td>
-                  <td>{inv.faro || "—"}</td>
                   <td>{inv.payment_type}</td>
                   <td>{inv.invoice_no}</td>
                   <td>{fmtDate(inv.invoice_date)}</td>
@@ -396,11 +386,20 @@ export function BillingPage() {
                         : "Yet to receive"}
                   </td>
                   <td>{inv.voucher_no || "0"}</td>
+                  <td>
+                    {inv.final_bill_pdf_path ? (
+                      <a href={mediaUrl(inv.final_bill_pdf_path)} target="_blank" rel="noreferrer">
+                        Open PDF
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
               {!pageRows.length ? (
                 <tr>
-                  <td colSpan={17}>No invoices yet.</td>
+                  <td colSpan={15}>No invoices yet.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -450,9 +449,9 @@ export function BillingPage() {
               <div>{selected.payment_type}</div>
             </div>
             <div>
-              <strong>PIU / FARO</strong>
+              <strong>This bill / Cumulative</strong>
               <div>
-                {selected.piu || "—"} / {selected.faro || "—"}
+                ₹ {money(selected.this_bill_amount ?? selected.amount)} / ₹ {money(selected.cumulative_amount)}
               </div>
             </div>
             <div>
@@ -460,11 +459,11 @@ export function BillingPage() {
               <div>₹ {money(selected.amount)}</div>
             </div>
             <div>
-              <strong>Recommended AE/IE</strong>
+              <strong>Recommended by GMC</strong>
               <div>₹ {money(selected.recommended_ae_amount ?? selected.recommended_amount)}</div>
             </div>
             <div>
-              <strong>Recommended PIU</strong>
+              <strong>Recommended Amount By NHIPMPL</strong>
               <div>₹ {money(selected.recommended_piu_amount ?? selected.recommended_amount)}</div>
             </div>
             <div>
@@ -472,10 +471,8 @@ export function BillingPage() {
               <div>₹ {money(selected.net_amount_released ?? selected.approved_amount)}</div>
             </div>
             <div>
-              <strong>UPC / Voucher</strong>
-              <div>
-                {selected.upc || "—"} / {selected.voucher_no || "—"}
-              </div>
+              <strong>Voucher</strong>
+              <div>{selected.voucher_no || "—"}</div>
             </div>
             <div>
               <strong>Bill duration</strong>
@@ -484,6 +481,30 @@ export function BillingPage() {
               </div>
             </div>
           </div>
+
+          {(role === "admin" || role === "government") && !isReadonly ? (
+            <label style={{ display: "block", marginTop: "1rem" }}>
+              Upload final bill (PDF)
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !token) return;
+                  await run(() => api.uploadFinalBill(token, selected.id, file));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ) : null}
+          {selected.invoice_pdf_path ? (
+            <p>
+              Invoice PDF:{" "}
+              <a href={mediaUrl(selected.invoice_pdf_path)} target="_blank" rel="noreferrer">
+                Open
+              </a>
+            </p>
+          ) : null}
 
           <h3 style={{ marginTop: "1.25rem" }}>Activity</h3>
           <ul className="activity-list">
@@ -502,7 +523,7 @@ export function BillingPage() {
               {role === "admin" &&
               (selected.status === "submitted" || selected.status === "clarification") ? (
                 <div className="panel nested">
-                  <h3>Recommend payment (AE/IE)</h3>
+                  <h3>Recommend payment (GMC)</h3>
                   <div className="form-grid">
                     <label>
                       Mode

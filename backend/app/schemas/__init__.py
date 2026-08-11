@@ -352,6 +352,14 @@ class InvoiceOut(BaseModel):
     summary: dict | None = None
     signature_name: str | None = None
     signature_at: datetime | None = None
+    this_bill_amount: float | None = None
+    cumulative_amount: float | None = None
+    contract_amount_cr: float | None = None
+    invoice_pdf_path: str | None = None
+    final_bill_pdf_path: str | None = None
+    diary_note: str | None = None
+    diary_signature: str | None = None
+    correspondence_path: str | None = None
     created_at: datetime
     updated_at: datetime
     activities: list[InvoiceActivityOut] = []

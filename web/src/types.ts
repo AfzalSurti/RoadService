@@ -188,6 +188,14 @@ export type Invoice = {
   summary?: Record<string, unknown> | null;
   signature_name?: string | null;
   signature_at?: string | null;
+  this_bill_amount?: number | null;
+  cumulative_amount?: number | null;
+  contract_amount_cr?: number | null;
+  invoice_pdf_path?: string | null;
+  final_bill_pdf_path?: string | null;
+  diary_note?: string | null;
+  diary_signature?: string | null;
+  correspondence_path?: string | null;
   created_at: string;
   updated_at: string;
   activities: InvoiceActivity[];

@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -23,6 +23,7 @@ from app.schemas import (
 )
 from app.services.invoice_summary import default_summary, dumps_summary, loads_summary
 from app.services.issue_service import notify
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -80,6 +81,14 @@ def _out(inv: Invoice) -> InvoiceOut:
         summary=summary,
         signature_name=inv.signature_name,
         signature_at=inv.signature_at,
+        this_bill_amount=float(inv.this_bill_amount) if inv.this_bill_amount is not None else None,
+        cumulative_amount=float(inv.cumulative_amount) if inv.cumulative_amount is not None else None,
+        contract_amount_cr=float(inv.contract_amount_cr) if inv.contract_amount_cr is not None else None,
+        invoice_pdf_path=inv.invoice_pdf_path,
+        final_bill_pdf_path=inv.final_bill_pdf_path,
+        diary_note=inv.diary_note,
+        diary_signature=inv.diary_signature,
+        correspondence_path=inv.correspondence_path,
         created_at=inv.created_at,
         updated_at=inv.updated_at,
         activities=[
@@ -397,5 +406,101 @@ async def withdraw_invoice(
     inv.status = InvoiceStatus.WITHDRAWN
     inv.status_detail = _status_detail(InvoiceStatus.WITHDRAWN)
     await _add_activity(db, inv, user, "withdrawn", body.note or "Invoice withdrawn")
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+def _require_pdf(file: UploadFile) -> None:
+    name = (file.filename or "").lower()
+    if not name.endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are allowed")
+
+
+@router.post("/invoices/claim", response_model=InvoiceOut, status_code=201)
+async def create_invoice_claim(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    project_id: Annotated[int, Form()],
+    invoice_no: Annotated[str, Form()],
+    invoice_date: Annotated[str, Form()],
+    payment_type: Annotated[str, Form()] = "Stage Payment Statement for Works",
+    this_bill_amount: Annotated[float, Form()] = 0,
+    cumulative_amount: Annotated[float, Form()] = 0,
+    contract_amount_cr: Annotated[float | None, Form()] = None,
+    bill_from: Annotated[str | None, Form()] = None,
+    bill_to: Annotated[str | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+    bill_pdf: UploadFile | None = File(None),
+):
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    amount = this_bill_amount or 0.01
+    count = (await db.execute(select(func.count(Invoice.id)))).scalar_one() + 1
+    txn = f"RS/{project.id:04d}/{count:05d}"
+    pdf_path = None
+    if bill_pdf and bill_pdf.filename:
+        _require_pdf(bill_pdf)
+        pdf_path = await save_upload(bill_pdf, "invoice_bill")
+    inv = Invoice(
+        project_id=project_id,
+        transaction_id=txn,
+        invoice_no=invoice_no.strip(),
+        invoice_date=date.fromisoformat(invoice_date[:10]),
+        payment_type=payment_type.strip() or "Stage Payment Statement for Works",
+        payment_mode=PaymentMode.FULL,
+        amount=_dec(amount),
+        this_bill_amount=_dec(this_bill_amount),
+        cumulative_amount=_dec(cumulative_amount),
+        contract_amount_cr=_dec(contract_amount_cr) if contract_amount_cr is not None else None,
+        bill_from=date.fromisoformat(bill_from[:10]) if bill_from else None,
+        bill_to=date.fromisoformat(bill_to[:10]) if bill_to else None,
+        invoice_pdf_path=pdf_path,
+        contractor_name=user.full_name,
+        project_title=project.name,
+        status=InvoiceStatus.SUBMITTED,
+        status_detail=_status_detail(InvoiceStatus.SUBMITTED),
+        submitted_by_id=user.id,
+        notes=notes,
+    )
+    db.add(inv)
+    await db.flush()
+    await _add_activity(db, inv, user, "submitted", notes or "Invoice submitted")
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.post("/invoices/{invoice_id}/final-bill", response_model=InvoiceOut)
+async def upload_final_bill(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    file: UploadFile = File(...),
+):
+    _require_pdf(file)
+    inv = await _load(db, invoice_id)
+    inv.final_bill_pdf_path = await save_upload(file, "final_bill")
+    await _add_activity(db, inv, user, "final_bill", "Final bill PDF uploaded")
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.post("/invoices/{invoice_id}/diary", response_model=InvoiceOut)
+async def save_invoice_diary(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    note: Annotated[str, Form()],
+    signature_name: Annotated[str | None, Form()] = None,
+    correspondence: UploadFile | None = File(None),
+):
+    inv = await _load(db, invoice_id)
+    if user.role == UserRole.CONTRACTOR and inv.submitted_by_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your invoice")
+    inv.diary_note = note.strip()
+    inv.diary_signature = (signature_name or user.full_name or "").strip() or None
+    if correspondence and correspondence.filename:
+        inv.correspondence_path = await save_upload(correspondence, "invoice_corr")
+    await _add_activity(db, inv, user, "diary", note.strip())
     await db.commit()
     return _out(await _load(db, inv.id))

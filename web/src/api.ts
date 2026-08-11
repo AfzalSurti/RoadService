@@ -380,6 +380,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  createInvoiceClaim: (token: string, form: FormData) =>
+    request<Invoice>("/api/v1/billing/invoices/claim", { method: "POST", token, body: form }),
+
+  uploadFinalBill: (token: string, id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<Invoice>(`/api/v1/billing/invoices/${id}/final-bill`, {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
+  saveInvoiceDiary: (token: string, id: number, form: FormData) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}/diary`, { method: "POST", token, body: form }),
+
   documents: (token: string, projectId?: number, folderId?: number) => {
     const qs = new URLSearchParams();
     if (projectId) qs.set("project_id", String(projectId));

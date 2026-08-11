@@ -36,7 +36,7 @@ def _upload_bytes(content: bytes, prefix: str, filename: str = "photo.jpg") -> s
             result = cloudinary.uploader.upload(
                 BytesIO(content),
                 public_id=public_id,
-                resource_type="image",
+                resource_type="auto",
                 overwrite=True,
             )
             url = result.get("secure_url") or result.get("url")
