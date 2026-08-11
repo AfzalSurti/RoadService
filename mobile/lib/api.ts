@@ -154,6 +154,21 @@ export const api = {
       types: { id: string; label: string; category_id: string }[];
     }>("/api/v1/catalog/defects", { token }),
 
+  punchAttendance: (
+    token: string,
+    body: { latitude?: number; longitude?: number; project_id?: number }
+  ) => {
+    const qs = new URLSearchParams();
+    if (body.latitude != null) qs.set("latitude", String(body.latitude));
+    if (body.longitude != null) qs.set("longitude", String(body.longitude));
+    if (body.project_id != null) qs.set("project_id", String(body.project_id));
+    const q = qs.toString();
+    return request<{ id: number; in_time?: string | null }>(
+      `/api/v1/nhit/attendance/punch${q ? `?${q}` : ""}`,
+      { method: "POST", token }
+    );
+  },
+
   rfis: (token: string, status?: string) =>
     request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${status}` : ""}`, { token }),
   raiseRfi: (

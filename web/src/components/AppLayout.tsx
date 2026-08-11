@@ -45,7 +45,7 @@ export function AppLayout() {
           {staff ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
-          {adminGov ? <NavLink to="/attendance">Attendance</NavLink> : null}
+          {role === "government" ? <NavLink to="/attendance">Attendance</NavLink> : null}
           {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
           {staff ? <NavLink to="/highway-incidents">Incidents</NavLink> : null}
           {staff ? <NavLink to="/its">ATMS/TMS/ITS</NavLink> : null}

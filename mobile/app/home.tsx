@@ -95,6 +95,13 @@ export default function HomeScreen() {
             </Pressable>
           </Link>
         ) : null}
+        {role === "contractor" || role === "surveyor" ? (
+          <Link href="/attendance" asChild>
+            <Pressable style={styles.secondary}>
+              <Text style={styles.secondaryText}>Attendance</Text>
+            </Pressable>
+          </Link>
+        ) : null}
       </View>
       {role === "surveyor" ? (
         <View style={styles.row}>

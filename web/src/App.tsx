@@ -60,6 +60,12 @@ function AdminOrGov({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function GovOnly({ children }: { children: ReactNode }) {
+  const { role } = useAuth();
+  if (role !== "government") return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -134,9 +140,9 @@ export default function App() {
         <Route
           path="/attendance"
           element={
-            <AdminOrGov>
+            <GovOnly>
               <AttendancePage />
-            </AdminOrGov>
+            </GovOnly>
           }
         />
         <Route

@@ -389,6 +389,10 @@ export function AttendancePage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      <p className="muted">
+        Linked to the mobile attendance punch (same database). NHIPMPL can view project personnel,
+        GPS punches, and leaves. Contractor cannot open this portal module.
+      </p>
       {summary ? (
         <section className="stat-grid">
           <article className="stat">
@@ -406,7 +410,7 @@ export function AttendancePage() {
         </section>
       ) : null}
 
-      {role === "admin" && !isReadonly ? (
+      {false ? (
         <section className="panel">
           <h2>Add personnel</h2>
           <form className="form-grid" onSubmit={addPerson}>

@@ -499,16 +499,72 @@ async def create_personnel(
 @router.get("/attendance")
 async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    user: Annotated[User, Depends(require_roles(UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN))],
+    project_id: int | None = None,
 ):
-    return [_orm_dict(r) for r in (await db.execute(select(AttendanceRecord).order_by(AttendanceRecord.id.desc()).limit(200))).scalars().all()]
+    stmt = select(AttendanceRecord).order_by(AttendanceRecord.id.desc()).limit(200)
+    if project_id is not None:
+        pids = (
+            await db.execute(select(Personnel.id).where(Personnel.project_id == project_id))
+        ).scalars().all()
+        stmt = stmt.where(AttendanceRecord.personnel_id.in_(pids or [-1]))
+    if user.role != UserRole.GOVERNMENT:
+        mine = (
+            await db.execute(select(Personnel.id).where(Personnel.employee_code == f"USER-{user.id}"))
+        ).scalars().all()
+        if mine:
+            stmt = stmt.where(AttendanceRecord.personnel_id.in_(mine))
+        elif user.role != UserRole.ADMIN:
+            return []
+    return [_orm_dict(r) for r in (await db.execute(stmt)).scalars().all()]
+
+
+@router.post("/attendance/punch", status_code=201)
+async def punch_attendance(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN))],
+    project_id: int | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    status_value: str = "present",
+):
+    code = f"USER-{user.id}"
+    person = (await db.execute(select(Personnel).where(Personnel.employee_code == code))).scalar_one_or_none()
+    if not person:
+        person = Personnel(
+            employee_code=code,
+            full_name=user.full_name,
+            designation=user.role.value if hasattr(user.role, "value") else str(user.role),
+            project_id=project_id,
+            employer="Mobile app",
+            is_active=True,
+        )
+        db.add(person)
+        await db.flush()
+    now = datetime.now(timezone.utc)
+    row = AttendanceRecord(
+        personnel_id=person.id,
+        work_date=date.today(),
+        status=status_value,
+        in_time=now.strftime("%H:%M"),
+        latitude=latitude,
+        longitude=longitude,
+        biometric_verified=False,
+        shift_name="General",
+        notes="Punched from mobile app",
+    )
+    db.add(row)
+    await write_audit(db, actor_id=user.id, action="attendance_punch", entity_type="attendance", entity_id=str(person.id))
+    await db.commit()
+    await db.refresh(row)
+    return _orm_dict(row)
 
 
 @router.post("/attendance", status_code=201)
 async def mark_attendance(
     body: AttendanceIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
 ):
     row = AttendanceRecord(**body.model_dump())
     db.add(row)
