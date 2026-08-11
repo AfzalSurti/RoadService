@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
 import type { PortalQueryTicket, Project } from "../types";
@@ -26,6 +26,7 @@ export function QueriesPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [resolveNote, setResolveNote] = useState("");
   const [comment, setComment] = useState("");
+  const [shotFile, setShotFile] = useState<File | null>(null);
 
   const canResolve = role === "admin" || role === "government";
   const canRaise = !isReadonly && (role === "admin" || role === "government" || role === "contractor");
@@ -87,15 +88,17 @@ export function QueriesPage() {
     setError(null);
     setMsg(null);
     try {
-      const created = await api.raiseQuery(token, {
-        subject: form.subject.trim(),
-        description: form.description.trim(),
-        module_area: form.module_area,
-        priority: form.priority,
-        project_id: form.project_id ? Number(form.project_id) : undefined,
-      });
+      const fd = new FormData();
+      fd.append("subject", form.subject.trim());
+      fd.append("description", form.description.trim());
+      fd.append("module_area", form.module_area);
+      fd.append("priority", form.priority);
+      if (form.project_id) fd.append("project_id", form.project_id);
+      if (shotFile) fd.append("attachment", shotFile);
+      const created = await api.raiseQuery(token, fd);
       setShowRaise(false);
       setForm(empty);
+      setShotFile(null);
       setMsg(`Ticket ${created.ticket_no} raised`);
       await load();
       setSelected(created);
@@ -210,6 +213,20 @@ export function QueriesPage() {
               </p>
               <h3 style={{ fontSize: "0.95rem" }}>{selected.subject}</h3>
               <p style={{ whiteSpace: "pre-wrap" }}>{selected.description}</p>
+              {selected.attachment_path ? (
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <strong>Attached screenshot</strong>
+                  <div>
+                    <a href={mediaUrl(selected.attachment_path)} target="_blank" rel="noreferrer">
+                      <img
+                        src={mediaUrl(selected.attachment_path)}
+                        alt="Query screenshot"
+                        style={{ maxWidth: "100%", maxHeight: 240, marginTop: 8, borderRadius: 8 }}
+                      />
+                    </a>
+                  </div>
+                </div>
+              ) : null}
               {selected.resolution_note ? (
                 <p>
                   <strong>Resolution:</strong> {selected.resolution_note}
@@ -415,6 +432,14 @@ export function QueriesPage() {
                   minLength={5}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </label>
+              <label className="span-2">
+                Image / screenshot (optional)
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setShotFile(e.target.files?.[0] || null)}
                 />
               </label>
             </div>

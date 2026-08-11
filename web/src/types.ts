@@ -311,6 +311,7 @@ export type PortalQueryTicket = {
   resolution_note: string | null;
   resolved_by_id: number | null;
   resolved_at: string | null;
+  attachment_path?: string | null;
   created_at: string;
   updated_at: string;
   can_resolve: boolean;

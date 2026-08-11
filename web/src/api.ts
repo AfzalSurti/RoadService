@@ -480,20 +480,11 @@ export const api = {
   getQuery: (token: string, id: number) =>
     request<PortalQueryTicket>(`/api/v1/queries/${id}`, { token }),
 
-  raiseQuery: (
-    token: string,
-    body: {
-      subject: string;
-      description: string;
-      module_area: string;
-      priority?: string;
-      project_id?: number;
-    }
-  ) =>
+  raiseQuery: (token: string, form: FormData) =>
     request<PortalQueryTicket>("/api/v1/queries", {
       method: "POST",
       token,
-      body: JSON.stringify(body),
+      body: form,
     }),
 
   startQuery: (token: string, id: number, note?: string) =>

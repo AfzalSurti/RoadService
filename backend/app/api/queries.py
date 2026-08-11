@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.models.portal_ops import PortalQueryComment, PortalQueryTicket
 from app.models.project import Project
 from app.models.user import User
 from app.services.issue_service import notify
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/queries", tags=["queries"])
 
@@ -82,6 +83,7 @@ class QueryTicketOut(BaseModel):
     resolution_note: str | None
     resolved_by_id: int | None
     resolved_at: datetime | None
+    attachment_path: str | None = None
     created_at: datetime
     updated_at: datetime
     can_resolve: bool = False
@@ -107,6 +109,7 @@ def _out(row: PortalQueryTicket, user: User, comments: list[PortalQueryComment] 
         resolution_note=row.resolution_note,
         resolved_by_id=row.resolved_by_id,
         resolved_at=row.resolved_at,
+        attachment_path=row.attachment_path,
         created_at=row.created_at,
         updated_at=row.updated_at,
         can_resolve=_can_resolve(user) and row.status in ("open", "in_progress"),
@@ -185,34 +188,47 @@ async def get_query(
 
 @router.post("", response_model=QueryTicketOut, status_code=201)
 async def raise_query(
-    body: QueryRaiseIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    subject: Annotated[str, Form(min_length=3)],
+    description: Annotated[str, Form(min_length=5)],
+    module_area: Annotated[str, Form()] = "billing",
+    priority: Annotated[str, Form()] = "medium",
+    project_id: Annotated[int | None, Form()] = None,
+    attachment: UploadFile | None = File(None),
 ):
-    area = body.module_area.strip().lower().replace(" ", "_")
+    area = module_area.strip().lower().replace(" ", "_")
     if area not in MODULE_AREAS:
         raise HTTPException(400, f"module_area must be one of: {', '.join(MODULE_AREAS)}")
-    priority = (body.priority or "medium").strip().lower()
-    if priority not in ("low", "medium", "high", "urgent"):
+    prio = (priority or "medium").strip().lower()
+    if prio not in ("low", "medium", "high", "urgent"):
         raise HTTPException(400, "Invalid priority")
 
-    if body.project_id is not None:
-        proj = (await db.execute(select(Project).where(Project.id == body.project_id))).scalar_one_or_none()
+    if project_id is not None:
+        proj = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
         if not proj:
             raise HTTPException(404, "Project not found")
 
     count = (await db.execute(select(func.count(PortalQueryTicket.id)))).scalar_one() + 1
     ticket_no = f"QR-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{count:04d}"
 
+    attachment_path = None
+    if attachment and attachment.filename:
+        name = (attachment.filename or "").lower()
+        if not any(name.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic")):
+            raise HTTPException(400, "Only image / screenshot files are allowed")
+        attachment_path = await save_upload(attachment, "query_shot")
+
     row = PortalQueryTicket(
         ticket_no=ticket_no,
-        project_id=body.project_id,
+        project_id=project_id,
         module_area=area,
-        subject=body.subject.strip(),
-        description=body.description.strip(),
-        priority=priority,
+        subject=subject.strip(),
+        description=description.strip(),
+        priority=prio,
         status="open",
         raised_by_id=user.id,
+        attachment_path=attachment_path,
     )
     db.add(row)
     await db.flush()
