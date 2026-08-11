@@ -326,6 +326,11 @@ export type SiteRfi = {
   subject: string;
   description: string;
   chainage: string | null;
+  ae_name?: string | null;
+  contractor_name?: string | null;
+  category?: string | null;
+  inspection_date?: string | null;
+  photo_path?: string | null;
   priority: string;
   status: string;
   raised_by_id: number;
@@ -337,4 +342,5 @@ export type SiteRfi = {
   updated_at: string;
   can_answer: boolean;
   can_close: boolean;
+  can_raise?: boolean;
 };

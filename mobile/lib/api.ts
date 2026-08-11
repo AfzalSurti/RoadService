@@ -1,4 +1,7 @@
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = (
+  process.env.EXPO_PUBLIC_API_URL ||
+  "https://roadservice.onrender.com"
+).replace(/\/$/, "");
 
 export type TokenResponse = {
   access_token: string;
@@ -163,12 +166,16 @@ export const api = {
       priority?: string;
       related_issue_id?: number;
     }
-  ) =>
-    request<SiteRfi>("/api/v1/rfis", {
-      method: "POST",
-      token,
-      body: JSON.stringify(body),
-    }),
+  ) => {
+    const fd = new FormData();
+    fd.append("project_id", String(body.project_id));
+    fd.append("subject", body.subject);
+    fd.append("description", body.description);
+    if (body.chainage) fd.append("chainage", body.chainage);
+    if (body.priority) fd.append("priority", body.priority);
+    if (body.related_issue_id) fd.append("related_issue_id", String(body.related_issue_id));
+    return request<SiteRfi>("/api/v1/rfis", { method: "POST", token, body: fd });
+  },
   answerRfi: (token: string, id: number, body: { answer_text: string }) =>
     request<SiteRfi>(`/api/v1/rfis/${id}/answer`, {
       method: "POST",

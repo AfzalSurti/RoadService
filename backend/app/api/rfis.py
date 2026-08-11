@@ -1,9 +1,9 @@
 """Site RFI — Request for Information raise / answer / close."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from app.models.portal_ops import SiteRfi
 from app.models.project import Project
 from app.models.user import User
 from app.services.issue_service import notify
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/rfis", tags=["rfis"])
 
@@ -43,6 +44,11 @@ class RfiOut(BaseModel):
     subject: str
     description: str
     chainage: str | None
+    ae_name: str | None = None
+    contractor_name: str | None = None
+    category: str | None = None
+    inspection_date: date | None = None
+    photo_path: str | None = None
     priority: str
     status: str
     raised_by_id: int
@@ -54,14 +60,14 @@ class RfiOut(BaseModel):
     updated_at: datetime
     can_answer: bool = False
     can_close: bool = False
+    can_raise: bool = False
 
 
 def _out(row: SiteRfi, user: User) -> RfiOut:
-    can_answer = user.role in (UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.SURVEYOR) and row.status == "open"
+    # GMC MIS Expert (admin) is view-only on RFI.
+    can_answer = user.role in (UserRole.GOVERNMENT, UserRole.SURVEYOR) and row.status == "open"
     can_close = row.status in ("open", "answered") and (
-        user.role == UserRole.ADMIN
-        or row.raised_by_id == user.id
-        or user.role in (UserRole.GOVERNMENT, UserRole.SURVEYOR)
+        row.raised_by_id == user.id or user.role in (UserRole.GOVERNMENT, UserRole.SURVEYOR)
     )
     return RfiOut(
         id=row.id,
@@ -71,6 +77,11 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
         subject=row.subject,
         description=row.description,
         chainage=row.chainage,
+        ae_name=row.ae_name,
+        contractor_name=row.contractor_name,
+        category=row.category,
+        inspection_date=row.inspection_date,
+        photo_path=row.photo_path,
         priority=row.priority,
         status=row.status,
         raised_by_id=row.raised_by_id,
@@ -82,6 +93,7 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
         updated_at=row.updated_at,
         can_answer=can_answer,
         can_close=can_close and row.status != "closed",
+        can_raise=user.role in (UserRole.CONTRACTOR, UserRole.SURVEYOR),
     )
 
 
@@ -91,12 +103,18 @@ async def list_rfis(
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
     status: str | None = None,
     project_id: int | None = None,
+    ae_name: str | None = None,
+    contractor: str | None = None,
 ):
     stmt = select(SiteRfi).order_by(SiteRfi.id.desc())
     if status:
         stmt = stmt.where(SiteRfi.status == status)
     if project_id is not None:
         stmt = stmt.where(SiteRfi.project_id == project_id)
+    if ae_name:
+        stmt = stmt.where(SiteRfi.ae_name.ilike(f"%{ae_name.strip()}%"))
+    if contractor:
+        stmt = stmt.where(SiteRfi.contractor_name.ilike(f"%{contractor.strip()}%"))
 
     if user.role == UserRole.CONTRACTOR:
         # Contractor sees RFIs on their assigned projects (and ones they raised)
@@ -131,13 +149,23 @@ async def get_rfi(
 
 @router.post("", response_model=RfiOut, status_code=201)
 async def raise_rfi(
-    body: RfiCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR))],
+    project_id: Annotated[int, Form()],
+    subject: Annotated[str, Form(min_length=3)],
+    description: Annotated[str, Form(min_length=5)],
+    chainage: Annotated[str | None, Form()] = None,
+    priority: Annotated[str, Form()] = "medium",
+    related_issue_id: Annotated[int | None, Form()] = None,
+    ae_name: Annotated[str | None, Form()] = None,
+    contractor_name: Annotated[str | None, Form()] = None,
+    category: Annotated[str | None, Form()] = None,
+    inspection_date: Annotated[str | None, Form()] = None,
+    photo: UploadFile | None = File(None),
 ):
     project = (
         await db.execute(
-            select(Project).options(selectinload(Project.contractors)).where(Project.id == body.project_id)
+            select(Project).options(selectinload(Project.contractors)).where(Project.id == project_id)
         )
     ).scalar_one_or_none()
     if not project:
@@ -145,26 +173,42 @@ async def raise_rfi(
     if user.role == UserRole.CONTRACTOR and not any(c.id == user.id for c in project.contractors):
         raise HTTPException(403, "Not assigned to this project")
 
-    if body.related_issue_id:
-        issue = (await db.execute(select(Issue).where(Issue.id == body.related_issue_id))).scalar_one_or_none()
-        if not issue or issue.project_id != body.project_id:
+    if related_issue_id:
+        issue = (await db.execute(select(Issue).where(Issue.id == related_issue_id))).scalar_one_or_none()
+        if not issue or issue.project_id != project_id:
             raise HTTPException(400, "related_issue_id must belong to the same project")
 
-    priority = (body.priority or "medium").strip().lower()
-    if priority not in ("low", "medium", "high", "urgent"):
+    prio = (priority or "medium").strip().lower()
+    if prio not in ("low", "medium", "high", "urgent"):
         raise HTTPException(400, "Invalid priority")
+
+    insp = None
+    if inspection_date:
+        try:
+            insp = date.fromisoformat(inspection_date[:10])
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid inspection_date") from exc
+
+    photo_path = None
+    if photo and photo.filename:
+        photo_path = await save_upload(photo, "rfi_photo")
 
     count = (await db.execute(select(func.count(SiteRfi.id)))).scalar_one() + 1
     rfi_no = f"RFI-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{count:04d}"
 
     row = SiteRfi(
         rfi_no=rfi_no,
-        project_id=body.project_id,
-        related_issue_id=body.related_issue_id,
-        subject=body.subject.strip(),
-        description=body.description.strip(),
-        chainage=(body.chainage or "").strip() or None,
-        priority=priority,
+        project_id=project_id,
+        related_issue_id=related_issue_id,
+        subject=subject.strip(),
+        description=description.strip(),
+        chainage=(chainage or "").strip() or None,
+        ae_name=(ae_name or "").strip() or None,
+        contractor_name=(contractor_name or user.full_name or "").strip() or None,
+        category=(category or "").strip() or None,
+        inspection_date=insp,
+        photo_path=photo_path,
+        priority=prio,
         status="open",
         raised_by_id=user.id,
     )
@@ -194,7 +238,7 @@ async def answer_rfi(
     rfi_id: int,
     body: RfiAnswer,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.SURVEYOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.GOVERNMENT, UserRole.SURVEYOR))],
 ):
     row = (await db.execute(select(SiteRfi).where(SiteRfi.id == rfi_id))).scalar_one_or_none()
     if not row:
@@ -215,7 +259,7 @@ async def answer_rfi(
 async def close_rfi(
     rfi_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
 ):
     row = (await db.execute(select(SiteRfi).where(SiteRfi.id == rfi_id))).scalar_one_or_none()
     if not row:
@@ -224,6 +268,8 @@ async def close_rfi(
         raise HTTPException(400, "Already closed")
     if user.role == UserRole.CONTRACTOR and row.raised_by_id != user.id:
         raise HTTPException(403, "Contractors can only close their own RFIs")
+    if user.role == UserRole.ADMIN:
+        raise HTTPException(403, "GMC MIS Expert has view-only access to RFI")
     row.status = "closed"
     row.closed_at = datetime.now(timezone.utc)
     await db.commit()

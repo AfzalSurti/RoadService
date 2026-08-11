@@ -519,28 +519,26 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  rfis: (token: string, status?: string) =>
-    request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${encodeURIComponent(status)}` : ""}`, {
-      token,
-    }),
+  rfis: (
+    token: string,
+    params?: { status?: string; project_id?: number; ae_name?: string; contractor?: string }
+  ) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.project_id) qs.set("project_id", String(params.project_id));
+    if (params?.ae_name) qs.set("ae_name", params.ae_name);
+    if (params?.contractor) qs.set("contractor", params.contractor);
+    const q = qs.toString();
+    return request<SiteRfi[]>(`/api/v1/rfis${q ? `?${q}` : ""}`, { token });
+  },
 
   getRfi: (token: string, id: number) => request<SiteRfi>(`/api/v1/rfis/${id}`, { token }),
 
-  raiseRfi: (
-    token: string,
-    body: {
-      project_id: number;
-      subject: string;
-      description: string;
-      chainage?: string;
-      priority?: string;
-      related_issue_id?: number;
-    }
-  ) =>
+  raiseRfi: (token: string, form: FormData) =>
     request<SiteRfi>("/api/v1/rfis", {
       method: "POST",
       token,
-      body: JSON.stringify(body),
+      body: form,
     }),
 
   answerRfi: (token: string, id: number, body: { answer_text: string }) =>
