@@ -20,7 +20,8 @@ const empty = {
 };
 
 export function MprPage() {
-  const { token, isReadonly } = useAuth();
+  const { token, role, isReadonly } = useAuth();
+  const canEdit = role === "contractor" && !isReadonly;
   const [projects, setProjects] = useState<Project[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [rows, setRows] = useState<MprReport[]>([]);
@@ -75,7 +76,7 @@ export function MprPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly) return;
+    if (!token || !canEdit) return;
     if (!form.project_id) {
       setError("Select a package / project");
       return;
@@ -91,8 +92,6 @@ export function MprPage() {
       if (form.vendor_id) fd.append("vendor_id", form.vendor_id);
       if (form.physical_progress.trim()) fd.append("physical_progress", form.physical_progress.trim());
       if (form.financial_progress.trim()) fd.append("financial_progress", form.financial_progress.trim());
-      if (form.rating_performance.trim()) fd.append("rating_performance", form.rating_performance.trim());
-      if (form.timely_execution.trim()) fd.append("timely_execution", form.timely_execution.trim());
       if (form.pending_activity.trim()) fd.append("pending_activity", form.pending_activity.trim());
       if (form.critical_observation.trim()) fd.append("critical_observation", form.critical_observation.trim());
       if (form.last_remarks.trim()) fd.append("last_remarks", form.last_remarks.trim());
@@ -150,7 +149,7 @@ export function MprPage() {
         </div>
       </section>
 
-      {!isReadonly ? (
+      {canEdit ? (
         <section className="panel">
           <h2>Fill Monthly Progress Report</h2>
           <form className="form-grid" onSubmit={onSubmit}>
@@ -210,20 +209,6 @@ export function MprPage() {
               />
             </label>
             <label className="span-2">
-              Rating Performance wise
-              <textarea
-                value={form.rating_performance}
-                onChange={(e) => setForm({ ...form, rating_performance: e.target.value })}
-              />
-            </label>
-            <label className="span-2">
-              Timely Execution Wise
-              <textarea
-                value={form.timely_execution}
-                onChange={(e) => setForm({ ...form, timely_execution: e.target.value })}
-              />
-            </label>
-            <label className="span-2">
               Pending Activity
               <textarea
                 value={form.pending_activity}
@@ -262,6 +247,9 @@ export function MprPage() {
       ) : null}
 
       <section className="panel">
+        {!canEdit ? (
+          <p className="muted">View only for GMC MIS Expert and NHIPMPL. Contractor fills the MPR.</p>
+        ) : null}
         <h2>Submitted MPRs</h2>
         <table className="data">
           <thead>

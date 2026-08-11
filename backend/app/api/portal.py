@@ -507,7 +507,7 @@ async def list_mpr(
 @mpr_router.post("", response_model=MprOut, status_code=201)
 async def create_mpr(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR))],
     package_name: Annotated[str, Form()],
     project_id: Annotated[int, Form()],
     report_month: Annotated[str, Form()],
