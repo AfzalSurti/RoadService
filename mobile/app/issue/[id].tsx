@@ -17,6 +17,9 @@ export default function IssueDetailScreen() {
   const { token, role } = useAuth();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [mode, setMode] = useState<"none" | "complete" | "approve" | "reject">("none");
+  const [pendingAction, setPendingAction] = useState<"complete" | "approve" | "reject">("complete");
+  const [pendingPhoto, setPendingPhoto] = useState<CapturedPhoto | null>(null);
+  const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [comments, setComments] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -37,13 +40,24 @@ export default function IssueDetailScreen() {
     if (action === "submit") setMode("none");
   }, [action]);
 
-  const onPhoto = async (photo: CapturedPhoto) => {
-    if (!token || !issue) return;
+  const onPhoto = (photo: CapturedPhoto) => {
+    setPendingPhoto(photo);
+    setMode("none");
+    setError(null);
+    setInfo(`Photo + GPS ready: ${photo.lat.toFixed(5)}, ${photo.lng.toFixed(5)}`);
+  };
+
+  const submitPhoto = async () => {
+    if (!token || !issue || !pendingPhoto) return;
+    setBusy(true);
+    setError(null);
     try {
+      const photo = pendingPhoto;
+      const uri = photo.uri.startsWith("file://") ? photo.uri : `file://${photo.uri}`;
       const form = new FormData();
-      form.append("photo", { uri: photo.uri, name: "capture.jpg", type: "image/jpeg" } as any);
+      form.append("photo", { uri, name: "capture.jpg", type: "image/jpeg" } as any);
       const capturedAt = new Date().toISOString();
-      if (mode === "complete") {
+      if (pendingAction === "complete" || issue.status === "in_progress") {
         const fields = {
           completion_lat: String(photo.lat),
           completion_lng: String(photo.lng),
@@ -59,37 +73,42 @@ export default function IssueDetailScreen() {
             await enqueueOfflineJob({
               type: "complete",
               issueId: issue.id,
-              photoUri: photo.uri,
+              photoUri: uri,
               fields,
             });
             setInfo("Saved offline — will sync when network returns");
-            setMode("none");
             router.replace("/home");
             return;
           }
           throw e;
         }
-      } else if (mode === "approve") {
+      } else if (issue.status === "completed" || issue.status === "verification_pending") {
         form.append("verification_lat", String(photo.lat));
         form.append("verification_lng", String(photo.lng));
-        await api.approveIssue(token, issue.id, form);
-      } else if (mode === "reject") {
-        form.append("verification_lat", String(photo.lat));
-        form.append("verification_lng", String(photo.lng));
-        form.append("reason", reason || "Rework required");
-        if (comments.trim()) form.append("comments", comments.trim());
-        await api.rejectIssue(token, issue.id, form);
+        if (pendingAction === "reject") {
+          form.append("reason", reason || "Rework required");
+          if (comments.trim()) form.append("comments", comments.trim());
+          await api.rejectIssue(token, issue.id, form);
+        } else {
+          await api.approveIssue(token, issue.id, form);
+        }
       }
-      setMode("none");
+      setPendingPhoto(null);
       router.replace("/home");
     } catch (e: any) {
       setError(e.message);
-      setMode("none");
+    } finally {
+      setBusy(false);
     }
   };
 
   if (mode !== "none") {
-    return <CameraCapture onCapture={onPhoto} />;
+    return (
+      <CameraCapture
+        onCapture={onPhoto}
+        onCancel={() => setMode("none")}
+      />
+    );
   }
 
   if (!issue) {
@@ -182,10 +201,30 @@ export default function IssueDetailScreen() {
             onChangeText={setRemarks}
             multiline
           />
-          <Pressable style={styles.primary} onPress={() => setMode("complete")}>
-            <Text style={styles.primaryText}>Submit (camera + GPS)</Text>
+          <Pressable
+            style={styles.primary}
+            onPress={() => {
+              setPendingAction("complete");
+              setMode("complete");
+            }}
+          >
+            <Text style={styles.primaryText}>
+              {pendingPhoto ? "Retake camera photo" : "Open camera (photo + GPS)"}
+            </Text>
           </Pressable>
-          <Text style={styles.meta}>If offline, photo is queued and synced later.</Text>
+          {pendingPhoto ? (
+            <Text style={styles.info}>
+              GPS locked: {pendingPhoto.lat.toFixed(5)}, {pendingPhoto.lng.toFixed(5)}
+            </Text>
+          ) : null}
+          <Pressable
+            style={[styles.primary, !pendingPhoto || busy ? { opacity: 0.5 } : null]}
+            disabled={!pendingPhoto || busy}
+            onPress={submitPhoto}
+          >
+            <Text style={styles.primaryText}>{busy ? "Submitting…" : "Submit rectification"}</Text>
+          </Pressable>
+          <Text style={styles.meta}>Capture first, then tap Submit. Offline photos queue and sync later.</Text>
         </View>
       ) : null}
 
@@ -193,8 +232,16 @@ export default function IssueDetailScreen() {
       (issue.status === "completed" || issue.status === "verification_pending") ? (
         <View>
           <Text style={styles.meta}>Verify within 24 hours of completion</Text>
-          <Pressable style={styles.primary} onPress={() => setMode("approve")}>
-            <Text style={styles.primaryText}>Approve & close (camera + GPS)</Text>
+          <Pressable
+            style={styles.primary}
+            onPress={() => {
+              setPendingAction("approve");
+              setMode("approve");
+            }}
+          >
+            <Text style={styles.primaryText}>
+              {pendingPhoto && pendingAction === "approve" ? "Retake photo" : "Open camera to approve"}
+            </Text>
           </Pressable>
           <TextInput
             style={styles.input}
@@ -211,9 +258,37 @@ export default function IssueDetailScreen() {
             onChangeText={setComments}
             multiline
           />
-          <Pressable style={styles.danger} onPress={() => setMode("reject")}>
-            <Text style={styles.primaryText}>Reject / rework</Text>
+          <Pressable
+            style={styles.danger}
+            onPress={() => {
+              setPendingAction("reject");
+              setMode("reject");
+            }}
+          >
+            <Text style={styles.primaryText}>
+              {pendingPhoto && pendingAction === "reject" ? "Retake reject photo" : "Open camera to reject"}
+            </Text>
           </Pressable>
+          {pendingPhoto ? (
+            <>
+              <Text style={styles.info}>
+                GPS locked: {pendingPhoto.lat.toFixed(5)}, {pendingPhoto.lng.toFixed(5)}
+              </Text>
+              <Pressable
+                style={[styles.primary, busy ? { opacity: 0.5 } : null]}
+                disabled={busy}
+                onPress={submitPhoto}
+              >
+                <Text style={styles.primaryText}>
+                  {busy
+                    ? "Submitting…"
+                    : pendingAction === "reject"
+                      ? "Submit rejection"
+                      : "Submit approval"}
+                </Text>
+              </Pressable>
+            </>
+          ) : null}
         </View>
       ) : null}
     </ScrollView>

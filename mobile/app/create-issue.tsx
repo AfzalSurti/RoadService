@@ -50,6 +50,7 @@ export default function CreateIssueScreen() {
           setPhoto(p);
           setShowCamera(false);
         }}
+        onCancel={() => setShowCamera(false)}
       />
     );
   }
