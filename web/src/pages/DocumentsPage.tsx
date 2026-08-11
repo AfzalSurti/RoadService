@@ -90,12 +90,15 @@ export function DocumentsPage() {
   const [versionFile, setVersionFile] = useState<File | null>(null);
   const [signText, setSignText] = useState("");
   const [watermark, setWatermark] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [renameTo, setRenameTo] = useState("");
 
   const selectedFolder = useMemo(
     () => findFolder(folders, selectedFolderId),
     [folders, selectedFolderId]
   );
   const canUploadHere = selectedFolder?.folder_type === "doctype";
+  const canManageFolders = role === "admin" && !isReadonly;
 
   const breadcrumb = useMemo(() => {
     if (!selectedFolder) return [] as string[];
@@ -251,8 +254,53 @@ export function DocumentsPage() {
             ) : null}
           </div>
           <p className="muted" style={{ marginTop: 0, fontSize: "0.85rem" }}>
-            Stretch → Civil / Toll-ATMS-TMS → Contract / Drawing / EOT
+            Contract Documents · Project Documents · ITS/TMS/ATMS Documents
+            {canManageFolders ? " — GMC MIS Expert can create / rename folders." : " — view only for folder structure."}
           </p>
+          {canManageFolders ? (
+            <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+              <input
+                placeholder={selectedFolder ? `New folder under ${selectedFolder.name}` : "New root folder"}
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+              />
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={!newFolderName.trim()}
+                onClick={async () => {
+                  if (!token || !newFolderName.trim()) return;
+                  await api.createDocumentFolder(token, newFolderName.trim(), selectedFolderId);
+                  setNewFolderName("");
+                  await load();
+                }}
+              >
+                Create folder
+              </button>
+              {selectedFolder ? (
+                <>
+                  <input
+                    placeholder="Rename selected folder"
+                    value={renameTo}
+                    onChange={(e) => setRenameTo(e.target.value)}
+                  />
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    disabled={!renameTo.trim()}
+                    onClick={async () => {
+                      if (!token || !selectedFolder || !renameTo.trim()) return;
+                      await api.renameDocumentFolder(token, selectedFolder.id, renameTo.trim());
+                      setRenameTo("");
+                      await load();
+                    }}
+                  >
+                    Rename folder
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {folders.length ? (
             <FolderTree
               nodes={folders}
@@ -381,7 +429,7 @@ export function DocumentsPage() {
               <p className="muted">
                 {selectedFolder
                   ? "Open a leaf folder (Contract agreement / Drawing / Extension time) to upload files or a folder."
-                  : "Browse the three stretch folders on the left."}
+                  : "Browse Contract / Project / ITS folders on the left."}
               </p>
             )}
 

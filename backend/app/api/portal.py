@@ -32,9 +32,99 @@ DOC_TYPES = [
     "Monthly Progress Report (MPR)",
 ]
 
+STANDARD_REPO: list[tuple[str, list[str]]] = [
+    (
+        "Contract Documents",
+        [
+            "Concession Agreement (CA)",
+            "EPC/HAM/BOT Contract Agreement",
+            "O&M Agreement",
+            "Letter of Award (LoA)",
+            "Letter of Acceptance (LoA)",
+            "Work Orders",
+            "Change of Scope Orders",
+            "Supplementary Agreements",
+            "Contract Amendments",
+            "Equipment inventory, warranties, AMC, lifecycle records",
+            "Digital approvals, comments, review history",
+            "Pending approvals, expiring contracts, document status",
+        ],
+    ),
+    (
+        "Project Documents",
+        [
+            "DPR",
+            "Approved Drawings",
+            "Good for Construction (GFC) Drawings",
+            "As-Built Drawings",
+            "BOQ",
+            "Technical Specifications",
+            "Design Calculations",
+            "Project Schedule",
+            "Baseline Programme",
+            "Monthly Progress Reports (MPR)",
+            "Inspection Reports",
+            "Audit Reports",
+            "Commissioning Certificates",
+            "Completion Certificate",
+            "O&M Manuals",
+        ],
+    ),
+    (
+        "ITS/TMS/ATMS Documents",
+        [
+            "ATMS drawings and specs",
+            "TMS drawings and specs",
+            "ITS architecture",
+            "MLFF / ETC records",
+            "Equipment inventory",
+            "As-built ITS",
+        ],
+    ),
+]
+
+
+async def _ensure_standard_repo(db: AsyncSession) -> None:
+    for r_idx, (root_name, children) in enumerate(STANDARD_REPO):
+        root = (
+            await db.execute(
+                select(DocumentFolder).where(
+                    DocumentFolder.name == root_name,
+                    DocumentFolder.parent_id.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if not root:
+            root = DocumentFolder(
+                name=root_name,
+                folder_type="discipline",
+                parent_id=None,
+                sort_order=100 + r_idx,
+            )
+            db.add(root)
+            await db.flush()
+        for t_idx, child in enumerate(children):
+            found = (
+                await db.execute(
+                    select(DocumentFolder).where(
+                        DocumentFolder.parent_id == root.id,
+                        DocumentFolder.name == child,
+                    )
+                )
+            ).scalar_one_or_none()
+            if not found:
+                db.add(
+                    DocumentFolder(
+                        name=child,
+                        folder_type="doctype",
+                        parent_id=root.id,
+                        sort_order=t_idx,
+                    )
+                )
+
 
 async def _ensure_folder_tree(db: AsyncSession) -> None:
-    """Create stretch → discipline → doctype tree; also backfill missing doctypes (e.g. MPR)."""
+    """Create stretch tree plus standard Contract / Project / ITS folders."""
     existing = (await db.execute(select(func.count(DocumentFolder.id)))).scalar_one()
 
     if not existing:
@@ -81,6 +171,7 @@ async def _ensure_folder_tree(db: AsyncSession) -> None:
                             sort_order=t_idx,
                         )
                     )
+        await _ensure_standard_repo(db)
         await db.commit()
         return
 
@@ -126,6 +217,7 @@ async def _ensure_folder_tree(db: AsyncSession) -> None:
                         sort_order=t_idx,
                     )
                 )
+    await _ensure_standard_repo(db)
     await db.commit()
 
 
@@ -188,6 +280,69 @@ async def seed_folders(
     return {"ok": True, "message": "Document folder tree ready"}
 
 
+@docs_router.post("/folders", response_model=DocumentFolderOut, status_code=201)
+async def create_folder(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    name: Annotated[str, Form()],
+    parent_id: Annotated[int | None, Form()] = None,
+):
+    parent = None
+    if parent_id is not None:
+        parent = (await db.execute(select(DocumentFolder).where(DocumentFolder.id == parent_id))).scalar_one_or_none()
+        if not parent:
+            raise HTTPException(404, "Parent folder not found")
+    folder = DocumentFolder(
+        name=name.strip(),
+        folder_type="doctype" if parent else "discipline",
+        parent_id=parent.id if parent else None,
+        project_id=parent.project_id if parent else None,
+        sort_order=0,
+    )
+    db.add(folder)
+    await write_audit(db, actor_id=user.id, action="folder_create", entity_type="document_folder", entity_id=name)
+    await db.commit()
+    await db.refresh(folder)
+    return DocumentFolderOut(
+        id=folder.id,
+        name=folder.name,
+        folder_type=folder.folder_type,
+        parent_id=folder.parent_id,
+        project_id=folder.project_id,
+        sort_order=folder.sort_order,
+        created_at=folder.created_at,
+        children=[],
+        document_count=0,
+    )
+
+
+@docs_router.patch("/folders/{folder_id}", response_model=DocumentFolderOut)
+async def rename_folder(
+    folder_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    name: Annotated[str, Form()],
+):
+    folder = (await db.execute(select(DocumentFolder).where(DocumentFolder.id == folder_id))).scalar_one_or_none()
+    if not folder:
+        raise HTTPException(404, "Folder not found")
+    folder.name = name.strip()
+    await write_audit(db, actor_id=user.id, action="folder_rename", entity_type="document_folder", entity_id=str(folder_id))
+    await db.commit()
+    await db.refresh(folder)
+    return DocumentFolderOut(
+        id=folder.id,
+        name=folder.name,
+        folder_type=folder.folder_type,
+        parent_id=folder.parent_id,
+        project_id=folder.project_id,
+        sort_order=folder.sort_order,
+        created_at=folder.created_at,
+        children=[],
+        document_count=0,
+    )
+
+
 @docs_router.get("", response_model=list[DocumentOut])
 async def list_documents(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -221,8 +376,8 @@ async def upload_document(
         folder = (await db.execute(select(DocumentFolder).where(DocumentFolder.id == folder_id))).scalar_one_or_none()
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
-        if folder.folder_type != "doctype":
-            raise HTTPException(status_code=400, detail="Upload only into a document-type folder")
+        if folder.folder_type not in ("doctype", "discipline"):
+            raise HTTPException(status_code=400, detail="Upload only into a document folder")
         if project_id is None:
             project_id = folder.project_id
         category = folder.name

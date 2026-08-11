@@ -413,6 +413,23 @@ export const api = {
       token,
     }),
 
+  createDocumentFolder: (token: string, name: string, parentId?: number | null) => {
+    const fd = new FormData();
+    fd.append("name", name);
+    if (parentId != null) fd.append("parent_id", String(parentId));
+    return request<DocumentFolder>("/api/v1/documents/folders", { method: "POST", token, body: fd });
+  },
+
+  renameDocumentFolder: (token: string, id: number, name: string) => {
+    const fd = new FormData();
+    fd.append("name", name);
+    return request<DocumentFolder>(`/api/v1/documents/folders/${id}`, {
+      method: "PATCH",
+      token,
+      body: fd,
+    });
+  },
+
   uploadDocument: (token: string, form: FormData) =>
     request<PortalDocument>("/api/v1/documents", { method: "POST", token, body: form }),
 
