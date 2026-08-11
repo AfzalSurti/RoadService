@@ -54,12 +54,17 @@ async function readGps(): Promise<{ lat: number; lng: number }> {
  */
 export function CameraCapture({ onCapture, onCancel }: Props) {
   const camRef = useRef<CameraView>(null);
+  const gpsRef = useRef<Promise<{ lat: number; lng: number }> | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Location.requestForegroundPermissionsAsync().catch(() => undefined);
+    gpsRef.current = (async () => {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) throw new Error("Location permission required for GPS tagging");
+      return readGps();
+    })();
   }, []);
 
   if (!permission) return <ActivityIndicator style={{ margin: 24 }} />;
@@ -84,10 +89,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const locPerm = await Location.requestForegroundPermissionsAsync();
-      if (!locPerm.granted) throw new Error("Location permission required for GPS tagging");
-
-      const photo = await withTimeout(
+      const photoPromise = withTimeout(
         camRef.current.takePictureAsync({
           quality: 0.5,
           skipProcessing: true,
@@ -95,9 +97,10 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         8000,
         "Camera"
       );
+      const gpsPromise = gpsRef.current ?? readGps();
+      const [photo, gps] = await Promise.all([photoPromise, gpsPromise]);
       if (!photo?.uri) throw new Error("Capture failed");
 
-      const gps = await readGps();
       onCapture({
         uri: photo.uri,
         lat: gps.lat,
