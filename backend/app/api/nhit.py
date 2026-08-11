@@ -1,5 +1,6 @@
 """NHIT portal APIs: attendance, security, toll, incidents, ITS, assets, integrations, backup, executive."""
 
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any
@@ -21,6 +22,7 @@ from app.models.portal_ops import (
     DocumentApproval,
     DocumentVersion,
     DutyRoster,
+    ExecutiveDrawing,
     ExecutiveSnapshot,
     HighwayIncident,
     IntegrationLink,
@@ -916,6 +918,61 @@ async def executive_overview(db: Annotated[AsyncSession, Depends(get_db)], _: An
     }
 
 
+DRAWING_KEYS = [
+    "pnp",
+    "tcs",
+    "drainage",
+    "mnb",
+    "mjb",
+    "rob",
+    "rub",
+    "fob",
+    "cnc",
+    "hpc",
+    "bxc",
+    "slc",
+    "toe_wall",
+    "retaining_wall",
+    "junction",
+    "rcc_drain",
+    "safety_plan",
+    "others",
+]
+
+
+def _drawing_out(row: ExecutiveDrawing) -> dict[str, Any]:
+    try:
+        counts = json.loads(row.counts_json or "{}")
+    except json.JSONDecodeError:
+        counts = {}
+    total = sum(int(counts.get(k, 0) or 0) for k in DRAWING_KEYS)
+    return {
+        "id": row.id,
+        "project_code": row.project_code,
+        "project_name": row.project_name,
+        "region": row.region,
+        "ae_name": row.ae_name,
+        "counts": {k: int(counts.get(k, 0) or 0) for k in DRAWING_KEYS},
+        "total": total,
+        "updated_at": row.updated_at,
+    }
+
+
+@router.get("/executive/drawings")
+async def list_drawings(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(get_current_user)]):
+    rows = (await db.execute(select(ExecutiveDrawing).order_by(ExecutiveDrawing.id))).scalars().all()
+    items = [_drawing_out(r) for r in rows]
+    totals = {k: sum(int(i["counts"][k]) for i in items) for k in DRAWING_KEYS}
+    return {
+        "keys": DRAWING_KEYS,
+        "items": items,
+        "totals": totals,
+        "grand_total": sum(totals.values()),
+        "regions": sorted({i["region"] for i in items if i["region"]}),
+        "aes": sorted({i["ae_name"] for i in items if i["ae_name"]}),
+    }
+
+
 # ---- Seed demo data ----
 @router.post("/seed-demo")
 async def seed_demo(
@@ -1021,6 +1078,25 @@ async def seed_demo(
                 notes="Executive snapshot seeded for demo",
             )
         )
+
+    if not (await db.execute(select(func.count(ExecutiveDrawing.id)))).scalar_one():
+        demo = [
+            ("14B", "Jabalpur - Lakhnadon", "West", "AE-1", [2, 1, 3, 4, 0, 0, 0, 0, 0, 6, 2, 0, 1, 2, 2, 1, 3, 4]),
+            ("13B", "Lakhnadon - Khawasa", "West", "AE-1", [3, 2, 2, 3, 1, 0, 0, 0, 0, 5, 1, 1, 2, 1, 1, 1, 2, 3]),
+            ("7A", "Bokhedi - Kelapur", "East", "AE-2", [1, 2, 4, 5, 0, 0, 0, 0, 0, 4, 2, 0, 2, 3, 3, 1, 4, 4]),
+            ("14A", "Package 14A", "East", "AE-2", [4, 3, 2, 3, 1, 0, 0, 0, 0, 3, 2, 0, 1, 2, 2, 1, 2, 3]),
+            ("AMK", "AMK Stretch", "West", "AE-1", [4, 5, 5, 6, 1, 0, 0, 0, 0, 6, 3, 1, 3, 3, 3, 2, 3, 5]),
+        ]
+        for code, name, region, ae, vals in demo:
+            db.add(
+                ExecutiveDrawing(
+                    project_code=code,
+                    project_name=name,
+                    region=region,
+                    ae_name=ae,
+                    counts_json=json.dumps(dict(zip(DRAWING_KEYS, vals, strict=True))),
+                )
+            )
 
     await write_audit(db, actor_id=user.id, action="seed_demo", entity_type="nhit", entity_id="all")
     await db.commit()

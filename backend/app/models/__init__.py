@@ -18,6 +18,7 @@ from app.models.portal_ops import (
     DocumentApproval,
     DocumentVersion,
     DutyRoster,
+    ExecutiveDrawing,
     ExecutiveSnapshot,
     HighwayIncident,
     IntegrationLink,
@@ -78,4 +79,5 @@ __all__ = [
     "BackupJob",
     "BcpItem",
     "ExecutiveSnapshot",
+    "ExecutiveDrawing",
 ]

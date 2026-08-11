@@ -289,6 +289,22 @@ class ExecutiveSnapshot(Base):
     )
 
 
+class ExecutiveDrawing(Base):
+    """Drawing portfolio counts used by Executive Summary."""
+
+    __tablename__ = "executive_drawings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    region: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ae_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    counts_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class MonthlyProgressReport(Base):
     """Package-wise Monthly Progress Report linked to vendor/agency."""
 

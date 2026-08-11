@@ -14,6 +14,7 @@ from app.models import (  # noqa: F401 — register metadata
     DocumentApproval,
     DocumentVersion,
     DutyRoster,
+    ExecutiveDrawing,
     ExecutiveSnapshot,
     HighwayIncident,
     DocumentFolder,
