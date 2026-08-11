@@ -45,13 +45,10 @@ export function BillingPage() {
     invoice_date: new Date().toISOString().slice(0, 10),
     payment_type: "Stage Payment Statement for Works",
     amount: "",
-    chainage_from: "",
-    chainage_to: "",
-    piu: "",
-    faro: "",
+    contract_amount_cr: "",
+    cumulative_cr: "",
     bill_from: "",
     bill_to: "",
-    notes: "",
   });
   const [recommend, setRecommend] = useState({
     payment_mode: "full",
@@ -61,6 +58,13 @@ export function BillingPage() {
   });
   const [approve, setApprove] = useState({ upc: "", note: "", approved_amount: "", voucher_no: "" });
   const [actionNote, setActionNote] = useState("");
+  const [viewMode, setViewMode] = useState<"submission" | "activity">("submission");
+  const [diaryOpen, setDiaryOpen] = useState<"none" | "after_submit" | "clarify" | "withdraw">("none");
+  const [diaryNote, setDiaryNote] = useState("");
+  const [diarySign, setDiarySign] = useState("");
+  const [diaryFile, setDiaryFile] = useState<File | null>(null);
+  const [claimPdf, setClaimPdf] = useState<File | null>(null);
+  const [openActionId, setOpenActionId] = useState<number | null>(null);
 
   const load = async () => {
     if (!token) return;
@@ -126,38 +130,36 @@ export function BillingPage() {
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly) return;
+    if (!token || isReadonly || role !== "admin") return;
     setBusy(true);
     setError(null);
     try {
-      await api.createInvoice(token, {
-        project_id: Number(form.project_id),
-        invoice_no: form.invoice_no.trim(),
-        invoice_date: form.invoice_date,
-        payment_type: form.payment_type.trim(),
-        amount: Number(form.amount),
-        chainage_from: form.chainage_from || undefined,
-        chainage_to: form.chainage_to || undefined,
-        notes: form.notes || undefined,
-        piu: form.piu || undefined,
-        faro: form.faro || undefined,
-        bill_from: form.bill_from || undefined,
-        bill_to: form.bill_to || undefined,
-      });
+      const fd = new FormData();
+      fd.append("project_id", form.project_id);
+      fd.append("invoice_no", form.invoice_no.trim());
+      fd.append("invoice_date", form.invoice_date);
+      fd.append("payment_type", form.payment_type.trim());
+      fd.append("this_bill_amount", form.amount || "0");
+      fd.append("cumulative_amount", form.cumulative_cr || form.amount || "0");
+      if (form.bill_from) fd.append("bill_from", form.bill_from);
+      if (form.bill_to) fd.append("bill_to", form.bill_to);
+      if (form.contract_amount_cr) fd.append("contract_amount_cr", form.contract_amount_cr);
+      if (claimPdf) fd.append("bill_pdf", claimPdf);
+      const created = await api.createInvoiceClaim(token, fd);
+      setSelected(created);
+      setDiaryOpen("after_submit");
       setShowCreate(false);
+      setClaimPdf(null);
       setForm({
         project_id: "",
         invoice_no: "",
         invoice_date: new Date().toISOString().slice(0, 10),
         payment_type: "Stage Payment Statement for Works",
         amount: "",
-        chainage_from: "",
-        chainage_to: "",
-        piu: "",
-        faro: "",
+        contract_amount_cr: "",
+        cumulative_cr: "",
         bill_from: "",
         bill_to: "",
-        notes: "",
       });
       await load();
     } catch (err: unknown) {
@@ -266,6 +268,11 @@ export function BillingPage() {
           <h2 style={{ margin: "0.2rem 0 0" }}>Invoice Processing</h2>
         </div>
         <div className="btn-row">
+          {role === "admin" && !isReadonly ? (
+            <button className="btn" type="button" onClick={() => setShowCreate(true)}>
+              New
+            </button>
+          ) : null}
           <button className="btn secondary" type="button" onClick={() => setFilter("all")}>
             FILTER
           </button>
@@ -342,6 +349,7 @@ export function BillingPage() {
           <table className="data">
             <thead>
               <tr>
+                <th>Action</th>
                 <th>View</th>
                 <th>Current Status of Invoice</th>
                 <th>Transaction ID</th>
@@ -363,8 +371,60 @@ export function BillingPage() {
               {pageRows.map((inv) => (
                 <tr key={inv.id} className={selected?.id === inv.id ? "selected-row" : undefined}>
                   <td>
-                    <button type="button" className="btn ghost" onClick={() => setSelected(inv)}>
-                      View
+                    {role === "admin" && !isReadonly ? (
+                      <div style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => setOpenActionId(openActionId === inv.id ? null : inv.id)}
+                        >
+                          Actions
+                        </button>
+                        {openActionId === inv.id ? (
+                          <div className="panel nested" style={{ position: "absolute", zIndex: 5, minWidth: 180 }}>
+                            {inv.status === "clarification" ? (
+                              <button
+                                type="button"
+                                className="btn ghost"
+                                onClick={() => {
+                                  setSelected(inv);
+                                  setDiaryOpen("clarify");
+                                  setOpenActionId(null);
+                                }}
+                              >
+                                Submit Clarification
+                              </button>
+                            ) : null}
+                            {inv.status === "submitted" || inv.status === "clarification" ? (
+                              <button
+                                type="button"
+                                className="btn ghost"
+                                onClick={() => {
+                                  setSelected(inv);
+                                  setDiaryOpen("withdraw");
+                                  setOpenActionId(null);
+                                }}
+                              >
+                                Withdraw Invoice
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => {
+                        setSelected(inv);
+                        setViewMode("submission");
+                      }}
+                    >
+                      View ▾
                     </button>
                   </td>
                   <td>{inv.status_detail || formatLabel(inv.status)}</td>
@@ -399,7 +459,7 @@ export function BillingPage() {
               ))}
               {!pageRows.length ? (
                 <tr>
-                  <td colSpan={15}>No invoices yet.</td>
+                  <td colSpan={16}>No invoices yet.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -434,9 +494,25 @@ export function BillingPage() {
             <h2>
               {selected.transaction_id} · {selected.invoice_no}
             </h2>
-            <button type="button" className="linkish" onClick={() => setSelected(null)}>
-              Close
-            </button>
+            <div className="btn-row">
+              <button
+                type="button"
+                className={viewMode === "submission" ? "btn" : "btn ghost"}
+                onClick={() => setViewMode("submission")}
+              >
+                Submission
+              </button>
+              <button
+                type="button"
+                className={viewMode === "activity" ? "btn" : "btn ghost"}
+                onClick={() => setViewMode("activity")}
+              >
+                Activity Log
+              </button>
+              <button type="button" className="linkish" onClick={() => setSelected(null)}>
+                Close
+              </button>
+            </div>
           </div>
           <p className="muted">{selected.status_detail}</p>
           <div className="detail-grid">
@@ -701,10 +777,11 @@ export function BillingPage() {
         </section>
       ) : null}
 
-      {showCreate ? (
+      {showCreate && role === "admin" ? (
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onCreate}>
-            <h2>New invoice</h2>
+            <h2>Details of payment being claimed now</h2>
+            <p className="muted">Only GMC MIS Expert can fill this. After Submit, the diary opens for a signed note.</p>
             <div className="form-grid">
               <label>
                 Project
@@ -720,6 +797,24 @@ export function BillingPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label>
+                Contract Amount (Rs. in Cr.)
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.contract_amount_cr}
+                  onChange={(e) => setForm({ ...form, contract_amount_cr: e.target.value })}
+                />
+              </label>
+              <label>
+                Cumulative payment received till date (Rs. in Cr.)
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.cumulative_cr}
+                  onChange={(e) => setForm({ ...form, cumulative_cr: e.target.value })}
+                />
               </label>
               <label>
                 Invoice no
@@ -747,7 +842,7 @@ export function BillingPage() {
                 />
               </label>
               <label>
-                Amount ₹
+                Invoice Absolute Amount ₹
                 <input
                   required
                   type="number"
@@ -758,15 +853,7 @@ export function BillingPage() {
                 />
               </label>
               <label>
-                PIU
-                <input value={form.piu} onChange={(e) => setForm({ ...form, piu: e.target.value })} />
-              </label>
-              <label>
-                FARO / RO
-                <input value={form.faro} onChange={(e) => setForm({ ...form, faro: e.target.value })} />
-              </label>
-              <label>
-                Bill from
+                Invoice duration from
                 <input
                   type="date"
                   value={form.bill_from}
@@ -774,41 +861,112 @@ export function BillingPage() {
                 />
               </label>
               <label>
-                Bill to
+                Invoice duration to
                 <input
                   type="date"
                   value={form.bill_to}
                   onChange={(e) => setForm({ ...form, bill_to: e.target.value })}
                 />
               </label>
-              <label>
-                Chainage from
-                <input
-                  value={form.chainage_from}
-                  onChange={(e) => setForm({ ...form, chainage_from: e.target.value })}
-                />
-              </label>
-              <label>
-                Chainage to
-                <input
-                  value={form.chainage_to}
-                  onChange={(e) => setForm({ ...form, chainage_to: e.target.value })}
-                />
-              </label>
               <label className="span-2">
-                Notes / diary
-                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                Upload invoice (PDF)
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => setClaimPdf(e.target.files?.[0] || null)}
+                />
               </label>
             </div>
             <div className="btn-row">
               <button className="btn" type="submit" disabled={busy}>
-                Submit invoice
+                Submit
               </button>
               <button type="button" className="btn ghost" onClick={() => setShowCreate(false)}>
-                Cancel
+                Back to Grid
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {diaryOpen !== "none" && selected ? (
+        <div className="modal-backdrop" onClick={() => setDiaryOpen("none")}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
+            <h2>
+              {diaryOpen === "clarify"
+                ? "Submit clarification — Diary"
+                : diaryOpen === "withdraw"
+                  ? "Withdraw invoice — Diary"
+                  : "Diary function"}
+            </h2>
+            <p className="muted">
+              Add a note with digital signature and optionally upload a reference document.
+            </p>
+            <div className="docs-layout">
+              <section className="panel">
+                <h3>Notepad</h3>
+                <textarea
+                  value={diaryNote}
+                  onChange={(e) => setDiaryNote(e.target.value)}
+                  placeholder="Add note"
+                  style={{ minHeight: 180 }}
+                />
+                <label>
+                  Digital signature name
+                  <input value={diarySign} onChange={(e) => setDiarySign(e.target.value)} />
+                </label>
+              </section>
+              <section className="panel">
+                <h3>Uploaded Document</h3>
+                <input type="file" onChange={(e) => setDiaryFile(e.target.files?.[0] || null)} />
+                {selected.correspondence_path ? (
+                  <p>
+                    <a href={mediaUrl(selected.correspondence_path)} target="_blank" rel="noreferrer">
+                      Open last correspondence
+                    </a>
+                  </p>
+                ) : (
+                  <p className="muted">No document uploaded yet.</p>
+                )}
+              </section>
+            </div>
+            <div className="btn-row" style={{ marginTop: "1rem" }}>
+              <button
+                className="btn"
+                type="button"
+                disabled={busy || diaryNote.trim().length < 2}
+                onClick={async () => {
+                  if (!token || !selected) return;
+                  setBusy(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("note", diaryNote.trim());
+                    if (diarySign.trim()) fd.append("signature_name", diarySign.trim());
+                    if (diaryFile) fd.append("correspondence", diaryFile);
+                    await api.saveInvoiceDiary(token, selected.id, fd);
+                    if (diaryOpen === "clarify") {
+                      await api.submitInvoiceClarification(token, selected.id, { note: diaryNote.trim() });
+                    } else if (diaryOpen === "withdraw") {
+                      await api.withdrawInvoice(token, selected.id, { note: diaryNote.trim() });
+                    }
+                    setDiaryOpen("none");
+                    setDiaryNote("");
+                    setDiaryFile(null);
+                    await load();
+                  } catch (err: unknown) {
+                    setError(err instanceof Error ? err.message : "Diary failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Submit
+              </button>
+              <button className="btn danger" type="button" onClick={() => setDiaryOpen("none")}>
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </>
