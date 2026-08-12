@@ -11,6 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -41,6 +42,10 @@ ISSUE_HEADERS = [
 ]
 
 
+def _status_key(status: object) -> str:
+    return status.value if hasattr(status, "value") else str(status)
+
+
 @router.get("/dashboard", response_model=DashboardStats)
 async def dashboard_stats(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -52,12 +57,30 @@ async def dashboard_stats(
     status_rows = (
         await db.execute(select(Issue.status, func.count(Issue.id)).group_by(Issue.status))
     ).all()
-    by_status = {s.value if hasattr(s, "value") else str(s): 0 for s in IssueStatus}
+    by_status = {s.value: 0 for s in IssueStatus}
     for status, count in status_rows:
-        by_status[status.value] = count
+        by_status[_status_key(status)] = count
 
-    issues = (await db.execute(select(Issue))).scalars().all()
-    delayed = sum(1 for i in issues if remaining_days(i.deadline_date) < 0 and i.status != IssueStatus.CLOSED)
+    # Only load columns needed for KPIs — avoids 500 if newer issue columns
+    # (lane/side/etc.) are not migrated on the remote DB yet.
+    issues = (
+        await db.execute(
+            select(Issue).options(
+                load_only(
+                    Issue.id,
+                    Issue.status,
+                    Issue.deadline_date,
+                    Issue.verified_at,
+                    Issue.created_at,
+                    Issue.assigned_contractor_id,
+                    Issue.reported_by_id,
+                )
+            )
+        )
+    ).scalars().all()
+    delayed = sum(
+        1 for i in issues if remaining_days(i.deadline_date) < 0 and i.status != IssueStatus.CLOSED
+    )
 
     closed = [i for i in issues if i.status == IssueStatus.CLOSED and i.verified_at and i.created_at]
     avg_resolution = None
@@ -89,15 +112,30 @@ async def dashboard_stats(
     ).all()
     surveyor_performance = [{"surveyor_id": sid, "reported": count} for sid, count in surveyor_rows]
 
-    total_invoices = (await db.execute(select(func.count(Invoice.id)))).scalar_one()
-    inv_rows = (await db.execute(select(Invoice.status, func.count(Invoice.id)).group_by(Invoice.status))).all()
-    invoices_by_status = {
-        (s.value if hasattr(s, "value") else str(s)): c for s, c in inv_rows
-    }
-    total_documents = (await db.execute(select(func.count(PortalDocument.id)))).scalar_one()
-    total_vendors = (await db.execute(select(func.count(Vendor.id)))).scalar_one()
-    boq_total = (await db.execute(select(func.coalesce(func.sum(RateItem.boq_amount), 0)))).scalar_one()
-    exec_total = (await db.execute(select(func.coalesce(func.sum(RateItem.executed_amount), 0)))).scalar_one()
+    total_invoices = 0
+    invoices_by_status: dict[str, int] = {}
+    total_documents = 0
+    total_vendors = 0
+    boq_total = 0.0
+    exec_total = 0.0
+    try:
+        total_invoices = (await db.execute(select(func.count(Invoice.id)))).scalar_one()
+        inv_rows = (
+            await db.execute(select(Invoice.status, func.count(Invoice.id)).group_by(Invoice.status))
+        ).all()
+        invoices_by_status = {_status_key(s): c for s, c in inv_rows}
+        total_documents = (await db.execute(select(func.count(PortalDocument.id)))).scalar_one()
+        total_vendors = (await db.execute(select(func.count(Vendor.id)))).scalar_one()
+        boq_total = float(
+            (await db.execute(select(func.coalesce(func.sum(RateItem.boq_amount), 0)))).scalar_one() or 0
+        )
+        exec_total = float(
+            (await db.execute(select(func.coalesce(func.sum(RateItem.executed_amount), 0)))).scalar_one()
+            or 0
+        )
+    except Exception:
+        # Portal tables / columns may lag behind code on free deploys — keep core KPIs working.
+        await db.rollback()
 
     return DashboardStats(
         total_projects=total_projects,
@@ -112,8 +150,8 @@ async def dashboard_stats(
         invoices_by_status=invoices_by_status,
         total_documents=total_documents,
         total_vendors=total_vendors,
-        total_boq_amount=float(boq_total or 0),
-        total_executed_amount=float(exec_total or 0),
+        total_boq_amount=boq_total,
+        total_executed_amount=exec_total,
     )
 
 
