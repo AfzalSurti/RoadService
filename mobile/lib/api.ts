@@ -15,10 +15,19 @@ export type Issue = {
   project_id: number;
   issue_type: string;
   work_category: string;
+  issue_type_label?: string | null;
+  work_category_label?: string | null;
   description: string;
   status: string;
   priority: string;
   chainage?: string;
+  lane?: string | null;
+  side?: string | null;
+  carriageway?: string | null;
+  is_critical?: boolean;
+  start_chainage?: string | null;
+  end_chainage?: string | null;
+  voice_note?: string | null;
   before_lat: number;
   before_lng: number;
   before_photo_path?: string;
@@ -50,6 +59,66 @@ export type Project = {
   id: number;
   name: string;
   location?: string | null;
+  description?: string | null;
+  ucc?: string;
+};
+
+export type SiteNcr = {
+  id: number;
+  ncr_no: string;
+  project_id: number;
+  related_rfi_id: number | null;
+  chainage_start: string | null;
+  chainage_end: string | null;
+  category: string | null;
+  sub_category: string | null;
+  item: string | null;
+  layer: string | null;
+  side: string | null;
+  description: string;
+  rectification_duration: string | null;
+  status: string;
+  stage: string | null;
+  block_succeeding_rfis: boolean;
+  created_at: string;
+};
+
+export type PmmSurvey = {
+  id: number;
+  project_id: number;
+  status: string;
+  survey_date: string | null;
+  remarks: string | null;
+  lane_length_km: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CriticalIssue = {
+  id: number;
+  issue_no: string;
+  project_id: number;
+  description: string;
+  issue_type: string | null;
+  status: string;
+  expected_resolution: string | null;
+  concerned_authority: string | null;
+  chainage_from: string | null;
+  chainage_to: string | null;
+  total_length_km: number | null;
+  priority: string | null;
+  remarks: string | null;
+  created_at: string;
+};
+
+export type RoadWarning = {
+  id: number;
+  project_id: number;
+  title: string;
+  chainage: string | null;
+  note: string | null;
+  status: string;
+  created_at: string;
 };
 
 export type SiteRfi = {
@@ -71,6 +140,10 @@ export type SiteRfi = {
   updated_at: string;
   can_answer: boolean;
   can_close: boolean;
+  ae_name?: string | null;
+  contractor_name?: string | null;
+  category?: string | null;
+  inspection_date?: string | null;
 };
 
 async function request<T>(
@@ -199,6 +272,64 @@ export const api = {
     }),
   closeRfi: (token: string, id: number) =>
     request<SiteRfi>(`/api/v1/rfis/${id}/close`, { method: "POST", token }),
+
+  fieldProjects: (token: string) =>
+    request<Project[]>("/api/v1/field/projects", { token }),
+  ncrs: (token: string) => request<SiteNcr[]>("/api/v1/field/ncrs", { token }),
+  raiseNcr: (
+    token: string,
+    body: {
+      project_id: number;
+      related_rfi_id?: number;
+      chainage_start?: string;
+      chainage_end?: string;
+      category?: string;
+      sub_category?: string;
+      item?: string;
+      layer?: string;
+      side?: string;
+      description: string;
+      rectification_duration?: string;
+      block_succeeding_rfis?: boolean;
+    }
+  ) => request<SiteNcr>("/api/v1/field/ncrs", { method: "POST", token, body: JSON.stringify(body) }),
+  pmmList: (token: string) => request<PmmSurvey[]>("/api/v1/field/pmm", { token }),
+  raisePmm: (
+    token: string,
+    body: { project_id: number; remarks?: string; lane_length_km?: number }
+  ) => request<PmmSurvey>("/api/v1/field/pmm", { method: "POST", token, body: JSON.stringify(body) }),
+  criticalList: (token: string) => request<CriticalIssue[]>("/api/v1/field/critical", { token }),
+  raiseCritical: (
+    token: string,
+    body: {
+      project_id: number;
+      description: string;
+      issue_type?: string;
+      status?: string;
+      expected_resolution?: string;
+      concerned_authority?: string;
+      chainage_from?: string;
+      chainage_to?: string;
+      total_length_km?: number;
+      priority?: string;
+      remarks?: string;
+    }
+  ) =>
+    request<CriticalIssue>("/api/v1/field/critical", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+  warnings: (token: string) => request<RoadWarning[]>("/api/v1/field/warnings", { token }),
+  raiseWarning: (
+    token: string,
+    body: { project_id: number; title: string; chainage?: string; note?: string }
+  ) =>
+    request<RoadWarning>("/api/v1/field/warnings", {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
 };
 
 export { API_URL };

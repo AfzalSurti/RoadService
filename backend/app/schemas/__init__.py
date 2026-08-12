@@ -153,6 +153,13 @@ class IssueOut(BaseModel):
     priority: IssuePriority
     status: IssueStatus
     chainage: str | None
+    lane: str | None = None
+    side: str | None = None
+    carriageway: str | None = None
+    is_critical: bool = False
+    start_chainage: str | None = None
+    end_chainage: str | None = None
+    voice_note: str | None = None
     before_photo_path: str
     before_lat: float
     before_lng: float

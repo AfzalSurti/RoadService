@@ -25,6 +25,7 @@ CATEGORIES: list[dict[str, str]] = [
     {"id": "STRUCTURE", "name": "Structure Defects"},
     {"id": "RETAINING_WALL", "name": "Retaining Wall Structural Defects"},
     {"id": "SAFETY", "name": "Safety"},
+    {"id": "MISC", "name": "Misc"},
 ]
 
 
@@ -261,6 +262,24 @@ def build_defect_types() -> list[DefectType]:
             ],
             used,
             start=21,
+        )
+    )
+
+    types.extend(
+        _letter_ids(
+            [
+                "Removal of dead Animals",
+                "Removal of broken down / accident vehicles",
+                "Removal of fallen trees, road blockade",
+                "Availability and Functioning of mobile crane",
+                "Other",
+                "Drain cover missing",
+                "Drain cover damaged",
+                "Median drain damaged",
+                "MBCB damaged",
+            ],
+            "MISC",
+            used,
         )
     )
     return types

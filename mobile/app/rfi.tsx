@@ -84,17 +84,32 @@ export default function RfiScreen() {
 
   return (
     <View style={styles.page}>
-      <Stack.Screen options={{ title: "RFI" }} />
+      <Stack.Screen options={{ title: role === "contractor" ? "RFI Raised" : "Request For Inspection" }} />
       <View style={styles.row}>
         <Pressable style={styles.secondary} onPress={() => router.back()}>
           <Text style={styles.secondaryText}>Back</Text>
         </Pressable>
         {canRaise ? (
           <Pressable style={styles.primary} onPress={() => setShowRaise(true)}>
-            <Text style={styles.primaryText}>Raise new RFI</Text>
+            <Text style={styles.primaryText}>{role === "contractor" ? "Raise RFI" : "Raise new RFI"}</Text>
           </Pressable>
         ) : null}
       </View>
+      {role === "surveyor" ? (
+        <View style={styles.kpiRow}>
+          {[
+            ["All RFI", rows.length],
+            ["Open", rows.filter((r) => r.status === "open").length],
+            ["Answered", rows.filter((r) => r.status === "answered").length],
+            ["Closed", rows.filter((r) => r.status === "closed").length],
+          ].map(([lab, val]) => (
+            <View key={String(lab)} style={styles.kpi}>
+              <Text style={styles.kpiVal}>{val}</Text>
+              <Text style={styles.kpiLab}>{lab}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <FlatList
@@ -118,6 +133,10 @@ export default function RfiScreen() {
             <Text style={styles.meta}>
               {item.priority} {item.chainage ? `· Ch. ${item.chainage}` : ""}
             </Text>
+            <Text style={styles.meta}>
+              {item.inspection_date ? `Scheduled ${item.inspection_date}` : item.created_at?.slice(0, 16)}
+              {item.category ? ` · ${item.category}` : ""}
+            </Text>
             <Text numberOfLines={2} style={{ color: "#e8eef6" }}>
               {item.subject}
             </Text>
@@ -135,6 +154,11 @@ export default function RfiScreen() {
                 <Text style={styles.meta}>{selected.status}</Text>
                 <Text style={[styles.cardTitle, { fontSize: 16 }]}>{selected.subject}</Text>
                 <Text style={{ color: "#e8eef6", marginVertical: 8 }}>{selected.description}</Text>
+                {selected.chainage ? <Text style={styles.meta}>Chainage: {selected.chainage}</Text> : null}
+                {selected.ae_name ? <Text style={styles.meta}>AE: {selected.ae_name}</Text> : null}
+                {selected.contractor_name ? (
+                  <Text style={styles.meta}>Contractor: {selected.contractor_name}</Text>
+                ) : null}
                 {selected.answer_text ? (
                   <Text style={{ color: "#86efac", marginBottom: 8 }}>
                     Answer: {selected.answer_text}
@@ -173,6 +197,19 @@ export default function RfiScreen() {
                       <Text style={styles.primaryText}>Submit answer</Text>
                     </Pressable>
                   </>
+                ) : null}
+                {role === "surveyor" ? (
+                  <Pressable
+                    style={[styles.primary, { marginTop: 8 }]}
+                    onPress={() => {
+                      const id = selected.id;
+                      const pid = selected.project_id;
+                      setSelected(null);
+                      router.push(`/ncr?rfiId=${id}&projectId=${pid}`);
+                    }}
+                  >
+                    <Text style={styles.primaryText}>Raise NCR</Text>
+                  </Pressable>
                 ) : null}
                 {selected.can_close ? (
                   <Pressable
@@ -317,4 +354,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   chipOn: { borderColor: "#3b9eff", backgroundColor: "#0b2a43" },
+  kpiRow: { flexDirection: "row", gap: 6, marginBottom: 12 },
+  kpi: {
+    flex: 1,
+    backgroundColor: "#12161d",
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#243041",
+  },
+  kpiVal: { color: "#e8eef6", fontWeight: "800" },
+  kpiLab: { color: "#8b9bb0", fontSize: 10 },
 });

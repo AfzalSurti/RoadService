@@ -417,3 +417,79 @@ class SiteRfi(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class SiteNcr(Base):
+    """Non-conformance report raised from site / RFI."""
+
+    __tablename__ = "site_ncrs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ncr_no: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    related_rfi_id: Mapped[int | None] = mapped_column(ForeignKey("site_rfis.id", ondelete="SET NULL"), nullable=True)
+    chainage_start: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chainage_end: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sub_category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    item: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    layer: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    side: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    rectification_duration: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    block_succeeding_rfis: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PmmSurvey(Base):
+    """Priority maintenance (PMM) survey list row."""
+
+    __tablename__ = "pmm_surveys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    survey_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lane_length_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distress_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CriticalIssue(Base):
+    __tablename__ = "critical_issues"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    issue_no: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    issue_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="new")
+    expected_resolution: Mapped[date | None] = mapped_column(Date, nullable=True)
+    concerned_authority: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chainage_to: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    total_length_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RoadWarning(Base):
+    __tablename__ = "road_warnings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

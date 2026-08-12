@@ -19,6 +19,7 @@ from app.api import (
     queries,
     rates,
     rfis,
+    field_ops,
     staff_details,
     users,
 )
@@ -84,6 +85,7 @@ app.include_router(portal.mpr_router, prefix="/api/v1")
 app.include_router(staff_details.router, prefix="/api/v1")
 app.include_router(queries.router, prefix="/api/v1")
 app.include_router(rfis.router, prefix="/api/v1")
+app.include_router(field_ops.router, prefix="/api/v1")
 app.include_router(nhit.router, prefix="/api/v1")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)

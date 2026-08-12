@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -24,6 +24,13 @@ class Issue(Base):
         pg_enum(IssueStatus, "issue_status"), default=IssueStatus.OPEN, index=True
     )
     chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lane: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    side: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    carriageway: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    start_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    end_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    voice_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Before (creation) — surveyor
     before_photo_path: Mapped[str] = mapped_column(String(1024), nullable=False)
