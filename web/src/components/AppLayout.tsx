@@ -32,6 +32,7 @@ export function AppLayout() {
         <div className="brand">
           Road<span>Service</span>
         </div>
+        <DeveloperCredit className="compact sidebar-credit-top" />
         <nav>
           <NavLink to="/dashboard" end>
             Dashboard
@@ -85,7 +86,6 @@ export function AppLayout() {
           >
             Sign out
           </button>
-          <DeveloperCredit className="compact" />
         </div>
       </aside>
       <main className="main">

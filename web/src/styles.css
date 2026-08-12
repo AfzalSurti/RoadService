@@ -76,6 +76,11 @@ button, input, select, textarea { font: inherit; }
   letter-spacing: -0.02em;
 }
 .brand span { color: var(--accent); }
+.sidebar-credit-top {
+  margin: 0 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
 .sidebar nav { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
 .sidebar a, .sidebar button.linkish {
   color: inherit;
