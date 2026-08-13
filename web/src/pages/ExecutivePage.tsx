@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { resolveProjectId } from "../lib/projectScope";
+import { projectIdFromUrl } from "../lib/projectScope";
 
 type Row = Record<string, unknown>;
 type DrawingItem = {
@@ -43,7 +43,7 @@ function money(n: number) {
 export function ExecutivePage() {
   const { token, role } = useAuth();
   const [searchParams] = useSearchParams();
-  const scopedProjectId = resolveProjectId(searchParams.get("project"));
+  const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
   const [tab, setTab] = useState<"overview" | "itf" | "drawings">("drawings");
   const [overview, setOverview] = useState<Row | null>(null);
   const [snaps, setSnaps] = useState<Row[]>([]);

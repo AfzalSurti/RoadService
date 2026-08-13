@@ -504,13 +504,27 @@ async def list_mpr(
     project_id: int | None = None,
     vendor_id: int | None = None,
 ):
-    await _ensure_folder_tree(db)
-    stmt = select(MonthlyProgressReport).order_by(MonthlyProgressReport.id.desc())
-    if project_id is not None:
-        stmt = stmt.where(MonthlyProgressReport.project_id == project_id)
-    if vendor_id is not None:
-        stmt = stmt.where(MonthlyProgressReport.vendor_id == vendor_id)
-    return (await db.execute(stmt)).scalars().all()
+    try:
+        try:
+            await _ensure_folder_tree(db)
+        except Exception:
+            await db.rollback()
+        stmt = select(MonthlyProgressReport).order_by(MonthlyProgressReport.id.desc())
+        if project_id is not None:
+            stmt = stmt.where(MonthlyProgressReport.project_id == project_id)
+        if vendor_id is not None:
+            stmt = stmt.where(MonthlyProgressReport.vendor_id == vendor_id)
+        return list((await db.execute(stmt)).scalars().all())
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        # Missing monthly_progress_reports table → empty list (not Failed to fetch)
+        detail = str(exc).lower()
+        if "monthly_progress" in detail or "does not exist" in detail or "undefinedtable" in detail:
+            return []
+        raise HTTPException(
+            status_code=500,
+            detail=f"MPR list failed (run Neon SQL for monthly_progress_reports): {exc}",
+        ) from exc
 
 
 @mpr_router.post("", response_model=MprOut, status_code=201)

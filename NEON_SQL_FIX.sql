@@ -160,3 +160,35 @@ WHERE EXISTS (SELECT 1 FROM alembic_version);
 INSERT INTO alembic_version (version_num)
 SELECT '019_query_multi_attachments'
 WHERE NOT EXISTS (SELECT 1 FROM alembic_version);
+
+-- Billing invoice claim / diary columns (017)
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS this_bill_amount NUMERIC(18, 2);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cumulative_amount NUMERIC(18, 2);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS contract_amount_cr NUMERIC(18, 2);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS invoice_pdf_path VARCHAR(512);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS final_bill_pdf_path VARCHAR(512);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS diary_note TEXT;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS diary_signature VARCHAR(255);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS correspondence_path VARCHAR(512);
+
+-- MPR table (010)
+CREATE TABLE IF NOT EXISTS monthly_progress_reports (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+  folder_id INTEGER REFERENCES document_folders(id) ON DELETE SET NULL,
+  package_name VARCHAR(255) NOT NULL,
+  report_month DATE NOT NULL,
+  physical_progress TEXT,
+  financial_progress TEXT,
+  rating_performance TEXT,
+  timely_execution TEXT,
+  pending_activity TEXT,
+  critical_observation TEXT,
+  last_remarks TEXT,
+  pdf_path VARCHAR(512),
+  submitted_by_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_mpr_project_id ON monthly_progress_reports (project_id);

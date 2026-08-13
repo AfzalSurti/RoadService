@@ -343,6 +343,18 @@ export function DashboardPage() {
                   hint="Executive for package →"
                 />
                 <StatCard
+                  label="MPR"
+                  value="Progress"
+                  to={withProjectQuery("/mpr", pid)}
+                  hint="Monthly progress →"
+                />
+                <StatCard
+                  label="Map"
+                  value="Locations"
+                  to={withProjectQuery("/map", pid)}
+                  hint="Map for this project →"
+                />
+                <StatCard
                   label="Vendors"
                   value={stats.total_vendors ?? 0}
                   to={vendorsPath}

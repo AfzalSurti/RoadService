@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
-import { resolveProjectId } from "../lib/projectScope";
+import { projectIdFromUrl } from "../lib/projectScope";
 import type { Issue, Project, SiteRfi } from "../types";
 
 const empty = {
@@ -24,7 +25,7 @@ const REPORT_VIEWS = ["RFI View", "RFI ScheduleH View", "Stake Holder View"];
 export function RfiPage() {
   const { token, role } = useAuth();
   const [searchParams] = useSearchParams();
-  const scopedProjectId = resolveProjectId(searchParams.get("project"));
+  const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
   const [rows, setRows] = useState<SiteRfi[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -230,20 +231,13 @@ export function RfiPage() {
               ))}
             </select>
           </label>
-          <label>
-            Project Code / EPC
-            <select
-              value={filters.project_id}
-              onChange={(e) => setFilters({ ...filters, project_id: e.target.value })}
-            >
-              <option value="">Select Project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ProjectSelect
+            label="Project Code / EPC"
+            allowAll
+            allLabel="All projects"
+            value={filters.project_id}
+            onChange={(id) => setFilters({ ...filters, project_id: id })}
+          />
           <label>
             Contractor
             <select
@@ -430,21 +424,13 @@ export function RfiPage() {
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onRaise}>
             <h2>New inspection / RFI request</h2>
             <div className="form-grid">
-              <label className="span-2">
-                Project *
-                <select
-                  required
-                  value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value, related_issue_id: "" })}
-                >
-                  <option value="">Select</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ProjectSelect
+                className="span-2"
+                required
+                label="Project *"
+                value={form.project_id}
+                onChange={(id) => setForm({ ...form, project_id: id, related_issue_id: "" })}
+              />
               <label>
                 AE Name
                 <input

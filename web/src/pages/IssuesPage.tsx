@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Issue, IssueStatus } from "../types";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
-import { resolveProjectId } from "../lib/projectScope";
+import { projectIdFromUrl } from "../lib/projectScope";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
   { key: "all", label: "All Issues" },
@@ -23,7 +23,7 @@ export function IssuesPage() {
   const status = (params.get("status") as IssueStatus | null) || null;
   const selectedId = params.get("id") ? Number(params.get("id")) : null;
   const action = params.get("action");
-  const projectId = resolveProjectId(params.get("project"));
+  const projectId = projectIdFromUrl(params.get("project"));
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);

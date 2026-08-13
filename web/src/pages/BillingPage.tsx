@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
 import type { Invoice, Project } from "../types";
 
@@ -87,16 +88,26 @@ export function BillingPage() {
   const load = async () => {
     if (!token) return;
     try {
-      const [inv, proj] = await Promise.all([api.invoices(token), api.projects(token)]);
-      setInvoices(inv);
+      const proj = await api.projects(token).catch(() => [] as Project[]);
       setProjects(proj);
-      setError(null);
-      if (selected) {
-        const fresh = inv.find((i) => i.id === selected.id) || null;
-        setSelected(fresh);
-      }
       if (!form.project_id && proj[0]) {
         setForm((f) => ({ ...f, project_id: String(proj[0].id) }));
+      }
+      try {
+        const inv = await api.invoices(token);
+        setInvoices(inv);
+        if (selected) {
+          const fresh = inv.find((i) => i.id === selected.id) || null;
+          setSelected(fresh);
+        }
+        setError(null);
+      } catch (e: unknown) {
+        setInvoices([]);
+        setError(
+          e instanceof Error
+            ? `${e.message} — run NEON_SQL_FIX.sql for invoice columns if this persists.`
+            : "Failed to load billing"
+        );
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load billing");
@@ -774,21 +785,12 @@ export function BillingPage() {
               &quot;Not Applicable&quot;.
             </p>
             <div className="form-grid">
-              <label>
-                Project / Package
-                <select
-                  required
-                  value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                >
-                  <option value="">Select…</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ProjectSelect
+                required
+                label="Project / Package"
+                value={form.project_id}
+                onChange={(id) => setForm({ ...form, project_id: id })}
+              />
               <label>
                 Contract Amount (Rs. in Cr.)
                 <input

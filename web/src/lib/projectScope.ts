@@ -22,13 +22,20 @@ export function setSelectedProjectId(id: number | null) {
   }
 }
 
-/** Prefer URL ?project= then session storage. */
-export function resolveProjectId(searchProject: string | null): number | null {
+/** URL ?project= only — use for Issues nav (all issues when absent). */
+export function projectIdFromUrl(searchProject: string | null): number | null {
   const fromUrl = Number(searchProject || 0);
   if (fromUrl > 0) {
     setSelectedProjectId(fromUrl);
     return fromUrl;
   }
+  return null;
+}
+
+/** Prefer URL ?project= then session storage (forms / dashboard selection). */
+export function resolveProjectId(searchProject: string | null): number | null {
+  const fromUrl = projectIdFromUrl(searchProject);
+  if (fromUrl) return fromUrl;
   return getSelectedProjectId();
 }
 

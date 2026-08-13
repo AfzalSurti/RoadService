@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { ProjectSelect } from "../components/ProjectSelect";
 import type { MprReport, Project, Vendor } from "../types";
 
 const PACKAGES = ["Jabalpur - Lakhnadon", "Lakhnadon - Khawasa", "Bokhedi - Kelapur"];
@@ -61,20 +62,29 @@ export function MprPage() {
   const load = async () => {
     if (!token) return;
     try {
-      const [p, v, m] = await Promise.all([
-        api.projects(token),
+      const [p, v] = await Promise.all([
+        api.projects(token).catch(() => [] as Project[]),
         api.vendors(token).catch(() => [] as Vendor[]),
-        api.listMpr(token),
       ]);
       setProjects(p);
       setVendors(v);
-      setRows(m);
-      setError(null);
       if (!form.project_id) {
         const first = p.find((x) => x.name === PACKAGES[0]) || p[0];
         if (first) {
           setForm((f) => ({ ...f, project_id: String(first.id), package_name: first.name }));
         }
+      }
+      try {
+        const m = await api.listMpr(token);
+        setRows(m);
+        setError(null);
+      } catch (e: unknown) {
+        setRows([]);
+        setError(
+          e instanceof Error
+            ? `${e.message} — run NEON_SQL_FIX.sql for monthly_progress_reports if this persists.`
+            : "Failed to load MPR"
+        );
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load MPR");
@@ -165,17 +175,12 @@ export function MprPage() {
             Prepared by
             <input value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} />
           </label>
-          <label>
-            Project (optional)
-            <select value={reportProjectId} onChange={(e) => setReportProjectId(e.target.value)}>
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ProjectSelect
+            label="Project (optional)"
+            allowAll
+            value={reportProjectId}
+            onChange={setReportProjectId}
+          />
         </div>
         <div className="btn-row">
           <button className="btn" type="button" disabled={!!reportBusy} onClick={() => void downloadPeriod("daily")}>
@@ -227,23 +232,19 @@ export function MprPage() {
         <section className="panel">
           <h2>Fill Monthly Progress Report</h2>
           <form className="form-grid" onSubmit={onSubmit}>
-            <label>
-              Package
-              <select
-                value={form.package_name}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  const hit = projects.find((p) => p.name === name);
-                  setForm({ ...form, package_name: name, project_id: hit ? String(hit.id) : "" });
-                }}
-              >
-                {PACKAGES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ProjectSelect
+              required
+              label="Package / Project"
+              value={form.project_id}
+              onChange={(id) => {
+                const hit = projects.find((p) => String(p.id) === id);
+                setForm({
+                  ...form,
+                  project_id: id,
+                  package_name: hit?.name || form.package_name,
+                });
+              }}
+            />
             <label>
               Report month
               <input

@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { ProjectSelect } from "../components/ProjectSelect";
 import type { Project, RateItem } from "../types";
 import * as v from "../lib/validation";
+import { projectIdFromUrl, setSelectedProjectId } from "../lib/projectScope";
 
 const emptyForm = {
   item_no: "",
@@ -55,8 +57,7 @@ export function RatesPage() {
     if (!token) return;
     api.projects(token).then((p) => {
       setProjects(p);
-      const params = new URLSearchParams(window.location.search);
-      const fromQuery = Number(params.get("project") || 0);
+      const fromQuery = projectIdFromUrl(new URLSearchParams(window.location.search).get("project"));
       if (fromQuery && p.some((x) => x.id === fromQuery)) {
         setProjectId(fromQuery);
       } else if (p[0]) {
@@ -129,20 +130,15 @@ export function RatesPage() {
         <div className="panel-head-row">
           <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
             <h2 style={{ margin: 0 }}>BOQ as per CA</h2>
-            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", margin: 0 }}>
-              Project
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
-              >
-                <option value="">Select…</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ProjectSelect
+              label="Project"
+              value={projectId === "" ? "" : String(projectId)}
+              onChange={(id) => {
+                const n = id ? Number(id) : "";
+                setProjectId(n);
+                if (typeof n === "number") setSelectedProjectId(n);
+              }}
+            />
           </div>
           {!isReadonly ? (
             <button className="btn" type="button" disabled={!projectId} onClick={() => setShowModal(true)}>

@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
-import { resolveProjectId } from "../lib/projectScope";
+import { projectIdFromUrl } from "../lib/projectScope";
 import type { PortalQueryTicket, Project } from "../types";
 
 const empty = {
@@ -17,7 +18,7 @@ const empty = {
 export function QueriesPage() {
   const { token, role, isReadonly } = useAuth();
   const [searchParams] = useSearchParams();
-  const projectId = resolveProjectId(searchParams.get("project"));
+  const projectId = projectIdFromUrl(searchParams.get("project"));
   const [tickets, setTickets] = useState<PortalQueryTicket[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<PortalQueryTicket | null>(null);
@@ -424,20 +425,14 @@ export function QueriesPage() {
                   <option value="urgent">Urgent</option>
                 </select>
               </label>
-              <label className="span-2">
-                Project (optional)
-                <select
-                  value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                >
-                  <option value="">None</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ProjectSelect
+                className="span-2"
+                label="Project (optional)"
+                allowAll
+                allLabel="None / all projects"
+                value={form.project_id}
+                onChange={(id) => setForm({ ...form, project_id: id })}
+              />
               <label className="span-2">
                 Subject *
                 <input

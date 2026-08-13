@@ -47,6 +47,12 @@ def _status_detail(status: InvoiceStatus | str) -> str:
 
 def _out(inv: Invoice) -> InvoiceOut:
     summary = loads_summary(inv.summary_json)
+    state = getattr(inv, "__dict__", {})
+
+    def _f(key: str) -> float | None:
+        v = state.get(key)
+        return float(v) if v is not None else None
+
     return InvoiceOut(
         id=inv.id,
         project_id=inv.project_id,
@@ -81,14 +87,14 @@ def _out(inv: Invoice) -> InvoiceOut:
         summary=summary,
         signature_name=inv.signature_name,
         signature_at=inv.signature_at,
-        this_bill_amount=float(inv.this_bill_amount) if inv.this_bill_amount is not None else None,
-        cumulative_amount=float(inv.cumulative_amount) if inv.cumulative_amount is not None else None,
-        contract_amount_cr=float(inv.contract_amount_cr) if inv.contract_amount_cr is not None else None,
-        invoice_pdf_path=inv.invoice_pdf_path,
-        final_bill_pdf_path=inv.final_bill_pdf_path,
-        diary_note=inv.diary_note,
-        diary_signature=inv.diary_signature,
-        correspondence_path=inv.correspondence_path,
+        this_bill_amount=_f("this_bill_amount"),
+        cumulative_amount=_f("cumulative_amount"),
+        contract_amount_cr=_f("contract_amount_cr"),
+        invoice_pdf_path=state.get("invoice_pdf_path"),
+        final_bill_pdf_path=state.get("final_bill_pdf_path"),
+        diary_note=state.get("diary_note"),
+        diary_signature=state.get("diary_signature"),
+        correspondence_path=state.get("correspondence_path"),
         created_at=inv.created_at,
         updated_at=inv.updated_at,
         activities=[
@@ -133,11 +139,21 @@ async def _add_activity(db: AsyncSession, invoice: Invoice, user: User, action: 
 async def list_invoices(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    project_id: int | None = None,
 ):
     # GMC MIS Expert + NHIPMPL only (contractor uses site tools, not GMC Billing Procedures)
-    stmt = select(Invoice).options(selectinload(Invoice.activities)).order_by(Invoice.id.desc())
-    rows = (await db.execute(stmt)).scalars().unique().all()
-    return [_out(i) for i in rows]
+    try:
+        stmt = select(Invoice).options(selectinload(Invoice.activities)).order_by(Invoice.id.desc())
+        if project_id is not None:
+            stmt = stmt.where(Invoice.project_id == project_id)
+        rows = (await db.execute(stmt)).scalars().unique().all()
+        return [_out(i) for i in rows]
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Billing list failed (run Neon SQL for invoices claim columns): {exc}",
+        ) from exc
 
 
 @router.post("/invoices", response_model=InvoiceOut, status_code=201)

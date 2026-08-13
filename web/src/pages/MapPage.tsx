@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
+import { projectIdFromUrl } from "../lib/projectScope";
 import type { Issue } from "../types";
 
 const COLORS: Record<string, string> = {
@@ -43,6 +45,8 @@ function historyLines(issue: Issue) {
 
 export function MapPage() {
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
+  const projectId = projectIdFromUrl(searchParams.get("project"));
   const [issues, setIssues] = useState<Issue[]>([]);
   const [selected, setSelected] = useState<Issue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,14 +54,16 @@ export function MapPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Map";
-  }, []);
+    if (el) el.textContent = projectId ? `Map · Project #${projectId}` : "Map";
+  }, [projectId]);
 
   useEffect(() => {
     if (!token) return;
     api
-      .issues(token)
+      .issues(token, null, projectId)
       .then(setIssues)
+      .catch((e: Error) => setError(e.message));
+  }, [token, projectId]);
       .catch((e: Error) => setError(e.message));
   }, [token]);
 
