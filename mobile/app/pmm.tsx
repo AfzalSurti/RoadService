@@ -265,13 +265,23 @@ export default function PmmScreen() {
               {item.remarks && !item.remarks.startsWith("{") ? <Text>{item.remarks}</Text> : null}
               {canAct ? (
                 <View style={st.row}>
-                  {["open", "in_progress", "closed"].map((s) => (
+                  {[
+                    ["in_progress", "In progress"],
+                    ["completed", "Completed"],
+                  ].map(([s, lab]) => (
                     <Pressable
                       key={s}
-                      style={[st.chip, item.status === s && st.chipOn]}
-                      onPress={() => setStatus(item.id, s)}
+                      style={[st.chip, (item.status === s || (s === "completed" && item.status === "closed")) && st.chipOn]}
+                      onPress={() => setStatus(item.id, s === "completed" ? "closed" : s)}
                     >
-                      <Text style={[st.chipText, item.status === s && { color: "#fff" }]}>{s}</Text>
+                      <Text
+                        style={[
+                          st.chipText,
+                          (item.status === s || (s === "completed" && item.status === "closed")) && { color: "#fff" },
+                        ]}
+                      >
+                        {lab}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>

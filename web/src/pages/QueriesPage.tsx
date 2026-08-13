@@ -33,8 +33,10 @@ export function QueriesPage() {
   const [comment, setComment] = useState("");
   const [shotFiles, setShotFiles] = useState<File[]>([]);
 
-  const canResolve = role === "admin" || role === "government";
-  const canRaise = !isReadonly && (role === "admin" || role === "government" || role === "contractor");
+  const canResolve = role === "admin";
+  const canRaise =
+    !isReadonly &&
+    (role === "admin" || role === "government" || role === "contractor" || role === "surveyor");
 
   const counts = useMemo(() => {
     const c = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
@@ -163,7 +165,7 @@ export function QueriesPage() {
             <h2>Query Raise (Tickets)</h2>
             <p className="muted" style={{ margin: 0 }}>
               Raise portal-operations queries (billing, documents, toll, ITS, etc.). GMC / NHIPMPL
-              take up and resolve; raiser can reopen with a note if needed.
+              take up and resolve (GMC MIS Expert only). Others can raise and view status.
             </p>
           </div>
           {canRaise ? (

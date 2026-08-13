@@ -314,13 +314,16 @@ export default function CriticalScreen() {
             ) : null}
             {canAct ? (
               <View style={st.chips}>
-                {STATUSES.map((s) => (
+                {[
+                  ["ongoing", "In progress"],
+                  ["resolved", "Completed"],
+                ].map(([s, lab]) => (
                   <Pressable
                     key={s}
                     style={[st.chip, item.status === s && st.chipOn]}
                     onPress={() => setStatus(item.id, s)}
                   >
-                    <Text style={[st.chipText, item.status === s && { color: "#fff" }]}>{s}</Text>
+                    <Text style={[st.chipText, item.status === s && { color: "#fff" }]}>{lab}</Text>
                   </Pressable>
                 ))}
               </View>

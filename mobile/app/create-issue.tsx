@@ -24,7 +24,24 @@ function fmtChain(km: string, m: string) {
 }
 
 export default function CreateIssueScreen() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
+  if (role === "contractor") {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#eef2f6", padding: 24, justifyContent: "center" }}>
+        <Stack.Screen options={{ title: "Raise Defect" }} />
+        <Text style={{ color: "#334", marginBottom: 16, lineHeight: 20 }}>
+          Contractor cannot raise defects. Open Site Work to view GMC items and set In progress /
+          Completed.
+        </Text>
+        <Pressable
+          style={{ backgroundColor: "#1a4b8c", padding: 14, borderRadius: 12, alignItems: "center" }}
+          onPress={() => router.replace("/site-work")}
+        >
+          <Text style={{ color: "#fff", fontWeight: "800" }}>Go to Site Work</Text>
+        </Pressable>
+      </View>
+    );
+  }
   const [projects, setProjects] = useState<Project[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [types, setTypes] = useState<DefectType[]>([]);

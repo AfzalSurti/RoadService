@@ -325,8 +325,8 @@ export default function NcrScreen() {
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                 {(
                   [
-                    ["open", "Open"],
-                    ["closed", "Closed"],
+                    ["in_progress", "In progress"],
+                    ["closed", "Completed"],
                   ] as const
                 ).map(([s, lab]) => (
                   <Pressable
@@ -337,12 +337,12 @@ export default function NcrScreen() {
                       borderRadius: 8,
                       paddingHorizontal: 10,
                       paddingVertical: 6,
-                      backgroundColor: item.status === s ? "#1a4b8c" : "#fff",
+                      backgroundColor: item.status === s || (s === "closed" && item.status === "closed") ? "#1a4b8c" : "#fff",
                     }}
                     onPress={async () => {
                       if (!token) return;
                       try {
-                        await api.updateNcrStatus(token, item.id, s);
+                        await api.updateNcrStatus(token, item.id, s === "closed" ? "closed" : "open", s === "in_progress" ? "In progress" : "Completed");
                         await load();
                       } catch (e: any) {
                         setError(e.message);
@@ -351,7 +351,7 @@ export default function NcrScreen() {
                   >
                     <Text
                       style={{
-                        color: item.status === s ? "#fff" : "#1a4b8c",
+                        color: item.status === s || item.stage === lab ? "#fff" : "#1a4b8c",
                         fontWeight: "700",
                         fontSize: 12,
                       }}

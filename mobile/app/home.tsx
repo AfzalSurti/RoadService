@@ -1,5 +1,5 @@
 import { Link, Stack, router, useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -15,7 +15,9 @@ import { flushOfflineJobs, listOfflineJobs } from "../lib/offline";
 import { roleLabel } from "../lib/roles";
 import { useTheme } from "../lib/theme";
 
-const QUICK_LINKS: { label: string; href: string; icon: string }[] = [
+type QuickLink = { label: string; href: string; icon: string };
+
+const GMC_LINKS: QuickLink[] = [
   { label: "Road\nMaintenance", href: "/create-issue", icon: "🛣" },
   { label: "RFI", href: "/rfi", icon: "📄" },
   { label: "Attendance", href: "/attendance", icon: "👤" },
@@ -23,6 +25,18 @@ const QUICK_LINKS: { label: string; href: string; icon: string }[] = [
   { label: "NCR", href: "/ncr", icon: "📋" },
   { label: "PMM", href: "/pmm", icon: "📊" },
   { label: "Critical\nIssues", href: "/critical", icon: "🚨" },
+  { label: "Query\nRaise", href: "/query", icon: "🎫" },
+];
+
+/** Same layout as GMC — no Attendance; no raise-defect; RFI + Query raise; rest view/action. */
+const CONTRACTOR_LINKS: QuickLink[] = [
+  { label: "Site\nWork", href: "/site-work", icon: "🛣" },
+  { label: "RFI", href: "/rfi", icon: "📄" },
+  { label: "Road\nWarnings", href: "/warnings", icon: "⚠" },
+  { label: "NCR", href: "/ncr", icon: "📋" },
+  { label: "PMM", href: "/pmm", icon: "📊" },
+  { label: "Critical\nIssues", href: "/critical", icon: "🚨" },
+  { label: "Query\nRaise", href: "/query", icon: "🎫" },
 ];
 
 function firstName(full?: string | null) {
@@ -30,7 +44,7 @@ function firstName(full?: string | null) {
   return full.split(" ")[0];
 }
 
-function SurveyorHome() {
+function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
   const { token, fullName, logout } = useAuth();
   const { mode, toggle } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -39,6 +53,9 @@ function SurveyorHome() {
   const [pendingOffline, setPendingOffline] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const links = role === "contractor" ? CONTRACTOR_LINKS : GMC_LINKS;
+  const subtitle = role === "contractor" ? "Contractor representative" : "GMC representative";
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -98,7 +115,7 @@ function SurveyorHome() {
         <View style={dash.top}>
           <View>
             <Text style={dash.hi}>Hi, {firstName(fullName)}</Text>
-            <Text style={dash.sub}>GMC representative</Text>
+            <Text style={dash.sub}>{subtitle}</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Pressable onPress={toggle}>
@@ -125,6 +142,12 @@ function SurveyorHome() {
           <Text style={dash.noteLink}>View all</Text>
         </Pressable>
 
+        {role === "contractor" ? (
+          <Text style={dash.hintBanner}>
+            Raise RFI and Query only. GMC activities: view and set In progress / Completed.
+          </Text>
+        ) : null}
+
         {pendingOffline ? (
           <Text style={dash.warn}>{pendingOffline} offline capture(s) saved — will sync when online</Text>
         ) : null}
@@ -141,7 +164,7 @@ function SurveyorHome() {
 
         <Text style={dash.section}>QuickLinks</Text>
         <View style={dash.links}>
-          {QUICK_LINKS.map((item) => (
+          {links.map((item) => (
             <Pressable key={item.href} style={dash.linkItem} onPress={() => router.push(item.href as any)}>
               <View style={dash.circle}>
                 <Text style={dash.circleIcon}>{item.icon}</Text>
@@ -167,33 +190,18 @@ export default function HomeScreen() {
   const { mode, toggle } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [unread, setUnread] = useState(0);
-  const [pendingOffline, setPendingOffline] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const sync = await flushOfflineJobs(token);
-      const [issueList, notes, offline] = await Promise.all([
-        api.issues(token),
-        api.notifications(token),
-        listOfflineJobs(),
-      ]);
+      const [issueList, notes] = await Promise.all([api.issues(token), api.notifications(token)]);
       setIssues(issueList);
       setUnread(notes.filter((n) => !n.is_read).length);
-      setPendingOffline(offline.length);
-      if (sync.synced) {
-        setError(null);
-      } else if (sync.failed) {
-        setError(`${sync.failed} offline item(s) still waiting for network`);
-      } else {
-        setError(null);
-      }
+      setError(null);
     } catch (e: any) {
       setError(e.message);
-      setPendingOffline((await listOfflineJobs()).length);
     }
   }, [token]);
 
@@ -203,33 +211,17 @@ export default function HomeScreen() {
     }, [load])
   );
 
-  const oneTapStart = async (item: Issue) => {
-    if (!token) return;
-    setBusyId(item.id);
-    try {
-      if (item.status === "under_review") await api.reworkStart(token, item.id);
-      else await api.startIssue(token, item.id);
-      await load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  if (role === "surveyor") {
-    return <SurveyorHome />;
-  }
+  if (role === "surveyor") return <FieldHome role="surveyor" />;
+  if (role === "contractor") return <FieldHome role="contractor" />;
 
   return (
     <View style={styles.page}>
-      <Stack.Screen options={{ title: role === "contractor" ? "Site work" : "Issues" }} />
+      <Stack.Screen options={{ title: "Issues" }} />
       <View style={styles.header}>
         <View>
           <Text style={styles.name}>{fullName}</Text>
           <Text style={styles.role}>
             {roleLabel(role)}
-            {role === "contractor" ? " · Rectify site defects" : ""}
             {unread ? ` · ${unread} alerts` : ""}
           </Text>
         </View>
@@ -247,42 +239,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </View>
-
-      <View style={styles.row}>
-        <Link href="/notifications" asChild>
-          <Pressable style={styles.secondary}>
-            <Text style={styles.secondaryText}>Notifications{unread ? ` (${unread})` : ""}</Text>
-          </Pressable>
-        </Link>
-        {role === "contractor" ? (
-          <Link href="/rfi" asChild>
-            <Pressable style={styles.primary}>
-              <Text style={styles.primaryText}>RFI Raised</Text>
-            </Pressable>
-          </Link>
-        ) : null}
-        {role === "contractor" ? (
-          <Link href="/attendance" asChild>
-            <Pressable style={styles.secondary}>
-              <Text style={styles.secondaryText}>Attendance</Text>
-            </Pressable>
-          </Link>
-        ) : null}
-      </View>
-      {role === "contractor" ? (
-        <Text style={styles.hint}>
-          Site only: when GMC raises a defect, Start work / Start rework → Submit rectification. Use
-          RFI Raised for site clarifications.
-        </Text>
-      ) : null}
-
-      {pendingOffline ? (
-        <Text style={styles.offline}>
-          {pendingOffline} offline capture(s) saved — will sync when online
-        </Text>
-      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-
       <FlatList
         data={issues}
         keyExtractor={(i) => String(i.id)}
@@ -297,50 +254,17 @@ export default function HomeScreen() {
           />
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Link href={`/issue/${item.id}`} asChild>
-              <Pressable>
-                <Text style={styles.cardTitle}>
-                  #{item.id} · {item.issue_type}
-                </Text>
-                <Text style={styles.meta}>
-                  {item.status} · {item.remaining_days ?? "?"} days left
-                </Text>
-                <Text numberOfLines={2}>{item.description}</Text>
-              </Pressable>
-            </Link>
-            {role === "contractor" ? (
-              <View style={styles.actions}>
-                {(item.status === "under_review" || item.status === "open") && (
-                  <Pressable
-                    style={styles.miniBtn}
-                    disabled={busyId === item.id}
-                    onPress={() => oneTapStart(item)}
-                  >
-                    <Text style={styles.miniText}>
-                      {item.status === "under_review" ? "Start rework / rectify" : "Start rectification"}
-                    </Text>
-                  </Pressable>
-                )}
-                {item.status === "in_progress" && (
-                  <Pressable
-                    style={styles.miniBtn}
-                    onPress={() => router.push(`/issue/${item.id}?action=submit`)}
-                  >
-                    <Text style={styles.miniText}>Submit rectification</Text>
-                  </Pressable>
-                )}
-                {item.status === "under_review" && (
-                  <Pressable
-                    style={[styles.miniBtn, styles.ghostBtn]}
-                    onPress={() => router.push(`/issue/${item.id}?action=rejection`)}
-                  >
-                    <Text style={styles.ghostText}>View rejection notes</Text>
-                  </Pressable>
-                )}
-              </View>
-            ) : null}
-          </View>
+          <Link href={`/issue/${item.id}`} asChild>
+            <Pressable style={styles.card}>
+              <Text style={styles.cardTitle}>
+                #{item.id} · {item.issue_type}
+              </Text>
+              <Text style={styles.meta}>
+                {item.status} · {item.remaining_days ?? "?"} days left
+              </Text>
+              <Text numberOfLines={2}>{item.description}</Text>
+            </Pressable>
+          </Link>
         )}
         ListEmptyComponent={<Text style={styles.meta}>No issues yet.</Text>}
       />
@@ -378,6 +302,13 @@ const dash = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  hintBanner: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    color: "#334",
+    fontSize: 13,
+    lineHeight: 18,
   },
   noteText: { color: "#223", fontWeight: "600", flex: 1 },
   noteLink: { color: "#1a4b8c", fontWeight: "700" },
@@ -428,25 +359,6 @@ const styles = StyleSheet.create({
   name: { fontWeight: "700", fontSize: 18, color: "#e8eef6" },
   role: { color: "#8b9bb0" },
   link: { color: "#3b9eff", fontWeight: "600" },
-  row: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  primary: {
-    flex: 1,
-    backgroundColor: "#3b9eff",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  primaryText: { color: "#041018", fontWeight: "700" },
-  secondary: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#243041",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: "#12161d",
-  },
-  secondaryText: { color: "#e8eef6", fontWeight: "600" },
   card: {
     backgroundColor: "#12161d",
     borderRadius: 12,
@@ -458,16 +370,4 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "700", marginBottom: 4, color: "#e8eef6" },
   meta: { color: "#8b9bb0", marginBottom: 4 },
   error: { color: "#fb7185", marginBottom: 8 },
-  offline: { color: "#fbbf24", marginBottom: 8 },
-  hint: { color: "#8b9bb0", marginBottom: 10, fontSize: 13, lineHeight: 18 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  miniBtn: {
-    backgroundColor: "#3b9eff",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  miniText: { color: "#041018", fontWeight: "700", fontSize: 13 },
-  ghostBtn: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#243041" },
-  ghostText: { color: "#e8eef6", fontWeight: "600", fontSize: 13 },
 });

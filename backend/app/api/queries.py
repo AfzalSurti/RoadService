@@ -119,7 +119,11 @@ def _dump_paths(paths: list[str]) -> str | None:
 
 
 def _can_resolve(user: User) -> bool:
-    return user.role in (UserRole.ADMIN, UserRole.GOVERNMENT)
+    # Resolve only GMC MIS Expert (admin)
+    return user.role == UserRole.ADMIN
+
+
+_QUERY_ROLES = (UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR)
 
 
 def _out(row: PortalQueryTicket, user: User, comments: list[PortalQueryComment] | None = None) -> QueryTicketOut:
@@ -180,7 +184,7 @@ async def _comments(db: AsyncSession, ticket_id: int) -> list[PortalQueryComment
 
 @router.get("/meta")
 async def query_meta(
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    _: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
 ):
     return {
         "module_areas": MODULE_AREAS,
@@ -192,7 +196,7 @@ async def query_meta(
 @router.get("", response_model=list[QueryTicketOut])
 async def list_queries(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
     status: str | None = None,
     module_area: str | None = None,
     project_id: int | None = None,
@@ -219,7 +223,7 @@ async def list_queries(
 async def get_query(
     ticket_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
 ):
     row = await _load(db, ticket_id)
     return _out(row, user, await _comments(db, ticket_id))
@@ -228,7 +232,7 @@ async def get_query(
 @router.post("", response_model=QueryTicketOut, status_code=201)
 async def raise_query(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
     subject: Annotated[str, Form(min_length=3)],
     description: Annotated[str, Form(min_length=5)],
     module_area: Annotated[str, Form()] = "billing",
@@ -259,15 +263,16 @@ async def raise_query(
         files.append(attachment)
     if len(files) > MAX_ATTACHMENTS:
         raise HTTPException(400, f"Maximum {MAX_ATTACHMENTS} images allowed")
-    if not files:
-        raise HTTPException(400, "At least one image / screenshot is required (max 4)")
-
+    # Screenshots preferred on portal; mobile raise may omit attachments
     paths: list[str] = []
     for upload in files:
         name = (upload.filename or "").lower()
         if not any(name.endswith(ext) for ext in IMAGE_EXTS):
             raise HTTPException(400, "Only image / screenshot files are allowed")
         paths.append(await save_upload(upload, "query_shot"))
+
+    if not paths and user.role not in (UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN, UserRole.GOVERNMENT):
+        raise HTTPException(400, "At least one image / screenshot is required (max 4)")
 
     row = PortalQueryTicket(
         ticket_no=ticket_no,
@@ -306,7 +311,7 @@ async def raise_query(
 async def start_query(
     ticket_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
     body: QueryStatusIn = QueryStatusIn(status="in_progress"),
 ):
     row = await _load(db, ticket_id)
@@ -327,7 +332,7 @@ async def resolve_query(
     ticket_id: int,
     body: QueryResolveIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     row = await _load(db, ticket_id)
     if row.status in ("resolved", "closed"):
@@ -364,13 +369,13 @@ async def reopen_query(
     ticket_id: int,
     body: QueryCommentIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
 ):
     row = await _load(db, ticket_id)
     if row.status not in ("resolved", "closed"):
         raise HTTPException(400, "Only resolved/closed queries can be reopened")
-    if user.role == UserRole.CONTRACTOR and row.raised_by_id != user.id:
-        raise HTTPException(403, "Contractors can only reopen their own queries")
+    if user.role in (UserRole.CONTRACTOR, UserRole.SURVEYOR) and row.raised_by_id != user.id:
+        raise HTTPException(403, "You can only reopen your own queries")
     row.status = "open"
     row.resolution_note = None
     row.resolved_by_id = None
@@ -386,7 +391,7 @@ async def add_comment(
     ticket_id: int,
     body: QueryCommentIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
 ):
     row = await _load(db, ticket_id)
     db.add(PortalQueryComment(ticket_id=row.id, actor_id=user.id, note=body.note.strip(), action="comment"))

@@ -122,6 +122,21 @@ export type RoadWarning = {
   created_at: string;
 };
 
+export type PortalQueryTicket = {
+  id: number;
+  ticket_no: string;
+  project_id: number | null;
+  module_area: string;
+  subject: string;
+  description: string;
+  priority: string;
+  status: string;
+  raised_by_id: number;
+  resolution_note?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SiteRfi = {
   id: number;
   rfi_no: string;
@@ -370,6 +385,10 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  queries: (token: string) => request<PortalQueryTicket[]>("/api/v1/queries", { token }),
+  raiseQuery: (token: string, form: FormData) =>
+    request<PortalQueryTicket>("/api/v1/queries", { method: "POST", token, body: form }),
 };
 
 export { API_URL };
