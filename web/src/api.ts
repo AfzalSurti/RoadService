@@ -393,6 +393,16 @@ export const api = {
     });
   },
 
+  uploadRecommendationDoc: (token: string, id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<Invoice>(`/api/v1/billing/invoices/${id}/recommendation-doc`, {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
   saveInvoiceDiary: (token: string, id: number, form: FormData) =>
     request<Invoice>(`/api/v1/billing/invoices/${id}/diary`, { method: "POST", token, body: form }),
 

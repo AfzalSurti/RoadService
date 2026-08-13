@@ -273,7 +273,9 @@ export function DashboardPage() {
               hint="Latest projects ↑"
             />
             <StatCard label="Total issues" value={stats.total_issues} to="/issues" hint="Open Issues →" />
-            <StatCard label="Invoices" value={stats.total_invoices ?? 0} to="/billing" hint="Open Billing →" />
+            {role === "admin" || role === "government" ? (
+              <StatCard label="Invoices" value={stats.total_invoices ?? 0} to="/billing" hint="Open Billing →" />
+            ) : null}
             <StatCard label="Documents" value={stats.total_documents ?? 0} to="/documents" hint="Open Documents →" />
             <StatCard label="Staff details" value="GMC · NHIPMPL · Contractor" to="/staff-details" hint="Organisation professionals →" />
             <StatCard label="Query Raise" value="Tickets" to="/queries" hint="Raise / resolve portal queries →" />

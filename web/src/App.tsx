@@ -108,9 +108,9 @@ export default function App() {
         <Route
           path="/billing"
           element={
-            <StaffPortal>
+            <AdminOrGov>
               <BillingPage />
-            </StaffPortal>
+            </AdminOrGov>
           }
         />
         <Route

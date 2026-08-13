@@ -132,22 +132,10 @@ async def _add_activity(db: AsyncSession, invoice: Invoice, user: User, action: 
 @router.get("/invoices", response_model=list[InvoiceOut])
 async def list_invoices(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
+    # GMC MIS Expert + NHIPMPL only (contractor uses site tools, not GMC Billing Procedures)
     stmt = select(Invoice).options(selectinload(Invoice.activities)).order_by(Invoice.id.desc())
-    if user.role == UserRole.CONTRACTOR:
-        stmt = stmt.where(Invoice.submitted_by_id == user.id)
-    elif user.role == UserRole.GOVERNMENT:
-        stmt = stmt.where(
-            Invoice.status.in_(
-                [
-                    InvoiceStatus.RECOMMENDED,
-                    InvoiceStatus.CLARIFICATION,
-                    InvoiceStatus.APPROVED,
-                    InvoiceStatus.REJECTED,
-                ]
-            )
-        )
     rows = (await db.execute(stmt)).scalars().unique().all()
     return [_out(i) for i in rows]
 
@@ -268,7 +256,7 @@ async def recommend_invoice(
     invoice_id: int,
     body: InvoiceRecommend,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
 ):
     inv = await _load(db, invoice_id)
     if inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION):
@@ -287,8 +275,13 @@ async def recommend_invoice(
         base = inv.transaction_id.replace("_P", "").replace("_F", "").replace("_B", "")
         inv.transaction_id = f"{base}_F"
     inv.calculation_json = body.calculation_note
-    inv.recommended_ae_amount = inv.recommended_amount
-    inv.recommended_piu_amount = inv.recommended_amount
+    if user.role == UserRole.ADMIN:
+        inv.recommended_ae_amount = inv.recommended_amount
+    if user.role == UserRole.GOVERNMENT:
+        inv.recommended_piu_amount = inv.recommended_amount
+        inv.authority_engineer = user.full_name
+    elif inv.recommended_piu_amount is None:
+        inv.recommended_piu_amount = inv.recommended_amount
     inv.status = InvoiceStatus.RECOMMENDED
     inv.status_detail = _status_detail(InvoiceStatus.RECOMMENDED)
     await _add_activity(
@@ -339,12 +332,12 @@ async def submit_clarification(
     invoice_id: int,
     body: InvoiceAction,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     inv = await _load(db, invoice_id)
     if inv.status != InvoiceStatus.CLARIFICATION:
         raise HTTPException(status_code=400, detail="Invoice is not awaiting clarification")
-    inv.status = InvoiceStatus.SUBMITTED if user.role == UserRole.CONTRACTOR else InvoiceStatus.RECOMMENDED
+    inv.status = InvoiceStatus.RECOMMENDED
     inv.status_detail = _status_detail(inv.status)
     await _add_activity(db, inv, user, "clarification_submitted", body.note or "Clarification submitted")
     await db.commit()
@@ -368,6 +361,9 @@ async def approve_invoice(
     inv.approved_amount = _dec(body.approved_amount) if body.approved_amount is not None else inv.recommended_amount
     inv.net_amount_released = inv.approved_amount
     inv.voucher_no = body.voucher_no or inv.voucher_no
+    inv.authority_engineer = inv.authority_engineer or user.full_name
+    if inv.recommended_piu_amount is None:
+        inv.recommended_piu_amount = inv.approved_amount
     inv.status_detail = _status_detail(InvoiceStatus.APPROVED)
     await _add_activity(db, inv, user, "approved", body.note or f"Approved with UPC {body.upc}")
     await notify(db, inv.submitted_by_id, "Invoice approved", f"{inv.transaction_id} approved.", None)
@@ -396,11 +392,9 @@ async def withdraw_invoice(
     invoice_id: int,
     body: InvoiceAction,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     inv = await _load(db, invoice_id)
-    if user.role == UserRole.CONTRACTOR and inv.submitted_by_id != user.id:
-        raise HTTPException(status_code=403, detail="Not your invoice")
     if inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION):
         raise HTTPException(status_code=400, detail="Cannot withdraw after processing has started")
     inv.status = InvoiceStatus.WITHDRAWN
@@ -419,7 +413,7 @@ def _require_pdf(file: UploadFile) -> None:
 @router.post("/invoices/claim", response_model=InvoiceOut, status_code=201)
 async def create_invoice_claim(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
     project_id: Annotated[int, Form()],
     invoice_no: Annotated[str, Form()],
     invoice_date: Annotated[str, Form()],
@@ -458,6 +452,7 @@ async def create_invoice_claim(
         invoice_pdf_path=pdf_path,
         contractor_name=user.full_name,
         project_title=project.name,
+        piu=project.location or "NHIPMPL HQ",
         status=InvoiceStatus.SUBMITTED,
         status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
@@ -466,6 +461,26 @@ async def create_invoice_claim(
     db.add(inv)
     await db.flush()
     await _add_activity(db, inv, user, "submitted", notes or "Invoice submitted")
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.post("/invoices/{invoice_id}/recommendation-doc", response_model=InvoiceOut)
+async def upload_recommendation_doc(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    file: UploadFile = File(...),
+):
+    """Recommendation Document PDF (GMC upload / NHIPMPL processing)."""
+    _require_pdf(file)
+    inv = await _load(db, invoice_id)
+    inv.final_bill_pdf_path = await save_upload(file, "recommendation_doc")
+    if user.role == UserRole.GOVERNMENT:
+        inv.authority_engineer = user.full_name
+        if inv.recommended_piu_amount is None and inv.recommended_amount is not None:
+            inv.recommended_piu_amount = inv.recommended_amount
+    await _add_activity(db, inv, user, "recommendation_doc", "Recommendation Document PDF uploaded")
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -489,18 +504,18 @@ async def upload_final_bill(
 async def save_invoice_diary(
     invoice_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
     note: Annotated[str, Form()],
     signature_name: Annotated[str | None, Form()] = None,
     correspondence: UploadFile | None = File(None),
 ):
     inv = await _load(db, invoice_id)
-    if user.role == UserRole.CONTRACTOR and inv.submitted_by_id != user.id:
-        raise HTTPException(status_code=403, detail="Not your invoice")
     inv.diary_note = note.strip()
     inv.diary_signature = (signature_name or user.full_name or "").strip() or None
     if correspondence and correspondence.filename:
         inv.correspondence_path = await save_upload(correspondence, "invoice_corr")
+    if user.role == UserRole.GOVERNMENT and not inv.authority_engineer:
+        inv.authority_engineer = user.full_name
     await _add_activity(db, inv, user, "diary", note.strip())
     await db.commit()
     return _out(await _load(db, inv.id))
