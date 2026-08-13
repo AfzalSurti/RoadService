@@ -473,8 +473,8 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   outline: none;
 }
 .developer-credit-logo {
-  width: 42px;
-  height: 42px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   display: block;
   border-radius: 50%;
@@ -483,12 +483,12 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   border: 0;
   background: transparent;
   padding: 0.35rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   justify-content: flex-start;
 }
 .developer-credit.compact .developer-credit-logo {
-  width: 30px;
-  height: 30px;
+  width: 52px;
+  height: 52px;
 }
 .soi-sheet { overflow: auto; }
 .soi-header {
