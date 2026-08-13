@@ -18,7 +18,7 @@ from app.services.issue_service import get_project_or_404
 
 router = APIRouter(prefix="/field", tags=["field-ops"])
 
-_FIELD_ROLES = (UserRole.SURVEYOR, UserRole.ADMIN, UserRole.GOVERNMENT)
+_FIELD_ROLES = (UserRole.SURVEYOR, UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR)
 
 
 def _ucc(project: Project) -> str:
@@ -30,11 +30,16 @@ def _ucc(project: Project) -> str:
 
 async def _assert_project_access(db: AsyncSession, user: User, project_id: int) -> Project:
     project = await get_project_or_404(db, project_id)
-    if user.role == UserRole.ADMIN or user.role == UserRole.GOVERNMENT:
+    if user.role in (UserRole.ADMIN, UserRole.GOVERNMENT):
         return project
     if user.role == UserRole.SURVEYOR:
         ids = {s.id for s in project.surveyors}
         if user.id not in ids:
+            raise HTTPException(status_code=403, detail="Not assigned to this project")
+        return project
+    if user.role == UserRole.CONTRACTOR:
+        ids = {c.id for c in project.contractors}
+        if ids and user.id not in ids:
             raise HTTPException(status_code=403, detail="Not assigned to this project")
         return project
     raise HTTPException(status_code=403, detail="Not allowed")
@@ -167,7 +172,12 @@ async def list_field_projects(
     stmt = select(Project).order_by(Project.id.desc())
     if user.role == UserRole.SURVEYOR:
         stmt = stmt.where(Project.surveyors.any(User.id == user.id))
+    elif user.role == UserRole.CONTRACTOR:
+        stmt = stmt.where(Project.contractors.any(User.id == user.id))
     rows = (await db.execute(stmt)).scalars().unique().all()
+    # Demo fallback: if contractor has no assignments, still list packages
+    if user.role == UserRole.CONTRACTOR and not rows:
+        rows = (await db.execute(select(Project).order_by(Project.id.desc()))).scalars().unique().all()
     return [
         ProjectUccOut(
             id=p.id,
@@ -189,8 +199,7 @@ async def list_ncrs(
     stmt = select(SiteNcr).order_by(SiteNcr.id.desc())
     if project_id:
         stmt = stmt.where(SiteNcr.project_id == project_id)
-    if user.role == UserRole.SURVEYOR:
-        stmt = stmt.where(SiteNcr.raised_by_id == user.id)
+    # GMC + contractor + gov see shared list (portal/mobile interlink)
     return (await db.execute(stmt)).scalars().all()
 
 
@@ -232,14 +241,35 @@ async def create_ncr(
     return row
 
 
+class StatusUpdate(BaseModel):
+    status: str = Field(min_length=2, max_length=64)
+    stage: str | None = None
+
+
+@router.patch("/ncrs/{ncr_id}/status", response_model=NcrOut)
+async def update_ncr_status(
+    ncr_id: int,
+    body: StatusUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
+):
+    row = (await db.execute(select(SiteNcr).where(SiteNcr.id == ncr_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "NCR not found")
+    row.status = body.status
+    if body.stage is not None:
+        row.stage = body.stage
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
 @router.get("/pmm", response_model=list[PmmOut])
 async def list_pmm(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
 ):
     stmt = select(PmmSurvey).order_by(PmmSurvey.id.desc())
-    if user.role == UserRole.SURVEYOR:
-        stmt = stmt.where(PmmSurvey.raised_by_id == user.id)
     return (await db.execute(stmt)).scalars().all()
 
 
@@ -265,14 +295,28 @@ async def create_pmm(
     return row
 
 
+@router.patch("/pmm/{pmm_id}/status", response_model=PmmOut)
+async def update_pmm_status(
+    pmm_id: int,
+    body: StatusUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
+):
+    row = (await db.execute(select(PmmSurvey).where(PmmSurvey.id == pmm_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "PMM not found")
+    row.status = body.status
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
 @router.get("/critical", response_model=list[CriticalOut])
 async def list_critical(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
 ):
     stmt = select(CriticalIssue).order_by(CriticalIssue.id.desc())
-    if user.role == UserRole.SURVEYOR:
-        stmt = stmt.where(CriticalIssue.raised_by_id == user.id)
     return (await db.execute(stmt)).scalars().all()
 
 
@@ -311,14 +355,28 @@ async def create_critical(
     return row
 
 
+@router.patch("/critical/{issue_id}/status", response_model=CriticalOut)
+async def update_critical_status(
+    issue_id: int,
+    body: StatusUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
+):
+    row = (await db.execute(select(CriticalIssue).where(CriticalIssue.id == issue_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Critical issue not found")
+    row.status = body.status
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
 @router.get("/warnings", response_model=list[WarningOut])
 async def list_warnings(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(*_FIELD_ROLES))],
 ):
     stmt = select(RoadWarning).order_by(RoadWarning.id.desc())
-    if user.role == UserRole.SURVEYOR:
-        stmt = stmt.where(RoadWarning.raised_by_id == user.id)
     return (await db.execute(stmt)).scalars().all()
 
 

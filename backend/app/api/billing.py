@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -138,14 +138,18 @@ async def _add_activity(db: AsyncSession, invoice: Invoice, user: User, action: 
 @router.get("/invoices", response_model=list[InvoiceOut])
 async def list_invoices(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
     project_id: int | None = None,
 ):
-    # GMC MIS Expert + NHIPMPL only (contractor uses site tools, not GMC Billing Procedures)
+    # Admin + NHIPMPL + contractor share the same billing register (interlinked)
     try:
         stmt = select(Invoice).options(selectinload(Invoice.activities)).order_by(Invoice.id.desc())
         if project_id is not None:
             stmt = stmt.where(Invoice.project_id == project_id)
+        if user.role == UserRole.CONTRACTOR:
+            stmt = stmt.where(
+                or_(Invoice.submitted_by_id == user.id, Invoice.contractor_name.ilike(f"%{user.full_name}%"))
+            )
         rows = (await db.execute(stmt)).scalars().unique().all()
         return [_out(i) for i in rows]
     except Exception as exc:  # noqa: BLE001
@@ -429,7 +433,7 @@ def _require_pdf(file: UploadFile) -> None:
 @router.post("/invoices/claim", response_model=InvoiceOut, status_code=201)
 async def create_invoice_claim(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
     project_id: Annotated[int, Form()],
     invoice_no: Annotated[str, Form()],
     invoice_date: Annotated[str, Form()],

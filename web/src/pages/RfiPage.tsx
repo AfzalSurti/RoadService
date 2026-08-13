@@ -46,7 +46,8 @@ export function RfiPage() {
   });
 
   const isAdminViewOnly = role === "admin";
-  const canRaise = role === "contractor" || role === "surveyor";
+  // Contractor + NHIPMPL raise; GMC representative (surveyor) view / answer only
+  const canRaise = role === "contractor" || role === "government";
   const canAnswer = role === "government" || role === "surveyor";
 
   useEffect(() => {
@@ -104,6 +105,19 @@ export function RfiPage() {
 
   useEffect(() => {
     void load();
+  }, [token, filters.status, filters.project_id, filters.ae_name, filters.contractor, scopedProjectId]);
+
+  useEffect(() => {
+    const refresh = () => void load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", refresh);
+    };
   }, [token, filters.status, filters.project_id, filters.ae_name, filters.contractor, scopedProjectId]);
 
   const onRaise = async (e: FormEvent) => {
@@ -189,7 +203,9 @@ export function RfiPage() {
             <p className="muted" style={{ margin: 0 }}>
               {isAdminViewOnly
                 ? "GMC MIS Expert has view-only access. Download the RFI report — raise, answer and close are not available."
-                : "Site inspection / clarification requests. Contractor raises; NHIPMPL / GMC representative answer."}
+                : role === "surveyor"
+                  ? "GMC representative: view raised RFIs and answer — you cannot raise new RFIs."
+                  : "Contractor and NHIPMPL can raise RFIs. GMC representative answers. Lists stay in sync with the mobile app."}
             </p>
           </div>
           {canRaise ? (

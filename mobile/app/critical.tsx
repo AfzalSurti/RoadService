@@ -11,23 +11,27 @@ import {
   View,
 } from "react-native";
 import { SelectSheet } from "../components/SelectSheet";
+import { PackageCheckboxes } from "../components/PackageCheckboxes";
+import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { api, type CriticalIssue, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { matchProjectsToPackages } from "../lib/packages";
 
 const TYPES = ["Contractual Obligations", "Structure", "Road Safety", "Others"];
 const STATUSES = ["new", "ongoing", "resolved"];
 const PRIORITIES = ["high", "medium", "low"];
 
 export default function CriticalScreen() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [rows, setRows] = useState<CriticalIssue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [step, setStep] = useState<"list" | "ucc" | "form">("list");
-  const [projectId, setProjectId] = useState<number | null>(null);
-  const [sheet, setSheet] = useState<"ucc" | "type" | "status" | "priority" | null>(null);
+  const [step, setStep] = useState<"list" | "form">("list");
+  const [pkgs, setPkgs] = useState<string[]>([]);
+  const [sheet, setSheet] = useState<"type" | "status" | "priority" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [form, setForm] = useState({
     description: "",
     issue_type: "",
@@ -39,6 +43,9 @@ export default function CriticalScreen() {
     priority: "high",
     remarks: "",
   });
+
+  const canRaise = role === "surveyor" || role === "admin";
+  const canAct = role === "contractor" || role === "surveyor" || role === "admin";
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -61,7 +68,6 @@ export default function CriticalScreen() {
     }, [load])
   );
 
-  const selected = projects.find((p) => p.id === projectId);
   const summary = useMemo(
     () => ({
       total: rows.length,
@@ -82,28 +88,45 @@ export default function CriticalScreen() {
   }, [form.chainage_from, form.chainage_to]);
 
   const save = async () => {
-    if (!token || !projectId) return;
+    if (!token) return;
+    if (!pkgs.length) {
+      setError("Select at least one package");
+      return;
+    }
     if (form.description.trim().length < 5 || !form.issue_type || !form.concerned_authority.trim()) {
       setError("Description, issue type and concerned authority are required");
+      return;
+    }
+    const matched = matchProjectsToPackages(projects, pkgs);
+    const targets = matched.length ? matched : projects.slice(0, 1);
+    if (!targets.length) {
+      setError("No project for selected package");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await api.raiseCritical(token, {
-        project_id: projectId,
-        description: form.description.trim(),
-        issue_type: form.issue_type,
-        status: form.status,
-        expected_resolution: form.expected_resolution || undefined,
-        concerned_authority: form.concerned_authority.trim(),
-        chainage_from: form.chainage_from || undefined,
-        chainage_to: form.chainage_to || undefined,
-        total_length_km: lengthKm === "--" ? undefined : Number(lengthKm),
-        priority: form.priority,
-        remarks: form.remarks.trim() || undefined,
-      });
+      const mediaNote = media
+        .map((m) => `[${m.kind}] ${m.uri}${m.lat != null ? ` @${m.lat.toFixed(5)},${m.lng?.toFixed(5)}` : ""}`)
+        .join("\n");
+      for (const p of targets) {
+        await api.raiseCritical(token, {
+          project_id: p.id,
+          description: form.description.trim(),
+          issue_type: form.issue_type,
+          status: form.status,
+          expected_resolution: form.expected_resolution || undefined,
+          concerned_authority: form.concerned_authority.trim(),
+          chainage_from: form.chainage_from || undefined,
+          chainage_to: form.chainage_to || undefined,
+          total_length_km: lengthKm === "--" ? undefined : Number(lengthKm),
+          priority: form.priority,
+          remarks: [`Packages: ${pkgs.join(", ")}`, form.remarks.trim(), mediaNote].filter(Boolean).join("\n") || undefined,
+        });
+      }
       setStep("list");
+      setPkgs([]);
+      setMedia([]);
       setForm({
         description: "",
         issue_type: "",
@@ -123,49 +146,21 @@ export default function CriticalScreen() {
     }
   };
 
-  if (step === "ucc") {
-    return (
-      <View style={st.page}>
-        <Stack.Screen options={{ title: "Select UCC" }} />
-        <Pressable style={st.select} onPress={() => setSheet("ucc")}>
-          <Text style={selected ? st.val : st.ph}>{selected?.ucc || selected?.name || "Search UCC"}</Text>
-        </Pressable>
-        {selected ? <Text style={st.meta}>{selected.name}</Text> : null}
-        {error ? <Text style={st.err}>{error}</Text> : null}
-        <View style={st.row}>
-          <Pressable style={st.ghost} onPress={() => setStep("list")}>
-            <Text style={st.ghostText}>Cancel</Text>
-          </Pressable>
-          <Pressable style={[st.primary, !projectId && st.off]} disabled={!projectId} onPress={() => setStep("form")}>
-            <Text style={st.primaryText}>Raise New Critical Issue</Text>
-          </Pressable>
-        </View>
-        <SelectSheet
-          visible={sheet === "ucc"}
-          title="Select UCC"
-          searchPlaceholder="Search UCC"
-          options={projects.map((p) => ({
-            id: String(p.id),
-            label: p.ucc || `N/${String(p.id).padStart(5, "0")}/MH`,
-            hint: p.name,
-          }))}
-          value={projectId ? String(projectId) : null}
-          onClose={() => setSheet(null)}
-          onConfirm={(id) => {
-            setProjectId(Number(id));
-            setSheet(null);
-          }}
-        />
-      </View>
-    );
-  }
+  const setStatus = async (id: number, status: string) => {
+    if (!token || !canAct) return;
+    try {
+      await api.updateCriticalStatus(token, id, status);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
 
   if (step === "form") {
     return (
-      <ScrollView contentContainerStyle={st.page}>
+      <ScrollView contentContainerStyle={st.page} keyboardShouldPersistTaps="handled">
         <Stack.Screen options={{ title: "Raise Critical Issue" }} />
-        <Text style={st.val}>{selected?.ucc || `N/${projectId}`}</Text>
-        <Text style={st.meta}>{selected?.name}</Text>
+        <PackageCheckboxes selected={pkgs} onChange={setPkgs} label="Select package(s) *" />
         <Text style={st.label}>Issue Description *</Text>
         <TextInput
           style={[st.input, { minHeight: 80 }]}
@@ -220,6 +215,7 @@ export default function CriticalScreen() {
           onChangeText={(t) => setForm({ ...form, remarks: t })}
           multiline
         />
+        <MediaAttach items={media} onChange={setMedia} />
         {error ? <Text style={st.err}>{error}</Text> : null}
         <View style={st.row}>
           <Pressable style={st.ghost} onPress={() => setStep("list")}>
@@ -282,9 +278,13 @@ export default function CriticalScreen() {
           </View>
         ))}
       </View>
-      <Pressable style={st.primary} onPress={() => setStep("ucc")}>
-        <Text style={st.primaryText}>Raise Critical Issue</Text>
-      </Pressable>
+      {canRaise ? (
+        <Pressable style={st.primary} onPress={() => setStep("form")}>
+          <Text style={st.primaryText}>Raise Critical Issue</Text>
+        </Pressable>
+      ) : (
+        <Text style={st.meta}>View / update status — only GMC representative can raise.</Text>
+      )}
       {error ? <Text style={st.err}>{error}</Text> : null}
       <FlatList
         data={rows}
@@ -307,6 +307,24 @@ export default function CriticalScreen() {
             </Text>
             <Text numberOfLines={2}>{item.description}</Text>
             <Text style={st.meta}>{item.concerned_authority}</Text>
+            {item.remarks ? (
+              <Text style={st.meta} numberOfLines={2}>
+                {item.remarks}
+              </Text>
+            ) : null}
+            {canAct ? (
+              <View style={st.chips}>
+                {STATUSES.map((s) => (
+                  <Pressable
+                    key={s}
+                    style={[st.chip, item.status === s && st.chipOn]}
+                    onPress={() => setStatus(item.id, s)}
+                  >
+                    <Text style={[st.chipText, item.status === s && { color: "#fff" }]}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </View>
         )}
         ListEmptyComponent={<Text style={st.meta}>No critical issues yet.</Text>}
@@ -325,9 +343,15 @@ const st = StyleSheet.create({
   kpiDark: { backgroundColor: "#12355a" },
   kpiVal: { fontWeight: "800", fontSize: 20, color: "#12355a" },
   kpiLab: { fontSize: 12, color: "#556", textAlign: "center" },
-  primary: { backgroundColor: "#1a4b8c", borderRadius: 12, padding: 14, alignItems: "center", marginBottom: 10, flex: 1 },
+  primary: {
+    backgroundColor: "#1a4b8c",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 10,
+    flex: 1,
+  },
   primaryText: { color: "#fff", fontWeight: "800", textAlign: "center" },
-  off: { backgroundColor: "#cfd6df" },
   ghost: {
     flex: 1,
     borderWidth: 1,
@@ -343,9 +367,28 @@ const st = StyleSheet.create({
   val: { fontWeight: "800", color: "#111", marginBottom: 4 },
   meta: { color: "#667", marginBottom: 6 },
   err: { color: "#b91c1c", marginBottom: 8 },
-  select: { borderWidth: 1, borderColor: "#d5dbe3", borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: "#fff" },
+  select: {
+    borderWidth: 1,
+    borderColor: "#d5dbe3",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: "#fff",
+  },
   ph: { color: "#8b97a8" },
-  input: { borderWidth: 1, borderColor: "#d5dbe3", borderRadius: 10, padding: 12, backgroundColor: "#fff", marginBottom: 10, color: "#111" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#d5dbe3",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#fff",
+    marginBottom: 10,
+    color: "#111",
+  },
   row: { flexDirection: "row", gap: 8 },
   label: { fontWeight: "700", color: "#334", marginBottom: 6 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  chip: { borderWidth: 1, borderColor: "#1a4b8c", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  chipOn: { backgroundColor: "#1a4b8c" },
+  chipText: { color: "#1a4b8c", fontSize: 12, fontWeight: "700" },
 });

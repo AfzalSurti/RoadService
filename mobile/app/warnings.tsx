@@ -4,28 +4,33 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { SelectSheet } from "../components/SelectSheet";
+import { MediaAttach, type MediaItem } from "../components/MediaAttach";
+import { PackageCheckboxes } from "../components/PackageCheckboxes";
 import { api, type Project, type RoadWarning } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { matchProjectsToPackages } from "../lib/packages";
 
 export default function WarningsScreen() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [rows, setRows] = useState<RoadWarning[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [show, setShow] = useState(false);
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const [pkgs, setPkgs] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [chainage, setChainage] = useState("");
   const [note, setNote] = useState("");
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [busy, setBusy] = useState(false);
-  const [sheet, setSheet] = useState(false);
+
+  const canRaise = role === "surveyor" || role === "admin";
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -36,12 +41,11 @@ export default function WarningsScreen() {
       ]);
       setRows(list);
       setProjects(proj);
-      if (proj[0] && !projectId) setProjectId(proj[0].id);
       setError(null);
     } catch (e: any) {
       setError(e.message);
     }
-  }, [token, projectId]);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,22 +54,46 @@ export default function WarningsScreen() {
   );
 
   const save = async () => {
-    if (!token || !projectId || title.trim().length < 3) {
-      setError("Project and title are required");
+    if (!token || title.trim().length < 3) {
+      setError("Title is required");
+      return;
+    }
+    if (!pkgs.length) {
+      setError("Select at least one package");
+      return;
+    }
+    const matched = matchProjectsToPackages(projects, pkgs);
+    const targets =
+      matched.length > 0
+        ? matched
+        : projects[0]
+          ? [{ ...projects[0], name: pkgs[0] }]
+          : [];
+    if (!targets.length) {
+      setError("No projects available for selected packages");
       return;
     }
     setBusy(true);
+    setError(null);
     try {
-      await api.raiseWarning(token, {
-        project_id: projectId,
-        title: title.trim(),
-        chainage: chainage.trim() || undefined,
-        note: note.trim() || undefined,
-      });
+      const mediaNote = media
+        .map((m) => `[${m.kind}] ${m.uri}${m.lat != null ? ` @${m.lat.toFixed(5)},${m.lng?.toFixed(5)}` : ""}`)
+        .join("\n");
+      for (const p of targets) {
+        const pkgLabel = pkgs.find((x) => p.name.includes(x.split(" - ")[0])) || pkgs.join(", ");
+        await api.raiseWarning(token, {
+          project_id: p.id,
+          title: title.trim(),
+          chainage: chainage.trim() || undefined,
+          note: [`Package: ${pkgLabel}`, note.trim(), mediaNote].filter(Boolean).join("\n"),
+        });
+      }
       setShow(false);
       setTitle("");
       setChainage("");
       setNote("");
+      setPkgs([]);
+      setMedia([]);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -77,21 +105,28 @@ export default function WarningsScreen() {
   return (
     <View style={st.page}>
       <Stack.Screen options={{ title: "Road Warnings" }} />
-      <Pressable style={st.primary} onPress={() => setShow((v) => !v)}>
-        <Text style={st.primaryText}>{show ? "Close" : "+ Raise warning"}</Text>
-      </Pressable>
+      {canRaise ? (
+        <Pressable style={st.primary} onPress={() => setShow((v) => !v)}>
+          <Text style={st.primaryText}>{show ? "Close" : "+ Raise warning"}</Text>
+        </Pressable>
+      ) : null}
       {show ? (
-        <View style={st.card}>
-          <Pressable style={st.select} onPress={() => setSheet(true)}>
-            <Text>{projects.find((p) => p.id === projectId)?.name || "Select project"}</Text>
-          </Pressable>
+        <ScrollView style={st.card} keyboardShouldPersistTaps="handled">
+          <PackageCheckboxes selected={pkgs} onChange={setPkgs} />
           <TextInput style={st.input} placeholder="Warning title" value={title} onChangeText={setTitle} />
           <TextInput style={st.input} placeholder="Chainage" value={chainage} onChangeText={setChainage} />
-          <TextInput style={[st.input, { minHeight: 70 }]} placeholder="Note" value={note} onChangeText={setNote} multiline />
+          <TextInput
+            style={[st.input, { minHeight: 70 }]}
+            placeholder="Note"
+            value={note}
+            onChangeText={setNote}
+            multiline
+          />
+          <MediaAttach items={media} onChange={setMedia} />
           <Pressable style={st.primary} disabled={busy} onPress={save}>
             <Text style={st.primaryText}>{busy ? "Saving…" : "Save"}</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       ) : null}
       {error ? <Text style={st.err}>{error}</Text> : null}
       <FlatList
@@ -122,17 +157,6 @@ export default function WarningsScreen() {
       <Pressable style={st.ghost} onPress={() => router.back()}>
         <Text style={st.ghostText}>Back</Text>
       </Pressable>
-      <SelectSheet
-        visible={sheet}
-        title="Project"
-        options={projects.map((p) => ({ id: String(p.id), label: p.ucc || p.name, hint: p.name }))}
-        value={projectId ? String(projectId) : null}
-        onClose={() => setSheet(false)}
-        onConfirm={(id) => {
-          setProjectId(Number(id));
-          setSheet(false);
-        }}
-      />
     </View>
   );
 }
@@ -145,8 +169,21 @@ const st = StyleSheet.create({
   title: { fontWeight: "800", color: "#111", marginBottom: 4 },
   meta: { color: "#667", marginBottom: 4 },
   err: { color: "#b91c1c", marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: "#d5dbe3", borderRadius: 10, padding: 12, marginBottom: 8, backgroundColor: "#fff" },
-  select: { borderWidth: 1, borderColor: "#d5dbe3", borderRadius: 10, padding: 12, marginBottom: 8 },
-  ghost: { borderWidth: 1, borderColor: "#1a4b8c", borderRadius: 12, padding: 12, alignItems: "center", backgroundColor: "#fff" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#d5dbe3",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+  },
+  ghost: {
+    borderWidth: 1,
+    borderColor: "#1a4b8c",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
   ghostText: { color: "#1a4b8c", fontWeight: "700" },
 });

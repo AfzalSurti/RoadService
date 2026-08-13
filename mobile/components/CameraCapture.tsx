@@ -1,7 +1,11 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+
+// Touch file-system native module so AppDirectories is linked with expo-camera.
+void FileSystem.cacheDirectory;
 
 export type CapturedPhoto = {
   uri: string;
@@ -12,6 +16,9 @@ export type CapturedPhoto = {
 type Props = {
   onCapture: (photo: CapturedPhoto) => void;
   onCancel?: () => void;
+  /** front = selfie, back = site photo */
+  facing?: "front" | "back";
+  hint?: string;
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -50,9 +57,15 @@ async function readGps(): Promise<{ lat: number; lng: number }> {
 }
 
 /**
- * Camera-only capture. GPS is read with a short timeout so shutter never hangs.
+ * Camera-only capture. Requires expo-file-system (native) for takePicture on Android.
+ * Rebuild the app after adding that dependency (EAS / npx expo run:android).
  */
-export function CameraCapture({ onCapture, onCancel }: Props) {
+export function CameraCapture({
+  onCapture,
+  onCancel,
+  facing = "back",
+  hint,
+}: Props) {
   const camRef = useRef<CameraView>(null);
   const gpsRef = useRef<Promise<{ lat: number; lng: number }> | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -89,26 +102,63 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const photoPromise = withTimeout(
-        camRef.current.takePictureAsync({
-          quality: 0.5,
-          skipProcessing: true,
-        }) as Promise<{ uri?: string } | undefined>,
-        8000,
-        "Camera"
-      );
-      const gpsPromise = gpsRef.current ?? readGps();
-      const [photo, gps] = await Promise.all([photoPromise, gpsPromise]);
-      if (!photo?.uri) throw new Error("Capture failed");
+      // Prefer base64 + write when native AppDirectories is missing (older builds).
+      let uri: string | undefined;
+      try {
+        const photo = await withTimeout(
+          camRef.current.takePictureAsync({
+            quality: 0.5,
+            skipProcessing: true,
+            exif: false,
+          }) as Promise<{ uri?: string; base64?: string } | undefined>,
+          10000,
+          "Camera"
+        );
+        uri = photo?.uri;
+        if (!uri && photo?.base64 && FileSystem.cacheDirectory) {
+          const dest = `${FileSystem.cacheDirectory}capture-${Date.now()}.jpg`;
+          await FileSystem.writeAsStringAsync(dest, photo.base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          uri = dest;
+        }
+      } catch (first: unknown) {
+        const msg = first instanceof Error ? first.message : String(first);
+        if (msg.includes("AppDirectories") || msg.includes("filesystem")) {
+          const photo = await withTimeout(
+            camRef.current.takePictureAsync({
+              quality: 0.4,
+              base64: true,
+              skipProcessing: true,
+              exif: false,
+            }) as Promise<{ uri?: string; base64?: string } | undefined>,
+            12000,
+            "Camera"
+          );
+          if (photo?.base64 && FileSystem.cacheDirectory) {
+            const dest = `${FileSystem.cacheDirectory}capture-${Date.now()}.jpg`;
+            await FileSystem.writeAsStringAsync(dest, photo.base64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            uri = dest;
+          } else {
+            uri = photo?.uri;
+          }
+        } else {
+          throw first;
+        }
+      }
+      if (!uri) throw new Error("Capture failed — rebuild the app with expo-file-system linked.");
 
-      onCapture({
-        uri: photo.uri,
-        lat: gps.lat,
-        lng: gps.lng,
-      });
+      const gps = await (gpsRef.current ?? readGps());
+      onCapture({ uri, lat: gps.lat, lng: gps.lng });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Capture failed";
-      setError(message);
+      setError(
+        message.includes("AppDirectories")
+          ? "Camera native module needs a rebuild. Install expo-file-system and run a new EAS/Android build."
+          : message
+      );
     } finally {
       setBusy(false);
     }
@@ -116,10 +166,12 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <CameraView ref={camRef} style={styles.camera} facing="back" />
+      <CameraView ref={camRef} style={styles.camera} facing={facing} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.hint}>
-        {busy ? "Taking photo and reading GPS…" : "Tap once. Photo + GPS, then you can submit."}
+        {busy
+          ? "Taking photo and reading GPS…"
+          : hint || "Tap once. Photo + GPS, then you can submit."}
       </Text>
       <Pressable style={[styles.shutter, busy && { opacity: 0.5 }]} onPress={take} disabled={busy}>
         <Text style={styles.btnText}>{busy ? "Capturing…" : "Capture photo + GPS"}</Text>

@@ -94,7 +94,7 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
         updated_at=row.updated_at,
         can_answer=can_answer,
         can_close=can_close and row.status != "closed",
-        can_raise=user.role in (UserRole.CONTRACTOR, UserRole.SURVEYOR),
+        can_raise=user.role in (UserRole.CONTRACTOR, UserRole.GOVERNMENT),
     )
 
 
@@ -162,7 +162,7 @@ async def get_rfi(
 @router.post("", response_model=RfiOut, status_code=201)
 async def raise_rfi(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.GOVERNMENT))],
     project_id: Annotated[int, Form()],
     subject: Annotated[str, Form(min_length=3)],
     description: Annotated[str, Form(min_length=5)],

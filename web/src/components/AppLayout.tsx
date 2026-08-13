@@ -14,6 +14,7 @@ export function AppLayout() {
   const [unread, setUnread] = useState(0);
   const staff = role === "admin" || role === "contractor" || role === "government";
   const adminGov = role === "admin" || role === "government";
+  const billingRoles = role === "admin" || role === "government" || role === "contractor";
 
   useEffect(() => {
     if (!token) return;
@@ -51,7 +52,7 @@ export function AppLayout() {
           {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
           {staff ? <NavLink to="/executive">Executive</NavLink> : null}
           <NavLink to="/issues">Issues</NavLink>
-          {adminGov ? <NavLink to="/billing">Billing</NavLink> : null}
+          {billingRoles ? <NavLink to="/billing">Billing</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
           {role === "government" ? <NavLink to="/attendance">Attendance</NavLink> : null}

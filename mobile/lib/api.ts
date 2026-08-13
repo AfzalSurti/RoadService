@@ -90,6 +90,7 @@ export type PmmSurvey = {
   survey_date: string | null;
   remarks: string | null;
   lane_length_km: number | null;
+  distress_json?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -229,14 +230,22 @@ export const api = {
 
   punchAttendance: (
     token: string,
-    body: { latitude?: number; longitude?: number; project_id?: number }
+    body: {
+      latitude?: number;
+      longitude?: number;
+      project_id?: number;
+      punch_type?: "in" | "out";
+      selfie_uri?: string;
+    }
   ) => {
     const qs = new URLSearchParams();
     if (body.latitude != null) qs.set("latitude", String(body.latitude));
     if (body.longitude != null) qs.set("longitude", String(body.longitude));
     if (body.project_id != null) qs.set("project_id", String(body.project_id));
+    if (body.punch_type) qs.set("punch_type", body.punch_type);
+    if (body.selfie_uri) qs.set("selfie_note", body.selfie_uri.slice(0, 400));
     const q = qs.toString();
-    return request<{ id: number; in_time?: string | null }>(
+    return request<{ id: number; in_time?: string | null; out_time?: string | null }>(
       `/api/v1/nhit/attendance/punch${q ? `?${q}` : ""}`,
       { method: "POST", token }
     );
@@ -296,8 +305,20 @@ export const api = {
   pmmList: (token: string) => request<PmmSurvey[]>("/api/v1/field/pmm", { token }),
   raisePmm: (
     token: string,
-    body: { project_id: number; remarks?: string; lane_length_km?: number }
+    body: {
+      project_id: number;
+      remarks?: string;
+      lane_length_km?: number;
+      distress_json?: string;
+      survey_date?: string;
+    }
   ) => request<PmmSurvey>("/api/v1/field/pmm", { method: "POST", token, body: JSON.stringify(body) }),
+  updatePmmStatus: (token: string, id: number, status: string) =>
+    request<PmmSurvey>(`/api/v1/field/pmm/${id}/status`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ status }),
+    }),
   criticalList: (token: string) => request<CriticalIssue[]>("/api/v1/field/critical", { token }),
   raiseCritical: (
     token: string,
@@ -319,6 +340,18 @@ export const api = {
       method: "POST",
       token,
       body: JSON.stringify(body),
+    }),
+  updateCriticalStatus: (token: string, id: number, status: string) =>
+    request<CriticalIssue>(`/api/v1/field/critical/${id}/status`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ status }),
+    }),
+  updateNcrStatus: (token: string, id: number, status: string, stage?: string) =>
+    request<SiteNcr>(`/api/v1/field/ncrs/${id}/status`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ status, stage }),
     }),
   warnings: (token: string) => request<RoadWarning[]>("/api/v1/field/warnings", { token }),
   raiseWarning: (

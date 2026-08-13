@@ -1,28 +1,58 @@
 {
   "expo": {
-    "name": "RoadService",
-    "slug": "roadservice",
+    "name": "Invit",
+    "slug": "invit",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "roadservice",
+    "scheme": "invit",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b2a43"
+    },
     "android": {
-      "usesCleartextTraffic": true
+      "package": "com.invit.app",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b2a43"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "extra": {
+      "apiUrl": "https://roadservice.onrender.com",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "84a9b009-2c75-4f81-9a46-22a3f5e68410"
+      }
     },
     "plugins": [
       "expo-router",
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow RoadService to capture issue photos."
+          "cameraPermission": "Allow Invit to capture issue photos.",
+          "microphonePermission": "Allow Invit to record short site videos.",
+          "recordAudioAndroid": true
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow RoadService to attach GPS to photos."
+          "locationWhenInUsePermission": "Allow Invit to attach GPS to photos."
         }
       ],
+      "expo-file-system",
       "expo-asset",
       "expo-font"
     ],

@@ -522,11 +522,13 @@ async def list_attendance(
 @router.post("/attendance/punch", status_code=201)
 async def punch_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN, UserRole.GOVERNMENT))],
     project_id: int | None = None,
     latitude: float | None = None,
     longitude: float | None = None,
     status_value: str = "present",
+    punch_type: str = "in",
+    selfie_note: str | None = None,
 ):
     code = f"USER-{user.id}"
     person = (await db.execute(select(Personnel).where(Personnel.employee_code == code))).scalar_one_or_none()
@@ -542,18 +544,52 @@ async def punch_attendance(
         db.add(person)
         await db.flush()
     now = datetime.now(timezone.utc)
-    row = AttendanceRecord(
-        personnel_id=person.id,
-        work_date=date.today(),
-        status=status_value,
-        in_time=now.strftime("%H:%M"),
-        latitude=latitude,
-        longitude=longitude,
-        biometric_verified=False,
-        shift_name="General",
-        notes="Punched from mobile app",
-    )
-    db.add(row)
+    time_str = now.strftime("%H:%M")
+    note_bits = ["Punched from mobile app"]
+    if punch_type:
+        note_bits.append(f"punch={punch_type}")
+    if selfie_note:
+        note_bits.append(f"selfie={selfie_note[:400]}")
+
+    today = date.today()
+    existing = (
+        await db.execute(
+            select(AttendanceRecord)
+            .where(AttendanceRecord.personnel_id == person.id, AttendanceRecord.work_date == today)
+            .order_by(AttendanceRecord.id.desc())
+        )
+    ).scalars().first()
+
+    if punch_type == "out" and existing:
+        existing.out_time = time_str
+        if latitude is not None:
+            existing.latitude = latitude
+        if longitude is not None:
+            existing.longitude = longitude
+        existing.notes = " | ".join(note_bits)
+        if existing.in_time:
+            try:
+                ih, im = map(int, existing.in_time.split(":")[:2])
+                oh, om = map(int, time_str.split(":")[:2])
+                existing.working_hours = max(0, (oh * 60 + om - ih * 60 - im) / 60)
+            except ValueError:
+                pass
+        row = existing
+    else:
+        row = AttendanceRecord(
+            personnel_id=person.id,
+            work_date=today,
+            status=status_value,
+            in_time=time_str if punch_type != "out" else None,
+            out_time=time_str if punch_type == "out" else None,
+            latitude=latitude,
+            longitude=longitude,
+            biometric_verified=bool(selfie_note),
+            shift_name="General",
+            notes=" | ".join(note_bits),
+        )
+        db.add(row)
+
     await write_audit(db, actor_id=user.id, action="attendance_punch", entity_type="attendance", entity_id=str(person.id))
     await db.commit()
     await db.refresh(row)

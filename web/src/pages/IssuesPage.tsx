@@ -42,6 +42,18 @@ export function IssuesPage() {
   }, [token, status, projectId]);
 
   useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", load);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", load);
+    };
+  }, [token, status, projectId]);
+
+  useEffect(() => {
     const el = document.getElementById("page-title");
     if (el) el.textContent = projectId ? `Issues · Project #${projectId}` : "Issues";
   }, [projectId]);

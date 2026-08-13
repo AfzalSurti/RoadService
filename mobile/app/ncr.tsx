@@ -18,7 +18,7 @@ const CATS = ["Highway", "Structure", "Drainage", "Safety", "Others"];
 const SIDES = ["LHS", "RHS", "Median"];
 
 export default function NcrScreen() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const params = useLocalSearchParams<{ rfiId?: string; projectId?: string }>();
   const [rows, setRows] = useState<SiteNcr[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -43,6 +43,9 @@ export default function NcrScreen() {
     rectification_duration: "",
     block: false,
   });
+
+  const canRaise = role === "surveyor" || role === "admin";
+  const canAct = role === "contractor" || role === "surveyor" || role === "admin";
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -288,9 +291,13 @@ export default function NcrScreen() {
           </View>
         ))}
       </View>
-      <Pressable style={st.primary} onPress={() => setStep("project")}>
-        <Text style={st.primaryText}>+ Raise New NCR</Text>
-      </Pressable>
+      {canRaise ? (
+        <Pressable style={st.primary} onPress={() => setStep("project")}>
+          <Text style={st.primaryText}>+ Raise New NCR</Text>
+        </Pressable>
+      ) : (
+        <Text style={st.meta}>Contractor: view NCRs and update status. Only GMC representative can raise.</Text>
+      )}
       {error ? <Text style={st.err}>{error}</Text> : null}
       <FlatList
         data={rows}
@@ -314,6 +321,47 @@ export default function NcrScreen() {
               {item.chainage_end ? ` to ${item.chainage_end}` : ""}
             </Text>
             <Text numberOfLines={2}>{item.description}</Text>
+            {canAct ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {(
+                  [
+                    ["open", "Open"],
+                    ["closed", "Closed"],
+                  ] as const
+                ).map(([s, lab]) => (
+                  <Pressable
+                    key={s}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#1a4b8c",
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      backgroundColor: item.status === s ? "#1a4b8c" : "#fff",
+                    }}
+                    onPress={async () => {
+                      if (!token) return;
+                      try {
+                        await api.updateNcrStatus(token, item.id, s);
+                        await load();
+                      } catch (e: any) {
+                        setError(e.message);
+                      }
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: item.status === s ? "#fff" : "#1a4b8c",
+                        fontWeight: "700",
+                        fontSize: 12,
+                      }}
+                    >
+                      {lab}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </View>
         )}
         ListEmptyComponent={<Text style={st.meta}>No Data Found.</Text>}

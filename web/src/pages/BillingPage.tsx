@@ -45,7 +45,7 @@ function nhipmplRecommendedBy(inv: Invoice) {
 
 export function BillingPage() {
   const { token, role, isReadonly, fullName } = useAuth();
-  const canUpload = role === "admin" && !isReadonly;
+  const canUpload = (role === "admin" || role === "government") && !isReadonly;
   const canProcess = (role === "admin" || role === "government") && !isReadonly;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -121,6 +121,19 @@ export function BillingPage() {
 
   useEffect(() => {
     void load();
+  }, [token]);
+
+  useEffect(() => {
+    const refresh = () => void load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", refresh);
+    };
   }, [token]);
 
   const counts = useMemo(

@@ -32,8 +32,9 @@ export default function RfiScreen() {
     priority: "medium",
   });
 
-  const canRaise = role === "contractor" || role === "surveyor" || role === "admin";
-  const canAnswer = role === "surveyor" || role === "admin" || role === "government";
+  // GMC representative (surveyor): view only. Contractor + NHIPMPL (government) can raise.
+  const canRaise = role === "contractor" || role === "government";
+  const canAnswer = role === "surveyor" || role === "government";
 
   const load = useCallback(async () => {
     if (!token) return;
