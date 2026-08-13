@@ -40,7 +40,6 @@ export function AppLayout() {
           <button className="linkish theme-link" type="button" onClick={toggleTheme}>
             Switch to {theme === "dark" ? "Light" : "Dark"} mode
           </button>
-          <DeveloperCredit className="compact sidebar-credit-top" />
         </div>
         <nav>
           <NavLink to="/dashboard" end>
@@ -93,6 +92,7 @@ export function AppLayout() {
       <main className="main">
         <div className="topbar">
           <h1 id="page-title">RoadService</h1>
+          <DeveloperCredit className="navbar" />
           <div className="topbar-user">
             <span className="topbar-name">{fullName}</span>
             <small>{roleLabel(role)}</small>

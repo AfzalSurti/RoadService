@@ -49,10 +49,19 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
+      <header className="portal-topnav">
         <Link to="/" className="brand">
           Road<span>Service</span>
         </Link>
+        <DeveloperCredit className="navbar" />
+        <Link className="btn ghost" to="/">
+          Back to home
+        </Link>
+      </header>
+      <div className="login-card">
+        <h1 className="brand login-title">
+          Sign in
+        </h1>
         <p className="muted">
           Web dashboard for NHIPMPL representative, GMC Experts (MIS Expert), and Contractors
         </p>
@@ -118,10 +127,6 @@ export function LoginPage() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
-        <p className="login-back">
-          <Link to="/">← Back to home</Link>
-        </p>
-        <DeveloperCredit />
       </div>
     </div>
   );

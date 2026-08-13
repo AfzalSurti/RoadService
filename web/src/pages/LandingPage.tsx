@@ -19,6 +19,7 @@ export function LandingPage() {
         <div className="brand landing-brand">
           Road<span>Service</span>
         </div>
+        <DeveloperCredit className="navbar landing-nav-credit" />
         <div className="landing-nav-actions">
           <Link className="btn ghost landing-btn-ghost" to="/login">
             Sign in
@@ -104,7 +105,6 @@ export function LandingPage() {
           </div>
           <Link to="/login">Sign in</Link>
         </div>
-        <DeveloperCredit />
       </footer>
     </div>
   );
