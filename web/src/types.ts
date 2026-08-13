@@ -320,6 +320,7 @@ export type PortalQueryTicket = {
   resolved_by_id: number | null;
   resolved_at: string | null;
   attachment_path?: string | null;
+  attachment_paths?: string[];
   created_at: string;
   updated_at: string;
   can_resolve: boolean;

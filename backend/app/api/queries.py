@@ -1,5 +1,8 @@
 """Portal Query Raise (tickets) — raise and resolve workflow for portal operations."""
 
+from __future__ import annotations
+
+import json
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -9,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.models.enums import UserRole
 from app.models.portal_ops import PortalQueryComment, PortalQueryTicket
 from app.models.project import Project
@@ -34,6 +37,8 @@ MODULE_AREAS = [
 ]
 
 STATUSES = {"open", "in_progress", "resolved", "closed"}
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic")
+MAX_ATTACHMENTS = 4
 
 
 class QueryRaiseIn(BaseModel):
@@ -84,10 +89,33 @@ class QueryTicketOut(BaseModel):
     resolved_by_id: int | None
     resolved_at: datetime | None
     attachment_path: str | None = None
+    attachment_paths: list[str] = []
     created_at: datetime
     updated_at: datetime
     can_resolve: bool = False
     comments: list[QueryCommentOut] = []
+
+
+def _parse_paths(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    text = raw.strip()
+    if text.startswith("["):
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                return [str(x) for x in data if x]
+        except json.JSONDecodeError:
+            pass
+    return [text]
+
+
+def _dump_paths(paths: list[str]) -> str | None:
+    if not paths:
+        return None
+    if len(paths) == 1:
+        return paths[0]
+    return json.dumps(paths)
 
 
 def _can_resolve(user: User) -> bool:
@@ -95,6 +123,7 @@ def _can_resolve(user: User) -> bool:
 
 
 def _out(row: PortalQueryTicket, user: User, comments: list[PortalQueryComment] | None = None) -> QueryTicketOut:
+    paths = _parse_paths(row.attachment_path)
     return QueryTicketOut(
         id=row.id,
         ticket_no=row.ticket_no,
@@ -109,7 +138,8 @@ def _out(row: PortalQueryTicket, user: User, comments: list[PortalQueryComment] 
         resolution_note=row.resolution_note,
         resolved_by_id=row.resolved_by_id,
         resolved_at=row.resolved_at,
-        attachment_path=row.attachment_path,
+        attachment_path=paths[0] if paths else None,
+        attachment_paths=paths,
         created_at=row.created_at,
         updated_at=row.updated_at,
         can_resolve=_can_resolve(user) and row.status in ("open", "in_progress"),
@@ -195,6 +225,7 @@ async def raise_query(
     module_area: Annotated[str, Form()] = "billing",
     priority: Annotated[str, Form()] = "medium",
     project_id: Annotated[int | None, Form()] = None,
+    attachments: Annotated[list[UploadFile] | None, File()] = None,
     attachment: UploadFile | None = File(None),
 ):
     area = module_area.strip().lower().replace(" ", "_")
@@ -212,12 +243,22 @@ async def raise_query(
     count = (await db.execute(select(func.count(PortalQueryTicket.id)))).scalar_one() + 1
     ticket_no = f"QR-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{count:04d}"
 
-    attachment_path = None
+    files: list[UploadFile] = []
+    if attachments:
+        files.extend([f for f in attachments if f and f.filename])
     if attachment and attachment.filename:
-        name = (attachment.filename or "").lower()
-        if not any(name.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic")):
+        files.append(attachment)
+    if len(files) > MAX_ATTACHMENTS:
+        raise HTTPException(400, f"Maximum {MAX_ATTACHMENTS} images allowed")
+    if not files:
+        raise HTTPException(400, "At least one image / screenshot is required (max 4)")
+
+    paths: list[str] = []
+    for upload in files:
+        name = (upload.filename or "").lower()
+        if not any(name.endswith(ext) for ext in IMAGE_EXTS):
             raise HTTPException(400, "Only image / screenshot files are allowed")
-        attachment_path = await save_upload(attachment, "query_shot")
+        paths.append(await save_upload(upload, "query_shot"))
 
     row = PortalQueryTicket(
         ticket_no=ticket_no,
@@ -228,7 +269,7 @@ async def raise_query(
         priority=prio,
         status="open",
         raised_by_id=user.id,
-        attachment_path=attachment_path,
+        attachment_path=_dump_paths(paths),
     )
     db.add(row)
     await db.flush()

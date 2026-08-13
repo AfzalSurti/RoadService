@@ -26,7 +26,7 @@ export function QueriesPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [resolveNote, setResolveNote] = useState("");
   const [comment, setComment] = useState("");
-  const [shotFile, setShotFile] = useState<File | null>(null);
+  const [shotFiles, setShotFiles] = useState<File[]>([]);
 
   const canResolve = role === "admin" || role === "government";
   const canRaise = !isReadonly && (role === "admin" || role === "government" || role === "contractor");
@@ -88,17 +88,29 @@ export function QueriesPage() {
     setError(null);
     setMsg(null);
     try {
+      if (!shotFiles.length) {
+        setError("Upload at least 1 image / screenshot (max 4)");
+        setBusy(false);
+        return;
+      }
+      if (shotFiles.length > 4) {
+        setError("Maximum 4 images allowed");
+        setBusy(false);
+        return;
+      }
       const fd = new FormData();
       fd.append("subject", form.subject.trim());
       fd.append("description", form.description.trim());
       fd.append("module_area", form.module_area);
       fd.append("priority", form.priority);
       if (form.project_id) fd.append("project_id", form.project_id);
-      if (shotFile) fd.append("attachment", shotFile);
+      for (const file of shotFiles) {
+        fd.append("attachments", file);
+      }
       const created = await api.raiseQuery(token, fd);
       setShowRaise(false);
       setForm(empty);
-      setShotFile(null);
+      setShotFiles([]);
       setMsg(`Ticket ${created.ticket_no} raised`);
       await load();
       setSelected(created);
@@ -213,17 +225,20 @@ export function QueriesPage() {
               </p>
               <h3 style={{ fontSize: "0.95rem" }}>{selected.subject}</h3>
               <p style={{ whiteSpace: "pre-wrap" }}>{selected.description}</p>
-              {selected.attachment_path ? (
+              {(selected.attachment_paths?.length || selected.attachment_path) ? (
                 <div style={{ marginBottom: "0.75rem" }}>
-                  <strong>Attached screenshot</strong>
-                  <div>
-                    <a href={mediaUrl(selected.attachment_path)} target="_blank" rel="noreferrer">
-                      <img
-                        src={mediaUrl(selected.attachment_path)}
-                        alt="Query screenshot"
-                        style={{ maxWidth: "100%", maxHeight: 240, marginTop: 8, borderRadius: 8 }}
-                      />
-                    </a>
+                  <strong>Attached screenshots</strong>
+                  <div className="query-shot-grid">
+                    {(selected.attachment_paths?.length
+                      ? selected.attachment_paths
+                      : selected.attachment_path
+                        ? [selected.attachment_path]
+                        : []
+                    ).map((path) => (
+                      <a key={path} href={mediaUrl(path)} target="_blank" rel="noreferrer">
+                        <img src={mediaUrl(path)} alt="Query screenshot" />
+                      </a>
+                    ))}
                   </div>
                 </div>
               ) : null}
@@ -435,12 +450,29 @@ export function QueriesPage() {
                 />
               </label>
               <label className="span-2">
-                Image / screenshot (optional)
+                Images / screenshots * (max 4)
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => setShotFile(e.target.files?.[0] || null)}
+                  multiple
+                  required
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files || []);
+                    if (picked.length > 4) {
+                      setError("Maximum 4 images allowed");
+                      setShotFiles(picked.slice(0, 4));
+                      e.target.value = "";
+                      return;
+                    }
+                    setError(null);
+                    setShotFiles(picked);
+                  }}
                 />
+                <small className="muted">
+                  {shotFiles.length
+                    ? `${shotFiles.length} selected: ${shotFiles.map((f) => f.name).join(", ")}`
+                    : "Choose up to 4 image files"}
+                </small>
               </label>
             </div>
             <div className="btn-row" style={{ marginTop: "1rem" }}>

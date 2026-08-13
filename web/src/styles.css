@@ -217,6 +217,19 @@ a.stat .stat-hint {
   margin: 0.25rem 0 0;
   color: var(--muted);
 }
+.query-shot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+}
+.query-shot-grid img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
 
 .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
 .pill {
