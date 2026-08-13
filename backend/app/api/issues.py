@@ -38,8 +38,50 @@ def _assert_verifier(user: User) -> None:
 
 
 def _to_out(issue: Issue) -> IssueOut:
-    data = IssueOut.model_validate(issue)
-    data.remaining_days = remaining_days(issue.deadline_date)
+    """Build IssueOut without touching deferred columns that may be missing in older DBs."""
+    data = IssueOut(
+        id=issue.id,
+        project_id=issue.project_id,
+        issue_type=issue.issue_type,
+        work_category=issue.work_category,
+        description=issue.description,
+        priority=issue.priority,
+        status=issue.status,
+        chainage=issue.chainage,
+        lane=None,
+        side=None,
+        carriageway=None,
+        is_critical=False,
+        start_chainage=None,
+        end_chainage=None,
+        voice_note=None,
+        before_photo_path=issue.before_photo_path,
+        before_lat=issue.before_lat,
+        before_lng=issue.before_lng,
+        completion_photo_path=issue.completion_photo_path,
+        completion_lat=issue.completion_lat,
+        completion_lng=issue.completion_lng,
+        completion_remarks=issue.completion_remarks,
+        completed_at=issue.completed_at,
+        verification_photo_path=issue.verification_photo_path,
+        verification_lat=issue.verification_lat,
+        verification_lng=issue.verification_lng,
+        verified_at=issue.verified_at,
+        deadline_days=issue.deadline_days,
+        deadline_date=issue.deadline_date,
+        remaining_days=remaining_days(issue.deadline_date),
+        reported_by_id=issue.reported_by_id,
+        assigned_contractor_id=issue.assigned_contractor_id,
+        created_at=issue.created_at,
+        updated_at=issue.updated_at,
+        status_history=list(issue.status_history or []),
+        rejection_history=list(issue.rejection_history or []),
+    )
+    # Prefer live values when migration columns exist (already loaded / not deferred).
+    state = getattr(issue, "__dict__", {})
+    for key in ("lane", "side", "carriageway", "is_critical", "start_chainage", "end_chainage", "voice_note"):
+        if key in state:
+            setattr(data, key, state[key])
     defect = DEFECT_BY_ID.get(issue.issue_type)
     data.issue_type_label = defect.label if defect else issue.issue_type
     data.work_category_label = _CATEGORY_NAMES.get(issue.work_category, issue.work_category)
@@ -66,8 +108,16 @@ async def list_issues(
         stmt = stmt.where(Issue.assigned_contractor_id == user.id)
     elif user.role == UserRole.SURVEYOR:
         stmt = stmt.where(Issue.reported_by_id == user.id)
-    result = await db.execute(stmt)
-    return [_to_out(i) for i in result.scalars().all()]
+    try:
+        result = await db.execute(stmt)
+        return [_to_out(i) for i in result.scalars().all()]
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        # Missing migration columns used to 500 without a clear body (browser shows CORS).
+        raise HTTPException(
+            status_code=500,
+            detail=f"Issues list failed (run Neon SQL migrations 018/019): {exc}",
+        ) from exc
 
 
 @router.post("", response_model=IssueOut, status_code=201)

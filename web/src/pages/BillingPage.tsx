@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
@@ -34,22 +34,10 @@ export function BillingPage() {
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
-  const [form, setForm] = useState({
-    project_id: "",
-    invoice_no: "",
-    invoice_date: new Date().toISOString().slice(0, 10),
-    payment_type: "Stage Payment Statement for Works",
-    amount: "",
-    contract_amount_cr: "",
-    cumulative_cr: "",
-    bill_from: "",
-    bill_to: "",
-  });
   const [recommend, setRecommend] = useState({
     payment_mode: "full",
     recommended_amount: "",
@@ -63,7 +51,6 @@ export function BillingPage() {
   const [diaryNote, setDiaryNote] = useState("");
   const [diarySign, setDiarySign] = useState("");
   const [diaryFile, setDiaryFile] = useState<File | null>(null);
-  const [claimPdf, setClaimPdf] = useState<File | null>(null);
   const [openActionId, setOpenActionId] = useState<number | null>(null);
 
   const load = async () => {
@@ -127,47 +114,6 @@ export function BillingPage() {
   useEffect(() => {
     setPage(1);
   }, [filter, search, pageSize]);
-
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!token || isReadonly || role !== "admin") return;
-    setBusy(true);
-    setError(null);
-    try {
-      const fd = new FormData();
-      fd.append("project_id", form.project_id);
-      fd.append("invoice_no", form.invoice_no.trim());
-      fd.append("invoice_date", form.invoice_date);
-      fd.append("payment_type", form.payment_type.trim());
-      fd.append("this_bill_amount", form.amount || "0");
-      fd.append("cumulative_amount", form.cumulative_cr || form.amount || "0");
-      if (form.bill_from) fd.append("bill_from", form.bill_from);
-      if (form.bill_to) fd.append("bill_to", form.bill_to);
-      if (form.contract_amount_cr) fd.append("contract_amount_cr", form.contract_amount_cr);
-      if (claimPdf) fd.append("bill_pdf", claimPdf);
-      const created = await api.createInvoiceClaim(token, fd);
-      setSelected(created);
-      setDiaryOpen("after_submit");
-      setShowCreate(false);
-      setClaimPdf(null);
-      setForm({
-        project_id: "",
-        invoice_no: "",
-        invoice_date: new Date().toISOString().slice(0, 10),
-        payment_type: "Stage Payment Statement for Works",
-        amount: "",
-        contract_amount_cr: "",
-        cumulative_cr: "",
-        bill_from: "",
-        bill_to: "",
-      });
-      await load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -268,11 +214,6 @@ export function BillingPage() {
           <h2 style={{ margin: "0.2rem 0 0" }}>Invoice Processing</h2>
         </div>
         <div className="btn-row">
-          {role === "admin" && !isReadonly ? (
-            <button className="btn" type="button" onClick={() => setShowCreate(true)}>
-              New
-            </button>
-          ) : null}
           <button className="btn secondary" type="button" onClick={() => setFilter("all")}>
             FILTER
           </button>
@@ -447,13 +388,36 @@ export function BillingPage() {
                   </td>
                   <td>{inv.voucher_no || "0"}</td>
                   <td>
-                    {inv.final_bill_pdf_path ? (
-                      <a href={mediaUrl(inv.final_bill_pdf_path)} target="_blank" rel="noreferrer">
-                        Open PDF
-                      </a>
-                    ) : (
-                      "—"
-                    )}
+                    <div className="final-bill-cell">
+                      {inv.final_bill_pdf_path ? (
+                        <a href={mediaUrl(inv.final_bill_pdf_path)} target="_blank" rel="noreferrer">
+                          Open PDF
+                        </a>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                      {role === "admin" || role === "government" ? (
+                        <label className="upload-icon-btn" title="Upload final bill PDF">
+                          ⬆
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            hidden
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!token || !file || isReadonly) return;
+                              try {
+                                await api.uploadFinalBill(token, inv.id, file);
+                                await load();
+                              } catch (err: unknown) {
+                                setError(err instanceof Error ? err.message : "PDF upload failed");
+                              }
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -775,118 +739,6 @@ export function BillingPage() {
             </div>
           ) : null}
         </section>
-      ) : null}
-
-      {showCreate && role === "admin" ? (
-        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
-          <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onCreate}>
-            <h2>Details of payment being claimed now</h2>
-            <p className="muted">Only GMC MIS Expert can fill this. After Submit, the diary opens for a signed note.</p>
-            <div className="form-grid">
-              <label>
-                Project
-                <select
-                  required
-                  value={form.project_id}
-                  onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                >
-                  <option value="">Select…</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Contract Amount (Rs. in Cr.)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.contract_amount_cr}
-                  onChange={(e) => setForm({ ...form, contract_amount_cr: e.target.value })}
-                />
-              </label>
-              <label>
-                Cumulative payment received till date (Rs. in Cr.)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.cumulative_cr}
-                  onChange={(e) => setForm({ ...form, cumulative_cr: e.target.value })}
-                />
-              </label>
-              <label>
-                Invoice no
-                <input
-                  required
-                  value={form.invoice_no}
-                  onChange={(e) => setForm({ ...form, invoice_no: e.target.value })}
-                />
-              </label>
-              <label>
-                Invoice date
-                <input
-                  type="date"
-                  required
-                  value={form.invoice_date}
-                  onChange={(e) => setForm({ ...form, invoice_date: e.target.value })}
-                />
-              </label>
-              <label>
-                Payment type
-                <input
-                  required
-                  value={form.payment_type}
-                  onChange={(e) => setForm({ ...form, payment_type: e.target.value })}
-                />
-              </label>
-              <label>
-                Invoice Absolute Amount ₹
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                />
-              </label>
-              <label>
-                Invoice duration from
-                <input
-                  type="date"
-                  value={form.bill_from}
-                  onChange={(e) => setForm({ ...form, bill_from: e.target.value })}
-                />
-              </label>
-              <label>
-                Invoice duration to
-                <input
-                  type="date"
-                  value={form.bill_to}
-                  onChange={(e) => setForm({ ...form, bill_to: e.target.value })}
-                />
-              </label>
-              <label className="span-2">
-                Upload invoice (PDF)
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={(e) => setClaimPdf(e.target.files?.[0] || null)}
-                />
-              </label>
-            </div>
-            <div className="btn-row">
-              <button className="btn" type="submit" disabled={busy}>
-                Submit
-              </button>
-              <button type="button" className="btn ghost" onClick={() => setShowCreate(false)}>
-                Back to Grid
-              </button>
-            </div>
-          </form>
-        </div>
       ) : null}
 
       {diaryOpen !== "none" && selected ? (

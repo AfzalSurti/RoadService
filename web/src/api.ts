@@ -448,6 +448,12 @@ export const api = {
   createMpr: (token: string, form: FormData) =>
     request<MprReport>("/api/v1/mpr", { method: "POST", token, body: form }),
 
+  uploadMprPdf: (token: string, id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("pdf_file", file);
+    return request<MprReport>(`/api/v1/mpr/${id}/pdf`, { method: "POST", token, body: fd });
+  },
+
   staffMeta: (token: string) => request<StaffMeta>("/api/v1/staff-details/meta", { token }),
 
   staffDetails: (token: string, organization?: string) =>

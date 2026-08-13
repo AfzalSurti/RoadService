@@ -243,7 +243,10 @@ async def list_folders(
 ):
     if user.role == UserRole.SURVEYOR:
         raise HTTPException(status_code=403, detail="Surveyors use mobile field tools")
-    await _ensure_folder_tree(db)
+    try:
+        await _ensure_folder_tree(db)
+    except Exception:
+        await db.rollback()
 
     folders = (
         await db.execute(select(DocumentFolder).order_by(DocumentFolder.sort_order, DocumentFolder.id))
@@ -274,10 +277,16 @@ async def seed_folders(
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     # Force rebuild only if empty; otherwise return current
-    await _ensure_folder_tree(db)
-    await write_audit(db, actor_id=user.id, action="document_folders_seed", entity_type="document_folder", entity_id="tree")
-    await db.commit()
-    return {"ok": True, "message": "Document folder tree ready"}
+    try:
+        await _ensure_folder_tree(db)
+        await write_audit(
+            db, actor_id=user.id, action="document_folders_seed", entity_type="document_folder", entity_id="tree"
+        )
+        await db.commit()
+        return {"ok": True, "message": "Document folder tree ready"}
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Could not set up folders: {exc}") from exc
 
 
 @docs_router.post("/folders", response_model=DocumentFolderOut, status_code=201)
@@ -620,6 +629,61 @@ async def create_mpr(
         entity_type="mpr",
         entity_id=str(row.id),
         detail=package_name,
+    )
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@mpr_router.post("/{mpr_id}/pdf", response_model=MprOut)
+async def upload_mpr_pdf(
+    mpr_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.ADMIN))],
+    pdf_file: UploadFile = File(...),
+):
+    row = (
+        await db.execute(select(MonthlyProgressReport).where(MonthlyProgressReport.id == mpr_id))
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="MPR not found")
+    if not pdf_file.filename:
+        raise HTTPException(status_code=400, detail="PDF file required")
+    pdf_path = await save_upload(pdf_file, "mpr_pdf")
+    row.pdf_path = pdf_path
+
+    if row.folder_id:
+        doc = PortalDocument(
+            project_id=row.project_id,
+            folder_id=row.folder_id,
+            category="Monthly Progress Report (MPR)",
+            title=f"MPR {row.package_name} {row.report_month}",
+            description=row.last_remarks,
+            file_path=pdf_path,
+            uploaded_by_id=user.id,
+            current_version=1,
+            approval_status="draft",
+            classification="internal",
+            watermark_text="CONFIDENTIAL — RoadService",
+        )
+        db.add(doc)
+        await db.flush()
+        db.add(
+            DocumentVersion(
+                document_id=doc.id,
+                version_no=1,
+                file_path=pdf_path,
+                change_note="MPR PDF upload",
+                uploaded_by_id=user.id,
+            )
+        )
+
+    await write_audit(
+        db,
+        actor_id=user.id,
+        action="mpr_pdf_upload",
+        entity_type="mpr",
+        entity_id=str(row.id),
     )
     await db.commit()
     await db.refresh(row)

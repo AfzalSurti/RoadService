@@ -19,8 +19,21 @@ const empty = {
   last_remarks: "",
 };
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function MprPage() {
-  const { token, role, isReadonly } = useAuth();
+  const { token, fullName, role, isReadonly } = useAuth();
   const canEdit = role === "contractor" && !isReadonly;
   const [projects, setProjects] = useState<Project[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -30,6 +43,9 @@ export function MprPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reportBusy, setReportBusy] = useState<"daily" | "weekly" | null>(null);
+  const [preparedBy, setPreparedBy] = useState(fullName || "");
+  const [reportProjectId, setReportProjectId] = useState("");
 
   const packageProjects = useMemo(() => {
     const byName = new Map(projects.map((p) => [p.name, p]));
@@ -74,6 +90,26 @@ export function MprPage() {
     void load();
   }, [token]);
 
+  const downloadPeriod = async (period: "daily" | "weekly") => {
+    if (!token) return;
+    setReportBusy(period);
+    setError(null);
+    setMsg(null);
+    try {
+      const blob = await api.exportExcel(token, {
+        period_type: period,
+        prepared_by: preparedBy.trim() || fullName || "RoadService user",
+        project_id: reportProjectId ? Number(reportProjectId) : undefined,
+      });
+      downloadBlob(blob, `roadservice_${period}_report_${isoToday()}.xlsx`);
+      setMsg(period === "daily" ? "Daily report downloaded." : "Weekly report downloaded.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Report download failed");
+    } finally {
+      setReportBusy(null);
+    }
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !canEdit) return;
@@ -117,6 +153,44 @@ export function MprPage() {
     <>
       {error ? <div className="error">{error}</div> : null}
       {msg ? <div className="ok">{msg}</div> : null}
+
+      <section className="panel">
+        <h2>Daily &amp; Weekly reports</h2>
+        <p className="muted">
+          Merged here with MPR — quick Excel downloads for today’s issues or the current week
+          (Monday–Sunday).
+        </p>
+        <div className="form-grid" style={{ marginBottom: "0.75rem" }}>
+          <label>
+            Prepared by
+            <input value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} />
+          </label>
+          <label>
+            Project (optional)
+            <select value={reportProjectId} onChange={(e) => setReportProjectId(e.target.value)}>
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="btn-row">
+          <button className="btn" type="button" disabled={!!reportBusy} onClick={() => void downloadPeriod("daily")}>
+            {reportBusy === "daily" ? "Preparing…" : "Download Daily Report"}
+          </button>
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={!!reportBusy}
+            onClick={() => void downloadPeriod("weekly")}
+          >
+            {reportBusy === "weekly" ? "Preparing…" : "Download Weekly Report"}
+          </button>
+        </div>
+      </section>
 
       <section className="panel">
         <h2>Three package folders (MPR)</h2>
@@ -230,12 +304,15 @@ export function MprPage() {
               />
             </label>
             <label className="span-2">
-              Import PDF file
+              Upload MPR PDF
               <input
                 type="file"
                 accept="application/pdf,.pdf"
                 onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
               />
+              <small className="muted">
+                {pdfFile ? pdfFile.name : "Choose a PDF file (optional but recommended)"}
+              </small>
             </label>
             <div className="span-2">
               <button className="btn" type="submit" disabled={busy}>
@@ -267,17 +344,44 @@ export function MprPage() {
               <tr key={r.id}>
                 <td>{r.package_name}</td>
                 <td>{String(r.report_month).slice(0, 10)}</td>
-                <td>{vendors.find((v) => v.id === r.vendor_id)?.name || (r.vendor_id ? `#${r.vendor_id}` : "—")}</td>
+                <td>
+                  {vendors.find((v) => v.id === r.vendor_id)?.name ||
+                    (r.vendor_id ? `#${r.vendor_id}` : "—")}
+                </td>
                 <td>{r.physical_progress || "—"}</td>
                 <td>{r.financial_progress || "—"}</td>
                 <td>
-                  {r.pdf_path ? (
-                    <a href={mediaUrl(r.pdf_path)} target="_blank" rel="noreferrer">
-                      Open PDF
-                    </a>
-                  ) : (
-                    "—"
-                  )}
+                  <div className="final-bill-cell">
+                    {r.pdf_path ? (
+                      <a href={mediaUrl(r.pdf_path)} target="_blank" rel="noreferrer">
+                        Open PDF
+                      </a>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                    {(canEdit || role === "admin") && !isReadonly ? (
+                      <label className="upload-icon-btn" title="Upload MPR PDF">
+                        ⬆
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          hidden
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!token || !file) return;
+                            try {
+                              await api.uploadMprPdf(token, r.id, file);
+                              await load();
+                              setMsg("MPR PDF uploaded.");
+                            } catch (err: unknown) {
+                              setError(err instanceof Error ? err.message : "PDF upload failed");
+                            }
+                          }}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}

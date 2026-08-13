@@ -24,13 +24,13 @@ class Issue(Base):
         pg_enum(IssueStatus, "issue_status"), default=IssueStatus.OPEN, index=True
     )
     chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    lane: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    side: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    carriageway: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    is_critical: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    start_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    end_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    voice_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lane: Mapped[str | None] = mapped_column(String(32), nullable=True, deferred=True)
+    side: Mapped[str | None] = mapped_column(String(32), nullable=True, deferred=True)
+    carriageway: Mapped[str | None] = mapped_column(String(64), nullable=True, deferred=True)
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, deferred=True)
+    start_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True, deferred=True)
+    end_chainage: Mapped[str | None] = mapped_column(String(64), nullable=True, deferred=True)
+    voice_note: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
 
     # Before (creation) — surveyor
     before_photo_path: Mapped[str] = mapped_column(String(1024), nullable=False)
