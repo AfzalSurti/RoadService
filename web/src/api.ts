@@ -80,8 +80,10 @@ export const api = {
 
   me: (token: string) => request<User>("/api/v1/auth/me", { token }),
 
-  dashboard: (token: string) =>
-    request<DashboardStats>("/api/v1/analytics/dashboard", { token }),
+  dashboard: (token: string, projectId?: number | null) => {
+    const q = projectId ? `?project_id=${projectId}` : "";
+    return request<DashboardStats>(`/api/v1/analytics/dashboard${q}`, { token });
+  },
 
   projects: (token: string) => request<Project[]>("/api/v1/projects", { token }),
 
@@ -518,10 +520,11 @@ export const api = {
       { token }
     ),
 
-  queries: (token: string, status?: string, moduleArea?: string) => {
+  queries: (token: string, status?: string, moduleArea?: string, projectId?: number | null) => {
     const qs = new URLSearchParams();
     if (status) qs.set("status", status);
     if (moduleArea) qs.set("module_area", moduleArea);
+    if (projectId) qs.set("project_id", String(projectId));
     const q = qs.toString();
     return request<PortalQueryTicket[]>(`/api/v1/queries${q ? `?${q}` : ""}`, { token });
   },

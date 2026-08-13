@@ -1016,17 +1016,28 @@ def _drawing_out(row: ExecutiveDrawing) -> dict[str, Any]:
 
 @router.get("/executive/drawings")
 async def list_drawings(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(get_current_user)]):
-    rows = (await db.execute(select(ExecutiveDrawing).order_by(ExecutiveDrawing.id))).scalars().all()
-    items = [_drawing_out(r) for r in rows]
-    totals = {k: sum(int(i["counts"][k]) for i in items) for k in DRAWING_KEYS}
-    return {
-        "keys": DRAWING_KEYS,
-        "items": items,
-        "totals": totals,
-        "grand_total": sum(totals.values()),
-        "regions": sorted({i["region"] for i in items if i["region"]}),
-        "aes": sorted({i["ae_name"] for i in items if i["ae_name"]}),
-    }
+    try:
+        rows = (await db.execute(select(ExecutiveDrawing).order_by(ExecutiveDrawing.id))).scalars().all()
+        items = [_drawing_out(r) for r in rows]
+        totals = {k: sum(int(i["counts"][k]) for i in items) for k in DRAWING_KEYS}
+        return {
+            "keys": DRAWING_KEYS,
+            "items": items,
+            "totals": totals,
+            "grand_total": sum(totals.values()),
+            "regions": sorted({i["region"] for i in items if i["region"]}),
+            "aes": sorted({i["ae_name"] for i in items if i["ae_name"]}),
+        }
+    except Exception:
+        await db.rollback()
+        return {
+            "keys": DRAWING_KEYS,
+            "items": [],
+            "totals": {k: 0 for k in DRAWING_KEYS},
+            "grand_total": 0,
+            "regions": [],
+            "aes": [],
+        }
 
 
 # ---- Seed demo data ----

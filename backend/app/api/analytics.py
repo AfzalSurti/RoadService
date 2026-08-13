@@ -50,34 +50,43 @@ def _status_key(status: object) -> str:
 async def dashboard_stats(
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
+    project_id: int | None = None,
 ):
     total_projects = (await db.execute(select(func.count(Project.id)))).scalar_one()
-    total_issues = (await db.execute(select(func.count(Issue.id)))).scalar_one()
 
-    status_rows = (
-        await db.execute(select(Issue.status, func.count(Issue.id)).group_by(Issue.status))
-    ).all()
+    issue_filter = []
+    if project_id is not None:
+        issue_filter.append(Issue.project_id == project_id)
+
+    total_issues = (
+        await db.execute(select(func.count(Issue.id)).where(*issue_filter))
+    ).scalar_one()
+
+    status_stmt = select(Issue.status, func.count(Issue.id)).group_by(Issue.status)
+    if project_id is not None:
+        status_stmt = status_stmt.where(Issue.project_id == project_id)
+    status_rows = (await db.execute(status_stmt)).all()
     by_status = {s.value: 0 for s in IssueStatus}
     for status, count in status_rows:
         by_status[_status_key(status)] = count
 
     # Only load columns needed for KPIs — avoids 500 if newer issue columns
     # (lane/side/etc.) are not migrated on the remote DB yet.
-    issues = (
-        await db.execute(
-            select(Issue).options(
-                load_only(
-                    Issue.id,
-                    Issue.status,
-                    Issue.deadline_date,
-                    Issue.verified_at,
-                    Issue.created_at,
-                    Issue.assigned_contractor_id,
-                    Issue.reported_by_id,
-                )
-            )
+    issue_stmt = select(Issue).options(
+        load_only(
+            Issue.id,
+            Issue.status,
+            Issue.deadline_date,
+            Issue.verified_at,
+            Issue.created_at,
+            Issue.assigned_contractor_id,
+            Issue.reported_by_id,
+            Issue.project_id,
         )
-    ).scalars().all()
+    )
+    if project_id is not None:
+        issue_stmt = issue_stmt.where(Issue.project_id == project_id)
+    issues = (await db.execute(issue_stmt)).scalars().all()
     delayed = sum(
         1 for i in issues if remaining_days(i.deadline_date) < 0 and i.status != IssueStatus.CLOSED
     )
@@ -88,28 +97,30 @@ async def dashboard_stats(
         days = [(i.verified_at.date() - i.created_at.date()).days for i in closed]
         avg_resolution = round(sum(days) / len(days), 2)
 
-    on_time = sum(1 for i in closed if i.verified_at and i.verified_at.date() <= i.deadline_date)
+    on_time = sum(
+        1
+        for i in closed
+        if i.verified_at and i.deadline_date and i.verified_at.date() <= i.deadline_date
+    )
     compliance = round((on_time / len(closed)) * 100, 1) if closed else None
 
-    contractor_rows = (
-        await db.execute(
-            select(
-                Issue.assigned_contractor_id,
-                func.count(Issue.id),
-                func.sum(case((Issue.status == IssueStatus.CLOSED, 1), else_=0)),
-            ).group_by(Issue.assigned_contractor_id)
-        )
-    ).all()
+    contractor_stmt = select(
+        Issue.assigned_contractor_id,
+        func.count(Issue.id),
+        func.sum(case((Issue.status == IssueStatus.CLOSED, 1), else_=0)),
+    ).group_by(Issue.assigned_contractor_id)
+    if project_id is not None:
+        contractor_stmt = contractor_stmt.where(Issue.project_id == project_id)
+    contractor_rows = (await db.execute(contractor_stmt)).all()
     contractor_performance = [
         {"contractor_id": cid, "total": total, "closed": int(closed_n or 0)}
         for cid, total, closed_n in contractor_rows
     ]
 
-    surveyor_rows = (
-        await db.execute(
-            select(Issue.reported_by_id, func.count(Issue.id)).group_by(Issue.reported_by_id)
-        )
-    ).all()
+    surveyor_stmt = select(Issue.reported_by_id, func.count(Issue.id)).group_by(Issue.reported_by_id)
+    if project_id is not None:
+        surveyor_stmt = surveyor_stmt.where(Issue.project_id == project_id)
+    surveyor_rows = (await db.execute(surveyor_stmt)).all()
     surveyor_performance = [{"surveyor_id": sid, "reported": count} for sid, count in surveyor_rows]
 
     total_invoices = 0
@@ -119,18 +130,45 @@ async def dashboard_stats(
     boq_total = 0.0
     exec_total = 0.0
     try:
-        total_invoices = (await db.execute(select(func.count(Invoice.id)))).scalar_one()
-        inv_rows = (
-            await db.execute(select(Invoice.status, func.count(Invoice.id)).group_by(Invoice.status))
-        ).all()
+        inv_stmt = select(func.count(Invoice.id))
+        if project_id is not None:
+            inv_stmt = inv_stmt.where(Invoice.project_id == project_id)
+        total_invoices = (await db.execute(inv_stmt)).scalar_one()
+        inv_status_stmt = select(Invoice.status, func.count(Invoice.id)).group_by(Invoice.status)
+        if project_id is not None:
+            inv_status_stmt = inv_status_stmt.where(Invoice.project_id == project_id)
+        inv_rows = (await db.execute(inv_status_stmt)).all()
         invoices_by_status = {_status_key(s): c for s, c in inv_rows}
-        total_documents = (await db.execute(select(func.count(PortalDocument.id)))).scalar_one()
-        total_vendors = (await db.execute(select(func.count(Vendor.id)))).scalar_one()
+
+        doc_stmt = select(func.count(PortalDocument.id))
+        if project_id is not None:
+            doc_stmt = doc_stmt.where(PortalDocument.project_id == project_id)
+        total_documents = (await db.execute(doc_stmt)).scalar_one()
+
+        vendor_stmt = select(func.count(Vendor.id))
+        if project_id is not None:
+            vendor_stmt = vendor_stmt.where(
+                (Vendor.project_id == project_id) | (Vendor.project_id.is_(None))
+            )
+        total_vendors = (await db.execute(vendor_stmt)).scalar_one()
+
+        rate_filter = []
+        if project_id is not None:
+            rate_filter.append(RateItem.project_id == project_id)
         boq_total = float(
-            (await db.execute(select(func.coalesce(func.sum(RateItem.boq_amount), 0)))).scalar_one() or 0
+            (
+                await db.execute(
+                    select(func.coalesce(func.sum(RateItem.boq_amount), 0)).where(*rate_filter)
+                )
+            ).scalar_one()
+            or 0
         )
         exec_total = float(
-            (await db.execute(select(func.coalesce(func.sum(RateItem.executed_amount), 0)))).scalar_one()
+            (
+                await db.execute(
+                    select(func.coalesce(func.sum(RateItem.executed_amount), 0)).where(*rate_filter)
+                )
+            ).scalar_one()
             or 0
         )
     except Exception:
@@ -138,7 +176,7 @@ async def dashboard_stats(
         await db.rollback()
 
     return DashboardStats(
-        total_projects=total_projects,
+        total_projects=1 if project_id is not None else total_projects,
         total_issues=total_issues,
         by_status=by_status,
         delayed_issues=delayed,

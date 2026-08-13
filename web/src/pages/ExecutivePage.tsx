@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { resolveProjectId } from "../lib/projectScope";
 
 type Row = Record<string, unknown>;
 type DrawingItem = {
@@ -41,6 +42,8 @@ function money(n: number) {
 
 export function ExecutivePage() {
   const { token, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const scopedProjectId = resolveProjectId(searchParams.get("project"));
   const [tab, setTab] = useState<"overview" | "itf" | "drawings">("drawings");
   const [overview, setOverview] = useState<Row | null>(null);
   const [snaps, setSnaps] = useState<Row[]>([]);
@@ -61,23 +64,36 @@ export function ExecutivePage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Executive Summary";
-  }, []);
+    if (el) {
+      el.textContent = scopedProjectId
+        ? `Executive Summary · Project #${scopedProjectId}`
+        : "Executive Summary";
+    }
+  }, [scopedProjectId]);
 
   const load = async () => {
     if (!token) return;
     try {
       const [o, s, d, devices, inc] = await Promise.all([
-        api.nhitGet<Row>(token, "/executive/overview"),
-        api.nhitGet<Row[]>(token, "/executive"),
-        api.nhitGet<{
-          items: DrawingItem[];
-          totals: Record<string, number>;
-          grand_total: number;
-          regions: string[];
-          aes: string[];
-          keys: string[];
-        }>(token, "/executive/drawings"),
+        api.nhitGet<Row>(token, "/executive/overview").catch(() => null),
+        api.nhitGet<Row[]>(token, "/executive").catch(() => [] as Row[]),
+        api
+          .nhitGet<{
+            items: DrawingItem[];
+            totals: Record<string, number>;
+            grand_total: number;
+            regions: string[];
+            aes: string[];
+            keys: string[];
+          }>(token, "/executive/drawings")
+          .catch(() => ({
+            items: [] as DrawingItem[],
+            totals: {} as Record<string, number>,
+            grand_total: 0,
+            regions: [] as string[],
+            aes: [] as string[],
+            keys: [] as string[],
+          })),
         api.nhitGet<Row[]>(token, "/its").catch(() => [] as Row[]),
         api.nhitGet<Row[]>(token, "/incidents").catch(() => [] as Row[]),
       ]);

@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
+import { resolveProjectId } from "../lib/projectScope";
 import type { PortalQueryTicket, Project } from "../types";
 
 const empty = {
@@ -14,6 +16,8 @@ const empty = {
 
 export function QueriesPage() {
   const { token, role, isReadonly } = useAuth();
+  const [searchParams] = useSearchParams();
+  const projectId = resolveProjectId(searchParams.get("project"));
   const [tickets, setTickets] = useState<PortalQueryTicket[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<PortalQueryTicket | null>(null);
@@ -43,13 +47,16 @@ export function QueriesPage() {
     if (!token) return;
     try {
       const [list, proj, meta] = await Promise.all([
-        api.queries(token, filterStatus || undefined),
+        api.queries(token, filterStatus || undefined, undefined, projectId),
         api.projects(token),
         api.queryMeta(token),
       ]);
       setTickets(list);
       setProjects(proj);
       setMetaAreas(meta.module_areas || []);
+      if (projectId && !form.project_id) {
+        setForm((f) => ({ ...f, project_id: String(projectId) }));
+      }
       setError(null);
       if (selected) {
         const fresh = await api.getQuery(token, selected.id).catch(() => null);
@@ -62,12 +69,12 @@ export function QueriesPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Query Raise";
-  }, []);
+    if (el) el.textContent = projectId ? `Query Raise · Project #${projectId}` : "Query Raise";
+  }, [projectId]);
 
   useEffect(() => {
     void load();
-  }, [token, filterStatus]);
+  }, [token, filterStatus, projectId]);
 
   const openTicket = async (id: number) => {
     if (!token) return;

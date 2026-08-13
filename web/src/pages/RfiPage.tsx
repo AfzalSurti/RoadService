@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
+import { resolveProjectId } from "../lib/projectScope";
 import type { Issue, Project, SiteRfi } from "../types";
 
 const empty = {
@@ -22,6 +23,8 @@ const REPORT_VIEWS = ["RFI View", "RFI ScheduleH View", "Stake Holder View"];
 
 export function RfiPage() {
   const { token, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const scopedProjectId = resolveProjectId(searchParams.get("project"));
   const [rows, setRows] = useState<SiteRfi[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -36,7 +39,7 @@ export function RfiPage() {
   const [reportView, setReportView] = useState("RFI View");
   const [filters, setFilters] = useState({
     ae_name: "",
-    project_id: "",
+    project_id: scopedProjectId ? String(scopedProjectId) : "",
     contractor: "",
     status: "",
   });
@@ -44,6 +47,13 @@ export function RfiPage() {
   const isAdminViewOnly = role === "admin";
   const canRaise = role === "contractor" || role === "surveyor";
   const canAnswer = role === "government" || role === "surveyor";
+
+  useEffect(() => {
+    if (scopedProjectId) {
+      setFilters((f) => ({ ...f, project_id: String(scopedProjectId) }));
+      setForm((f) => ({ ...f, project_id: String(scopedProjectId) }));
+    }
+  }, [scopedProjectId]);
 
   const aeOptions = useMemo(() => {
     const set = new Set<string>();
@@ -58,16 +68,19 @@ export function RfiPage() {
 
   const load = async () => {
     if (!token) return;
+    const projectFilter = filters.project_id
+      ? Number(filters.project_id)
+      : scopedProjectId || undefined;
     try {
       const [list, proj, iss] = await Promise.all([
         api.rfis(token, {
           status: filters.status || undefined,
-          project_id: filters.project_id ? Number(filters.project_id) : undefined,
+          project_id: projectFilter,
           ae_name: filters.ae_name || undefined,
           contractor: filters.contractor || undefined,
         }),
         api.projects(token),
-        api.issues(token).catch(() => [] as Issue[]),
+        api.issues(token, null, projectFilter || null).catch(() => [] as Issue[]),
       ]);
       setRows(list);
       setProjects(proj);
@@ -84,12 +97,13 @@ export function RfiPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = isAdminViewOnly ? "RFI — View only" : "RFI — Site Request for Information";
-  }, [isAdminViewOnly]);
+    const base = isAdminViewOnly ? "RFI — View only" : "RFI — Site Request for Information";
+    if (el) el.textContent = scopedProjectId ? `${base} · Project #${scopedProjectId}` : base;
+  }, [isAdminViewOnly, scopedProjectId]);
 
   useEffect(() => {
     void load();
-  }, [token, filters.status, filters.project_id, filters.ae_name, filters.contractor]);
+  }, [token, filters.status, filters.project_id, filters.ae_name, filters.contractor, scopedProjectId]);
 
   const onRaise = async (e: FormEvent) => {
     e.preventDefault();

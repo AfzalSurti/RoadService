@@ -195,15 +195,24 @@ async def list_queries(
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
     status: str | None = None,
     module_area: str | None = None,
+    project_id: int | None = None,
 ):
-    stmt = select(PortalQueryTicket).order_by(PortalQueryTicket.id.desc())
-    if status:
-        stmt = stmt.where(PortalQueryTicket.status == status)
-    if module_area:
-        stmt = stmt.where(PortalQueryTicket.module_area == module_area)
-    # Contractors see all portal queries for transparency; filter optional via query params
-    rows = (await db.execute(stmt)).scalars().all()
-    return [_out(r, user) for r in rows]
+    try:
+        stmt = select(PortalQueryTicket).order_by(PortalQueryTicket.id.desc())
+        if status:
+            stmt = stmt.where(PortalQueryTicket.status == status)
+        if module_area:
+            stmt = stmt.where(PortalQueryTicket.module_area == module_area)
+        if project_id is not None:
+            stmt = stmt.where(PortalQueryTicket.project_id == project_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        return [_out(r, user) for r in rows]
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Queries list failed (run Neon SQL for portal_query_tickets): {exc}",
+        ) from exc
 
 
 @router.get("/{ticket_id}", response_model=QueryTicketOut)

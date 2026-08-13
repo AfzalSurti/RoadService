@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Issue, IssueStatus } from "../types";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
+import { resolveProjectId } from "../lib/projectScope";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
   { key: "all", label: "All Issues" },
@@ -22,6 +23,7 @@ export function IssuesPage() {
   const status = (params.get("status") as IssueStatus | null) || null;
   const selectedId = params.get("id") ? Number(params.get("id")) : null;
   const action = params.get("action");
+  const projectId = resolveProjectId(params.get("project"));
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -30,19 +32,19 @@ export function IssuesPage() {
   const load = () => {
     if (!token) return;
     api
-      .issues(token, status)
+      .issues(token, status, projectId)
       .then(setIssues)
       .catch((e: Error) => setError(e.message));
   };
 
   useEffect(() => {
     load();
-  }, [token, status]);
+  }, [token, status, projectId]);
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Issues";
-  }, []);
+    if (el) el.textContent = projectId ? `Issues · Project #${projectId}` : "Issues";
+  }, [projectId]);
 
   const openIssue = (id: number, nextAction?: string) => {
     const next = new URLSearchParams(params);
@@ -74,6 +76,14 @@ export function IssuesPage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      {projectId ? (
+        <p className="muted">
+          Showing issues for <strong>project #{projectId}</strong> only.{" "}
+          <button type="button" className="linkish" onClick={() => navigate("/dashboard")}>
+            Change project
+          </button>
+        </p>
+      ) : null}
       <div className="tabs">
         {TABS.map((t) => (
           <button

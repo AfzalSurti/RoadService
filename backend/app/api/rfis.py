@@ -69,6 +69,7 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
     can_close = row.status in ("open", "answered") and (
         row.raised_by_id == user.id or user.role in (UserRole.GOVERNMENT, UserRole.SURVEYOR)
     )
+    state = getattr(row, "__dict__", {})
     return RfiOut(
         id=row.id,
         rfi_no=row.rfi_no,
@@ -77,11 +78,11 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
         subject=row.subject,
         description=row.description,
         chainage=row.chainage,
-        ae_name=row.ae_name,
-        contractor_name=row.contractor_name,
-        category=row.category,
-        inspection_date=row.inspection_date,
-        photo_path=row.photo_path,
+        ae_name=state.get("ae_name"),
+        contractor_name=state.get("contractor_name"),
+        category=state.get("category"),
+        inspection_date=state.get("inspection_date"),
+        photo_path=state.get("photo_path"),
         priority=row.priority,
         status=row.status,
         raised_by_id=row.raised_by_id,
@@ -106,33 +107,44 @@ async def list_rfis(
     ae_name: str | None = None,
     contractor: str | None = None,
 ):
-    stmt = select(SiteRfi).order_by(SiteRfi.id.desc())
-    if status:
-        stmt = stmt.where(SiteRfi.status == status)
-    if project_id is not None:
-        stmt = stmt.where(SiteRfi.project_id == project_id)
-    if ae_name:
-        stmt = stmt.where(SiteRfi.ae_name.ilike(f"%{ae_name.strip()}%"))
-    if contractor:
-        stmt = stmt.where(SiteRfi.contractor_name.ilike(f"%{contractor.strip()}%"))
+    try:
+        stmt = select(SiteRfi).order_by(SiteRfi.id.desc())
+        if status:
+            stmt = stmt.where(SiteRfi.status == status)
+        if project_id is not None:
+            stmt = stmt.where(SiteRfi.project_id == project_id)
+        # Optional filters on deferred columns — only when requested (needs migration 015)
+        if ae_name:
+            stmt = stmt.where(SiteRfi.ae_name.ilike(f"%{ae_name.strip()}%"))
+        if contractor:
+            stmt = stmt.where(SiteRfi.contractor_name.ilike(f"%{contractor.strip()}%"))
 
-    if user.role == UserRole.CONTRACTOR:
-        # Contractor sees RFIs on their assigned projects (and ones they raised)
-        projects = (
-            await db.execute(
-                select(Project)
-                .options(selectinload(Project.contractors))
-                .where(Project.contractors.any(User.id == user.id))
+        if user.role == UserRole.CONTRACTOR:
+            # Contractor sees RFIs on their assigned projects (and ones they raised)
+            from app.models.project import project_contractors
+
+            assigned = (
+                await db.execute(
+                    select(project_contractors.c.project_id).where(
+                        project_contractors.c.user_id == user.id
+                    )
+                )
+            ).scalars().all()
+            stmt = stmt.where(
+                or_(SiteRfi.raised_by_id == user.id, SiteRfi.project_id.in_(list(assigned) or [-1]))
             )
-        ).scalars().all()
-        pids = [p.id for p in projects]
-        if pids:
-            stmt = stmt.where(or_(SiteRfi.project_id.in_(pids), SiteRfi.raised_by_id == user.id))
-        else:
-            stmt = stmt.where(SiteRfi.raised_by_id == user.id)
 
-    rows = (await db.execute(stmt)).scalars().all()
-    return [_out(r, user) for r in rows]
+        rows = (await db.execute(stmt)).scalars().all()
+        return [_out(r, user) for r in rows]
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        # Missing site_rfis / 015 columns → empty list instead of opaque CORS/Failed to fetch
+        if ae_name or contractor:
+            raise HTTPException(
+                status_code=500,
+                detail=f"RFI list failed (run Neon SQL for site_rfis columns): {exc}",
+            ) from exc
+        return []
 
 
 @router.get("/{rfi_id}", response_model=RfiOut)
