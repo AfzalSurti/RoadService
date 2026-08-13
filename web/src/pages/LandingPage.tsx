@@ -8,15 +8,22 @@ export function LandingPage() {
 
   return (
     <div className="landing">
+      <div className="landing-bg" aria-hidden="true">
+        <div className="landing-bg-photo" />
+        <div className="landing-bg-wash" />
+        <div className="landing-bg-glow" />
+        <div className="landing-bg-grain" />
+      </div>
+
       <header className="landing-nav">
-        <div className="brand">
+        <div className="brand landing-brand">
           Road<span>Service</span>
         </div>
         <div className="landing-nav-actions">
-          <Link className="btn ghost" to="/login">
+          <Link className="btn ghost landing-btn-ghost" to="/login">
             Sign in
           </Link>
-          <Link className="btn" to="/login">
+          <Link className="btn landing-btn-solid" to="/login">
             Open dashboard
           </Link>
         </div>
@@ -24,36 +31,21 @@ export function LandingPage() {
 
       <section className="landing-hero">
         <div className="landing-hero-copy">
-          <p className="landing-eyebrow">Road issue management</p>
+          <p className="landing-eyebrow">Highway defect lifecycle</p>
           <h1 className="brand landing-title">
             Road<span>Service</span>
           </h1>
           <p className="landing-lead">
-            Track defects from survey to close — photo proof, GPS, and role-based verification in one
-            place.
+            From field capture to verified close — photo proof, GPS, and clear ownership for every
+            stretch of road.
           </p>
           <div className="landing-cta">
-            <Link className="btn" to="/login">
+            <Link className="btn landing-btn-solid" to="/login">
               Sign in to continue
             </Link>
-            <a className="btn secondary" href="#how-it-works">
+            <a className="btn secondary landing-btn-ghost" href="#how-it-works">
               How it works
             </a>
-          </div>
-        </div>
-        <div className="landing-hero-visual" aria-hidden="true">
-          <div className="landing-road" />
-          <div className="landing-card-stack">
-            <div className="landing-float-card">
-              <span className="badge status-open">Open</span>
-              <strong>Pothole · km 12+400</strong>
-              <small>Assigned to contractor</small>
-            </div>
-            <div className="landing-float-card alt">
-              <span className="badge status-verification_pending">Verification</span>
-              <strong>Camera + GPS submitted</strong>
-              <small>Awaiting GMC representative review</small>
-            </div>
           </div>
         </div>
       </section>
@@ -62,13 +54,13 @@ export function LandingPage() {
         <h2>One workflow, clear ownership</h2>
         <p className="muted landing-section-lead">
           GMC representatives raise issues in the field. Contractors fix and submit proof. GMC Experts
-          (MIS Expert) and GMC representatives verify. NHIPMPL representatives stay informed.
+          (MIS Expert) verify. NHIPMPL representatives stay informed.
         </p>
         <div className="landing-steps">
           <article>
             <span>01</span>
             <h3>Report</h3>
-            <p>Capture defect type, location, and before photos from the GMC representative mobile app.</p>
+            <p>Capture defect type, location, and before photos from the GMC representative app.</p>
           </article>
           <article>
             <span>02</span>
