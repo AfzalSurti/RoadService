@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import * as v from "../lib/validation";
@@ -21,6 +21,8 @@ function money(n: number) {
 
 export function ProjectsPage() {
   const { token, isReadonly } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightId = Number(searchParams.get("project") || 0) || null;
   const [projects, setProjects] = useState<Project[]>([]);
   const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
   const [contractors, setContractors] = useState<User[]>([]);
@@ -29,6 +31,21 @@ export function ProjectsPage() {
   const [form, setForm] = useState(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [showAll, setShowAll] = useState(false);
+
+  const sortedProjects = useMemo(
+    () => [...projects].sort((a, b) => b.id - a.id),
+    [projects]
+  );
+  const visibleProjects = useMemo(() => {
+    if (showAll || highlightId) return sortedProjects;
+    return sortedProjects.slice(0, 3);
+  }, [sortedProjects, showAll, highlightId]);
+
+  const selected = useMemo(
+    () => (highlightId ? sortedProjects.find((p) => p.id === highlightId) || null : null),
+    [highlightId, sortedProjects]
+  );
 
   const load = () => {
     if (!token) return;
@@ -245,6 +262,24 @@ export function ProjectsPage() {
       ) : null}
 
       <section className="panel">
+        {selected ? (
+          <div className="selected-project-banner">
+            <div>
+              <strong>
+                #{selected.id} · {selected.name}
+              </strong>
+              <p>
+                {selected.location}
+                {selected.chainage_from || selected.chainage_to
+                  ? ` · ${selected.chainage_from || "—"} – ${selected.chainage_to || "—"}`
+                  : ""}
+              </p>
+            </div>
+            <Link className="btn" to={`/rates?project=${selected.id}`}>
+              Open rates
+            </Link>
+          </div>
+        ) : null}
         <table className="data">
           <thead>
             <tr>
@@ -260,10 +295,10 @@ export function ProjectsPage() {
             </tr>
           </thead>
           <tbody>
-            {projects.map((p) => {
+            {visibleProjects.map((p) => {
               const sum = summaries[p.id];
               return (
-                <tr key={p.id}>
+                <tr key={p.id} className={highlightId === p.id ? "row-active" : undefined}>
                   <td>{p.id}</td>
                   <td>{p.name}</td>
                   <td>{p.location}</td>
@@ -277,13 +312,20 @@ export function ProjectsPage() {
                   <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
                   <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
                   <td>
-                    <Link to="/rates">Rates</Link>
+                    <Link to={`/rates?project=${p.id}`}>Rates</Link>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        {!highlightId && sortedProjects.length > 3 ? (
+          <div className="show-more-row">
+            <button type="button" className="btn secondary" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Show less" : `Show more (${sortedProjects.length - 3} more)`}
+            </button>
+          </div>
+        ) : null}
       </section>
     </>
   );

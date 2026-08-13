@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -15,7 +15,7 @@ import {
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
-import type { DashboardStats, Project } from "../types";
+import type { DashboardStats, Project, ProjectRateSummary } from "../types";
 
 const COLORS: Record<string, string> = {
   open: "#e11d48",
@@ -25,6 +25,12 @@ const COLORS: Record<string, string> = {
   under_review: "#ea580c",
   closed: "#16a34a",
 };
+
+const PREVIEW_COUNT = 3;
+
+function money(n: number) {
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function StatCard({
   label,
@@ -48,8 +54,11 @@ function StatCard({
 
 export function DashboardPage() {
   const { token, role } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const projectsPath = role === "admin" ? "/projects" : "/executive";
   const ratesPath = role === "admin" ? "/rates" : "/executive";
@@ -58,9 +67,25 @@ export function DashboardPage() {
   useEffect(() => {
     if (!token) return;
     Promise.all([api.dashboard(token), api.projects(token)])
-      .then(([s, p]) => {
+      .then(async ([s, p]) => {
         setStats(s);
-        setProjects(p);
+        const sorted = [...p].sort((a, b) => b.id - a.id);
+        setProjects(sorted);
+        const entries = await Promise.all(
+          sorted.map(async (proj) => {
+            try {
+              const sum = await api.projectRateSummary(token, proj.id);
+              return [proj.id, sum] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+        const map: Record<number, ProjectRateSummary> = {};
+        for (const e of entries) {
+          if (e) map[e[0]] = e[1];
+        }
+        setSummaries(map);
       })
       .catch((e: Error) => setError(e.message));
   }, [token]);
@@ -85,6 +110,19 @@ export function DashboardPage() {
     [stats]
   );
 
+  const visibleProjects = useMemo(
+    () => (showAllProjects ? projects : projects.slice(0, PREVIEW_COUNT)),
+    [projects, showAllProjects]
+  );
+
+  const openProject = (project: Project) => {
+    if (role === "admin") {
+      navigate(`/projects?project=${project.id}`);
+      return;
+    }
+    navigate(`${ratesPath}?project=${project.id}`);
+  };
+
   useEffect(() => {
     const el = document.getElementById("page-title");
     if (el) el.textContent = "Dashboard";
@@ -96,7 +134,12 @@ export function DashboardPage() {
       {stats ? (
         <>
           <section className="stat-grid">
-            <StatCard label="Projects" value={stats.total_projects} to={projectsPath} hint="Open Projects →" />
+            <StatCard
+              label="Projects"
+              value={stats.total_projects}
+              to="#latest-projects"
+              hint="Latest projects ↓"
+            />
             <StatCard label="Total issues" value={stats.total_issues} to="/issues" hint="Open Issues →" />
             <StatCard label="Invoices" value={stats.total_invoices ?? 0} to="/billing" hint="Open Billing →" />
             <StatCard label="Documents" value={stats.total_documents ?? 0} to="/documents" hint="Open Documents →" />
@@ -170,33 +213,87 @@ export function DashboardPage() {
         </>
       ) : null}
 
-      <section className="panel">
-        <h2>Projects</h2>
+      <section className="panel" id="latest-projects">
+        <div className="panel-head-row">
+          <h2>Latest projects</h2>
+          <Link className="btn ghost" to={projectsPath}>
+            Open full list
+          </Link>
+        </div>
         <table className="data">
           <thead>
             <tr>
+              <th>ID</th>
               <th>Name</th>
               <th>Location</th>
-              <th>Contractors</th>
-              <th>GMC representatives</th>
+              <th>Chainage</th>
+              <th>Team</th>
+              <th>BOQ amount</th>
+              <th>Executed value</th>
+              <th>% progress</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {projects.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>{p.location}</td>
-                <td>{p.contractors.length}</td>
-                <td>{p.surveyors.length}</td>
-              </tr>
-            ))}
+            {visibleProjects.map((p) => {
+              const sum = summaries[p.id];
+              return (
+                <tr
+                  key={p.id}
+                  className="clickable-row"
+                  onClick={() => openProject(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openProject(p);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                >
+                  <td>{p.id}</td>
+                  <td>{p.name}</td>
+                  <td>{p.location}</td>
+                  <td>
+                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
+                  </td>
+                  <td>
+                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
+                  </td>
+                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
+                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
+                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
+                  <td>
+                    <Link
+                      to={role === "admin" ? `/rates?project=${p.id}` : `${ratesPath}?project=${p.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Rates
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
             {!projects.length ? (
               <tr>
-                <td colSpan={4}>No projects yet.</td>
+                <td colSpan={9}>No projects yet.</td>
               </tr>
             ) : null}
           </tbody>
         </table>
+        {projects.length > PREVIEW_COUNT ? (
+          <div className="show-more-row">
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setShowAllProjects((v) => !v)}
+            >
+              {showAllProjects
+                ? "Show less"
+                : `Show more (${projects.length - PREVIEW_COUNT} more)`}
+            </button>
+          </div>
+        ) : null}
       </section>
     </>
   );

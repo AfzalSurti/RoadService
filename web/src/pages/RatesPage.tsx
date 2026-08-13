@@ -55,7 +55,13 @@ export function RatesPage() {
     if (!token) return;
     api.projects(token).then((p) => {
       setProjects(p);
-      if (p[0]) setProjectId(p[0].id);
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = Number(params.get("project") || 0);
+      if (fromQuery && p.some((x) => x.id === fromQuery)) {
+        setProjectId(fromQuery);
+      } else if (p[0]) {
+        setProjectId(p[0].id);
+      }
     });
   }, [token]);
 

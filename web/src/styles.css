@@ -180,6 +180,43 @@ a.stat .stat-hint {
 }
 .stat span { color: var(--muted); font-size: 0.85rem; }
 .stat strong { display: block; font-size: 1.8rem; margin-top: 0.25rem; font-family: var(--display); }
+.panel-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.panel-head-row h2 { margin: 0; }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover,
+.clickable-row:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: none;
+}
+.row-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.show-more-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 1rem;
+}
+.selected-project-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.selected-project-banner p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
 
 .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
 .pill {
