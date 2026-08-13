@@ -52,7 +52,7 @@ export function AppLayout() {
           {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
           {staff ? <NavLink to="/executive">Executive</NavLink> : null}
           <NavLink to="/issues">Issues</NavLink>
-          {billingRoles ? <NavLink to="/billing">Billing</NavLink> : null}
+          {billingRoles ? <NavLink to="/billing">CONTRACTOR BILLING</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
           {role === "admin" || role === "government" ? <NavLink to="/attendance">Attendance</NavLink> : null}

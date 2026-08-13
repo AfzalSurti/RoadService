@@ -309,7 +309,7 @@ export function DashboardPage() {
                     label="Invoices"
                     value={stats.total_invoices ?? 0}
                     to={withProjectQuery("/billing", pid)}
-                    hint="Open Billing →"
+                    hint="Open CONTRACTOR BILLING →"
                   />
                 ) : null}
                 <StatCard
