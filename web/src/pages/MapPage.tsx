@@ -64,8 +64,6 @@ export function MapPage() {
       .then(setIssues)
       .catch((e: Error) => setError(e.message));
   }, [token, projectId]);
-      .catch((e: Error) => setError(e.message));
-  }, [token]);
 
   const center = useMemo<[number, number]>(() => {
     if (!issues.length) return [20.5937, 78.9629];
