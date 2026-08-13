@@ -198,6 +198,21 @@ export function BillingPage() {
       setError("Select payment type");
       return;
     }
+    const contractCr = Number(form.contract_amount_cr);
+    const cumulativeCr = Number(form.cumulative_cr);
+    if (
+      form.contract_amount_cr &&
+      form.cumulative_cr &&
+      Number.isFinite(contractCr) &&
+      Number.isFinite(cumulativeCr) &&
+      cumulativeCr > contractCr
+    ) {
+      window.alert(
+        "Contract Amount thi vadhare Amount nai nakhi sako.\n\nCumulative Payment cannot be greater than Contract Amount."
+      );
+      setError("Cumulative Payment cannot exceed Contract Amount");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -819,7 +834,24 @@ export function BillingPage() {
                   type="number"
                   step="0.01"
                   value={form.cumulative_cr}
-                  onChange={(e) => setForm({ ...form, cumulative_cr: e.target.value })}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const contractCr = Number(form.contract_amount_cr);
+                    const cumulativeCr = Number(next);
+                    if (
+                      form.contract_amount_cr &&
+                      next &&
+                      Number.isFinite(contractCr) &&
+                      Number.isFinite(cumulativeCr) &&
+                      cumulativeCr > contractCr
+                    ) {
+                      window.alert(
+                        "Contract Amount thi vadhare Amount nai nakhi sako.\n\nCumulative Payment cannot be greater than Contract Amount."
+                      );
+                      return;
+                    }
+                    setForm({ ...form, cumulative_cr: next });
+                  }}
                 />
               </label>
             </div>

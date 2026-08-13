@@ -140,9 +140,9 @@ export default function App() {
         <Route
           path="/attendance"
           element={
-            <GovOnly>
+            <AdminOrGov>
               <AttendancePage />
-            </GovOnly>
+            </AdminOrGov>
           }
         />
         <Route

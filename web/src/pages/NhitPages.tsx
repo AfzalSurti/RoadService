@@ -390,8 +390,8 @@ export function AttendancePage() {
     <>
       {error ? <div className="error">{error}</div> : null}
       <p className="muted">
-        Linked to the mobile attendance punch (same database). NHIPMPL can view project personnel,
-        GPS punches, and leaves. Contractor cannot open this portal module.
+        Linked to the mobile attendance punch (same database). NHIPMPL and GMC MIS Expert can view
+        punches; GMC MIS Expert can download PDF.
       </p>
       {summary ? (
         <section className="stat-grid">
@@ -467,7 +467,37 @@ export function AttendancePage() {
       </section>
 
       <section className="panel">
-        <h2>Attendance (GPS / biometric flags)</h2>
+        <div className="panel-head-row">
+          <h2>Attendance (GPS / biometric flags)</h2>
+          {role === "admin" ? (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                const rows = attendance
+                  .map(
+                    (a) =>
+                      `<tr><td>${String(a.work_date)}</td><td>#${String(a.personnel_id)}</td><td>${String(a.status)}</td><td>${String(a.in_time || "—")} / ${String(a.out_time || "—")}</td><td>${a.latitude != null ? `${a.latitude}, ${a.longitude}` : "—"}</td><td>${a.biometric_verified ? "Yes" : "No"}</td></tr>`
+                  )
+                  .join("");
+                const w = window.open("", "_blank");
+                if (!w) return;
+                w.document.write(`<!doctype html><html><head><title>Attendance PDF</title>
+                  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:8px;font-size:12px}th{background:#0b2a43;color:#fff}h1{color:#0b2a43}</style>
+                  </head><body>
+                  <h1>Attendance Register — GMC MIS Expert</h1>
+                  <p>Generated ${new Date().toLocaleString()}</p>
+                  <table><thead><tr><th>Date</th><th>Person</th><th>Status</th><th>In/Out</th><th>GPS</th><th>Selfie/Bio</th></tr></thead>
+                  <tbody>${rows || "<tr><td colspan=6>No records</td></tr>"}</tbody></table>
+                  <script>window.onload=()=>{window.print()}</script>
+                  </body></html>`);
+                w.document.close();
+              }}
+            >
+              Download PDF
+            </button>
+          ) : null}
+        </div>
         <table className="data">
           <thead>
             <tr>

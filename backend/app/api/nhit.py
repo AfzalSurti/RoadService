@@ -508,7 +508,7 @@ async def list_attendance(
             await db.execute(select(Personnel.id).where(Personnel.project_id == project_id))
         ).scalars().all()
         stmt = stmt.where(AttendanceRecord.personnel_id.in_(pids or [-1]))
-    if user.role != UserRole.GOVERNMENT:
+    if user.role not in (UserRole.GOVERNMENT, UserRole.ADMIN):
         mine = (
             await db.execute(select(Personnel.id).where(Personnel.employee_code == f"USER-{user.id}"))
         ).scalars().all()
@@ -560,40 +560,78 @@ async def punch_attendance(
         )
     ).scalars().first()
 
-    if punch_type == "out" and existing:
+    kind = (punch_type or "in").strip().lower()
+    if kind == "in":
+        if existing and existing.in_time:
+            raise HTTPException(status_code=400, detail="Already punched in today")
+        if existing and not existing.in_time:
+            existing.in_time = time_str
+            existing.status = status_value
+            if latitude is not None:
+                existing.latitude = latitude
+            if longitude is not None:
+                existing.longitude = longitude
+            existing.notes = " | ".join(note_bits)
+            existing.biometric_verified = bool(selfie_note)
+            row = existing
+        else:
+            row = AttendanceRecord(
+                personnel_id=person.id,
+                work_date=today,
+                status=status_value,
+                in_time=time_str,
+                latitude=latitude,
+                longitude=longitude,
+                biometric_verified=bool(selfie_note),
+                shift_name="General",
+                notes=" | ".join(note_bits),
+            )
+            db.add(row)
+    elif kind == "out":
+        if not existing or not existing.in_time:
+            raise HTTPException(status_code=400, detail="Punch in first before punch out")
+        if existing.out_time:
+            raise HTTPException(status_code=400, detail="Already punched out today")
         existing.out_time = time_str
         if latitude is not None:
             existing.latitude = latitude
         if longitude is not None:
             existing.longitude = longitude
         existing.notes = " | ".join(note_bits)
-        if existing.in_time:
-            try:
-                ih, im = map(int, existing.in_time.split(":")[:2])
-                oh, om = map(int, time_str.split(":")[:2])
-                existing.working_hours = max(0, (oh * 60 + om - ih * 60 - im) / 60)
-            except ValueError:
-                pass
+        existing.biometric_verified = existing.biometric_verified or bool(selfie_note)
+        try:
+            ih, im = map(int, existing.in_time.split(":")[:2])
+            oh, om = map(int, time_str.split(":")[:2])
+            existing.working_hours = max(0, (oh * 60 + om - ih * 60 - im) / 60)
+        except ValueError:
+            pass
         row = existing
     else:
-        row = AttendanceRecord(
-            personnel_id=person.id,
-            work_date=today,
-            status=status_value,
-            in_time=time_str if punch_type != "out" else None,
-            out_time=time_str if punch_type == "out" else None,
-            latitude=latitude,
-            longitude=longitude,
-            biometric_verified=bool(selfie_note),
-            shift_name="General",
-            notes=" | ".join(note_bits),
-        )
-        db.add(row)
+        raise HTTPException(status_code=400, detail="punch_type must be in or out")
 
     await write_audit(db, actor_id=user.id, action="attendance_punch", entity_type="attendance", entity_id=str(person.id))
     await db.commit()
     await db.refresh(row)
     return _orm_dict(row)
+
+
+@router.get("/attendance/today")
+async def attendance_today(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.SURVEYOR, UserRole.ADMIN, UserRole.GOVERNMENT))],
+):
+    code = f"USER-{user.id}"
+    person = (await db.execute(select(Personnel).where(Personnel.employee_code == code))).scalar_one_or_none()
+    if not person:
+        return None
+    row = (
+        await db.execute(
+            select(AttendanceRecord)
+            .where(AttendanceRecord.personnel_id == person.id, AttendanceRecord.work_date == date.today())
+            .order_by(AttendanceRecord.id.desc())
+        )
+    ).scalars().first()
+    return _orm_dict(row) if row else None
 
 
 @router.post("/attendance", status_code=201)

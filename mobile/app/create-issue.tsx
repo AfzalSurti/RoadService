@@ -3,6 +3,7 @@ import { Stack, router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CameraCapture, type CapturedPhoto } from "../components/CameraCapture";
+import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { SelectSheet } from "../components/SelectSheet";
 import { api, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -40,8 +41,8 @@ export default function CreateIssueScreen() {
   const [endKm, setEndKm] = useState("");
   const [endM, setEndM] = useState("");
   const [photo, setPhoto] = useState<CapturedPhoto | null>(null);
-  const [extraClips, setExtraClips] = useState<CapturedPhoto[]>([]);
-  const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [captureMode, setCaptureMode] = useState<"photo" | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isCritical, setIsCritical] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,12 +84,11 @@ export default function CreateIssueScreen() {
     if (photo && !coords) setCoords({ lat: photo.lat, lng: photo.lng });
   }, [photo, coords]);
 
-  if (captureMode) {
+  if (captureMode === "photo") {
     return (
       <CameraCapture
         onCapture={(p) => {
-          if (captureMode === "video") setExtraClips((prev) => [...prev, p]);
-          else setPhoto(p);
+          setPhoto(p);
           setCaptureMode(null);
         }}
         onCancel={() => setCaptureMode(null)}
@@ -194,16 +194,19 @@ export default function CreateIssueScreen() {
             <Text style={s.photoIcon}>📷</Text>
             <Text style={s.photoLab}>{photo ? "Retake photo" : "Site photo"}</Text>
           </Pressable>
-          <Pressable style={s.photoBtn} onPress={() => setCaptureMode("video")}>
-            <Text style={s.photoIcon}>🎥</Text>
-            <Text style={s.photoLab}>{extraClips.length ? `${extraClips.length} clip(s)` : "Site video"}</Text>
-          </Pressable>
         </View>
         {photo ? (
-          <Text style={s.ok}>Photo captured · GPS {photo.lat.toFixed(5)}, {photo.lng.toFixed(5)}</Text>
+          <Text style={s.ok}>
+            Photo captured · GPS {photo.lat.toFixed(5)}, {photo.lng.toFixed(5)}
+          </Text>
         ) : (
-          <Text style={s.hint}>Capture on-site photo / video. Gallery upload is disabled.</Text>
+          <Text style={s.hint}>Capture on-site photo. Gallery upload is disabled.</Text>
         )}
+        <MediaAttach
+          items={media}
+          onChange={setMedia}
+          maxItems={3}
+        />
         <Text style={s.label}>Remarks</Text>
         <TextInput
           style={[s.input, { minHeight: 80 }]}
@@ -287,12 +290,15 @@ export default function CreateIssueScreen() {
       </Pressable>
 
       <View style={s.card}>
-        <Text style={s.sec}>Voice Notes ({voiceNote.trim() ? 1 : 0})</Text>
+        <Text style={s.sec}>Voice Notes ({voiceNote.trim() ? 1 : 0}) — optional</Text>
+        <Text style={{ color: "#8b97a8", marginBottom: 8, fontSize: 13 }}>
+          Optional. You can raise the defect without a voice note.
+        </Text>
         <TextInput
           style={[s.input, { minHeight: 70 }]}
           value={voiceNote}
           onChangeText={setVoiceNote}
-          placeholder="Add a voice-note transcript / extra site note"
+          placeholder="Optional: voice-note transcript / extra site note"
           placeholderTextColor="#8b97a8"
           multiline
         />

@@ -13,6 +13,7 @@ import { api, type Issue, type SiteRfi } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { flushOfflineJobs, listOfflineJobs } from "../lib/offline";
 import { roleLabel } from "../lib/roles";
+import { useTheme } from "../lib/theme";
 
 const QUICK_LINKS: { label: string; href: string; icon: string }[] = [
   { label: "Road\nMaintenance", href: "/create-issue", icon: "🛣" },
@@ -31,6 +32,7 @@ function firstName(full?: string | null) {
 
 function SurveyorHome() {
   const { token, fullName, logout } = useAuth();
+  const { mode, toggle } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [rfis, setRfis] = useState<SiteRfi[]>([]);
   const [unread, setUnread] = useState(0);
@@ -99,6 +101,9 @@ function SurveyorHome() {
             <Text style={dash.sub}>GMC representative</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Pressable onPress={toggle}>
+              <Text style={dash.signOut}>{mode === "dark" ? "Light" : "Dark"}</Text>
+            </Pressable>
             <View style={dash.avatar}>
               <Text style={{ fontSize: 22 }}>👤</Text>
             </View>
@@ -148,9 +153,6 @@ function SurveyorHome() {
 
         <View style={dash.tabs}>
           <Text style={dash.tabOn}>Home</Text>
-          <Pressable onPress={() => router.push("/rfi")}>
-            <Text style={dash.tab}>UCC</Text>
-          </Pressable>
           <Pressable onPress={() => router.push("/notifications")}>
             <Text style={dash.tab}>Alerts</Text>
           </Pressable>
@@ -162,6 +164,7 @@ function SurveyorHome() {
 
 export default function HomeScreen() {
   const { token, role, fullName, logout } = useAuth();
+  const { mode, toggle } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [unread, setUnread] = useState(0);
   const [pendingOffline, setPendingOffline] = useState(0);
@@ -230,14 +233,19 @@ export default function HomeScreen() {
             {unread ? ` · ${unread} alerts` : ""}
           </Text>
         </View>
-        <Pressable
-          onPress={async () => {
-            await logout();
-            router.replace("/login");
-          }}
-        >
-          <Text style={styles.link}>Sign out</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+          <Pressable onPress={toggle}>
+            <Text style={styles.link}>{mode === "dark" ? "Light" : "Dark"}</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              await logout();
+              router.replace("/login");
+            }}
+          >
+            <Text style={styles.link}>Sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.row}>

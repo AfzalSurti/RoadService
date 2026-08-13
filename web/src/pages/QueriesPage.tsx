@@ -16,7 +16,7 @@ const empty = {
 };
 
 export function QueriesPage() {
-  const { token, role, isReadonly } = useAuth();
+  const { token, role, isReadonly, userId } = useAuth();
   const [searchParams] = useSearchParams();
   const projectId = projectIdFromUrl(searchParams.get("project"));
   const [tickets, setTickets] = useState<PortalQueryTicket[]>([]);
@@ -77,6 +77,19 @@ export function QueriesPage() {
     void load();
   }, [token, filterStatus, projectId]);
 
+  useEffect(() => {
+    const refresh = () => void load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [token, filterStatus, projectId]);
+
   const openTicket = async (id: number) => {
     if (!token) return;
     try {
@@ -111,17 +124,27 @@ export function QueriesPage() {
       fd.append("description", form.description.trim());
       fd.append("module_area", form.module_area);
       fd.append("priority", form.priority);
-      if (form.project_id) fd.append("project_id", form.project_id);
+      const pid = form.project_id || (projectId ? String(projectId) : "");
+      if (!pid) {
+        setError("Select a project so the ticket shows on that project’s Query Raise page");
+        setBusy(false);
+        return;
+      }
+      fd.append("project_id", pid);
       for (const file of shotFiles) {
         fd.append("attachments", file);
       }
       const created = await api.raiseQuery(token, fd);
       setShowRaise(false);
-      setForm(empty);
+      setForm({
+        ...empty,
+        project_id: projectId ? String(projectId) : pid,
+      });
       setShotFiles([]);
-      setMsg(`Ticket ${created.ticket_no} raised`);
+      setMsg(`Ticket ${created.ticket_no} raised · Client ID #${created.raised_by_id} · Project #${created.project_id}`);
       await load();
       setSelected(created);
+      if (created.id) await openTicket(created.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Raise failed");
     } finally {
@@ -181,6 +204,8 @@ export function QueriesPage() {
               <thead>
                 <tr>
                   <th>Ticket</th>
+                  <th>Client ID</th>
+                  <th>Project</th>
                   <th>Module</th>
                   <th>Subject</th>
                   <th>Priority</th>
@@ -192,6 +217,12 @@ export function QueriesPage() {
                 {tickets.map((t) => (
                   <tr key={t.id} className={selected?.id === t.id ? "active-row" : undefined}>
                     <td>{t.ticket_no}</td>
+                    <td>#{t.raised_by_id}</td>
+                    <td>
+                      {t.project_id
+                        ? projects.find((p) => p.id === t.project_id)?.name || `#${t.project_id}`
+                        : "—"}
+                    </td>
                     <td>{formatLabel(t.module_area)}</td>
                     <td>{t.subject}</td>
                     <td>{formatLabel(t.priority)}</td>
@@ -205,8 +236,8 @@ export function QueriesPage() {
                 ))}
                 {!tickets.length ? (
                   <tr>
-                    <td colSpan={6} className="muted">
-                      No queries yet.
+                    <td colSpan={8} className="muted">
+                      No queries yet{projectId ? " for this project" : ""}.
                     </td>
                   </tr>
                 ) : null}
@@ -227,6 +258,7 @@ export function QueriesPage() {
               </p>
               <p className="muted">
                 Module: {formatLabel(selected.module_area)}
+                {` · Client ID: #${selected.raised_by_id}`}
                 {selected.project_id
                   ? ` · Project: ${projects.find((p) => p.id === selected.project_id)?.name || `#${selected.project_id}`}`
                   : ""}
@@ -427,12 +459,15 @@ export function QueriesPage() {
               </label>
               <ProjectSelect
                 className="span-2"
-                label="Project (optional)"
-                allowAll
-                allLabel="None / all projects"
-                value={form.project_id}
+                label="Project *"
+                required
+                value={form.project_id || (projectId ? String(projectId) : "")}
                 onChange={(id) => setForm({ ...form, project_id: id })}
               />
+              <label className="span-2">
+                Client ID
+                <input readOnly value={userId != null ? `#${userId}` : "—"} />
+              </label>
               <label className="span-2">
                 Subject *
                 <input

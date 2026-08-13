@@ -22,6 +22,7 @@ export function ContractorBillingPage() {
   const [paymentType, setPaymentType] = useState("Stage Payment Statement for Works");
   const [thisBill, setThisBill] = useState("");
   const [cumulative, setCumulative] = useState("");
+  const [contractAmount, setContractAmount] = useState("");
   const [billFrom, setBillFrom] = useState("");
   const [billTo, setBillTo] = useState("");
   const [notes, setNotes] = useState("");
@@ -53,6 +54,20 @@ export function ContractorBillingPage() {
       setError("Project, invoice no and This bill Amount are required");
       return;
     }
+    const contractN = Number(contractAmount);
+    const cumulativeN = Number(cumulative || thisBill);
+    if (
+      contractAmount &&
+      Number.isFinite(contractN) &&
+      Number.isFinite(cumulativeN) &&
+      cumulativeN > contractN
+    ) {
+      window.alert(
+        "Contract Amount thi vadhare Amount nai nakhi sako.\n\nCumulative Payment cannot be greater than Contract Amount."
+      );
+      setError("Cumulative Payment cannot exceed Contract Amount");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMsg(null);
@@ -64,6 +79,7 @@ export function ContractorBillingPage() {
       fd.append("payment_type", paymentType);
       fd.append("this_bill_amount", thisBill);
       fd.append("cumulative_amount", cumulative || thisBill);
+      if (contractAmount) fd.append("contract_amount_cr", contractAmount);
       if (billFrom) fd.append("bill_from", billFrom);
       if (billTo) fd.append("bill_to", billTo);
       if (notes.trim()) fd.append("notes", notes.trim());
@@ -73,6 +89,7 @@ export function ContractorBillingPage() {
       setInvoiceNo("");
       setThisBill("");
       setCumulative("");
+      setContractAmount("");
       setNotes("");
       setPdf(null);
       await load();
@@ -131,6 +148,17 @@ export function ContractorBillingPage() {
               <input value={paymentType} onChange={(e) => setPaymentType(e.target.value)} />
             </label>
             <label>
+              Contract Amount ₹
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={contractAmount}
+                onChange={(e) => setContractAmount(e.target.value)}
+                required
+              />
+            </label>
+            <label>
               This bill Amount ₹
               <input
                 type="number"
@@ -148,7 +176,24 @@ export function ContractorBillingPage() {
                 min="0"
                 step="0.01"
                 value={cumulative}
-                onChange={(e) => setCumulative(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const contractN = Number(contractAmount);
+                  const cumulativeN = Number(next);
+                  if (
+                    contractAmount &&
+                    next &&
+                    Number.isFinite(contractN) &&
+                    Number.isFinite(cumulativeN) &&
+                    cumulativeN > contractN
+                  ) {
+                    window.alert(
+                      "Contract Amount thi vadhare Amount nai nakhi sako.\n\nCumulative Payment cannot be greater than Contract Amount."
+                    );
+                    return;
+                  }
+                  setCumulative(next);
+                }}
               />
             </label>
             <label>

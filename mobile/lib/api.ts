@@ -250,6 +250,13 @@ export const api = {
       { method: "POST", token }
     );
   },
+  attendanceToday: (token: string) =>
+    request<{
+      id?: number;
+      in_time?: string | null;
+      out_time?: string | null;
+      work_date?: string;
+    } | null>(`/api/v1/nhit/attendance/today`, { token }),
 
   rfis: (token: string, status?: string) =>
     request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${status}` : ""}`, { token }),

@@ -433,7 +433,7 @@ def _require_pdf(file: UploadFile) -> None:
 @router.post("/invoices/claim", response_model=InvoiceOut, status_code=201)
 async def create_invoice_claim(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
     project_id: Annotated[int, Form()],
     invoice_no: Annotated[str, Form()],
     invoice_date: Annotated[str, Form()],
@@ -449,6 +449,12 @@ async def create_invoice_claim(
     project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if contract_amount_cr is not None and cumulative_amount is not None:
+        if float(cumulative_amount) > float(contract_amount_cr):
+            raise HTTPException(
+                status_code=400,
+                detail="Cumulative Payment cannot exceed Contract Amount",
+            )
     amount = this_bill_amount or 0.01
     count = (await db.execute(select(func.count(Invoice.id)))).scalar_one() + 1
     txn = f"RS/{project.id:04d}/{count:05d}"

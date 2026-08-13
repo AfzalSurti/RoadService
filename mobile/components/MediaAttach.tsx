@@ -1,6 +1,6 @@
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as FileSystem from "expo-file-system";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraCapture, type CapturedPhoto } from "./CameraCapture";
 
@@ -20,39 +20,82 @@ type Props = {
 };
 
 /**
- * Attach site photos and short videos (camera). Used on Warnings / Critical Issues.
+ * Attach site photos and proper video clips (with mic permission).
  */
 export function MediaAttach({ items, onChange, maxItems = 4 }: Props) {
   const [mode, setMode] = useState<"photo" | "video" | null>(null);
   const camRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const [recording, setRecording] = useState(false);
+  const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode === "video") {
+      setReady(false);
+      const t = setTimeout(() => setReady(true), 600);
+      return () => clearTimeout(t);
+    }
+  }, [mode]);
 
   const addPhoto = (p: CapturedPhoto) => {
     onChange([...items, { uri: p.uri, kind: "photo", lat: p.lat, lng: p.lng }].slice(0, maxItems));
     setMode(null);
   };
 
+  const openVideo = async () => {
+    setErr(null);
+    if (!permission?.granted) {
+      const cam = await requestPermission();
+      if (!cam.granted) {
+        setErr("Camera permission is required for video");
+        return;
+      }
+    }
+    if (!micPermission?.granted) {
+      const mic = await requestMicPermission();
+      if (!mic.granted) {
+        setErr("Microphone permission is required to record video. Allow RECORD_AUDIO and try again.");
+        return;
+      }
+    }
+    setMode("video");
+  };
+
   const startVideo = async () => {
-    if (!camRef.current || recording) return;
+    if (!camRef.current || recording || !ready) return;
     setErr(null);
     setRecording(true);
     try {
-      const rec = await camRef.current.recordAsync({ maxDuration: 30 });
+      const rec = await camRef.current.recordAsync({
+        maxDuration: 60,
+        mute: false,
+      });
       if (rec?.uri) {
         onChange([...items, { uri: rec.uri, kind: "video" }].slice(0, maxItems));
         setMode(null);
+      } else {
+        setErr("Video capture returned empty file");
       }
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Video failed");
+      const msg = e instanceof Error ? e.message : "Video failed";
+      setErr(
+        msg.includes("RECORD_AUDIO") || msg.includes("permissions")
+          ? "Microphone permission missing. Rebuild the app and allow mic access."
+          : msg
+      );
     } finally {
       setRecording(false);
     }
   };
 
   const stopVideo = () => {
-    camRef.current?.stopRecording();
+    try {
+      camRef.current?.stopRecording();
+    } catch {
+      /* ignore */
+    }
   };
 
   return (
@@ -61,13 +104,14 @@ export function MediaAttach({ items, onChange, maxItems = 4 }: Props) {
       {items.map((m, i) => (
         <View key={`${m.uri}-${i}`} style={styles.row}>
           <Text style={styles.meta} numberOfLines={1}>
-            {m.kind === "photo" ? "📷" : "🎥"} {m.uri.split("/").pop()}
+            {m.kind === "photo" ? "📷 Photo" : "🎥 Video"} · {m.uri.split("/").pop()}
           </Text>
           <Pressable onPress={() => onChange(items.filter((_, j) => j !== i))}>
             <Text style={styles.remove}>Remove</Text>
           </Pressable>
         </View>
       ))}
+      {err && mode === null ? <Text style={styles.errorInline}>{err}</Text> : null}
       {items.length < maxItems ? (
         <View style={styles.btns}>
           <Pressable
@@ -79,13 +123,7 @@ export function MediaAttach({ items, onChange, maxItems = 4 }: Props) {
           >
             <Text style={styles.btnText}>Add photo</Text>
           </Pressable>
-          <Pressable
-            style={styles.btn}
-            onPress={() => {
-              if (!permission?.granted) requestPermission();
-              setMode("video");
-            }}
-          >
+          <Pressable style={styles.btn} onPress={() => void openVideo()}>
             <Text style={styles.btnText}>Add video</Text>
           </Pressable>
         </View>
@@ -97,11 +135,28 @@ export function MediaAttach({ items, onChange, maxItems = 4 }: Props) {
 
       <Modal visible={mode === "video"} animationType="slide">
         <View style={styles.videoWrap}>
-          <CameraView ref={camRef} style={styles.camera} facing="back" mode="video" />
+          <CameraView
+            ref={camRef}
+            style={styles.camera}
+            facing="back"
+            mode="video"
+            mute={false}
+            videoQuality="720p"
+          />
           {err ? <Text style={styles.error}>{err}</Text> : null}
-          <Text style={styles.hint}>{recording ? "Recording… tap Stop when done" : "Record up to 30s"}</Text>
+          <Text style={styles.hint}>
+            {!ready
+              ? "Preparing camera…"
+              : recording
+                ? "Recording video… tap Stop when done (max 60s)"
+                : "Record a proper video clip (audio on)"}
+          </Text>
           {!recording ? (
-            <Pressable style={styles.shutter} onPress={startVideo}>
+            <Pressable
+              style={[styles.shutter, !ready && { opacity: 0.5 }]}
+              onPress={() => void startVideo()}
+              disabled={!ready}
+            >
               <Text style={styles.btnText}>Start video</Text>
             </Pressable>
           ) : (
@@ -109,7 +164,15 @@ export function MediaAttach({ items, onChange, maxItems = 4 }: Props) {
               <Text style={styles.btnText}>Stop</Text>
             </Pressable>
           )}
-          <Pressable style={styles.link} onPress={() => setMode(null)} disabled={recording}>
+          <Pressable
+            style={styles.link}
+            onPress={() => {
+              if (recording) stopVideo();
+              setMode(null);
+              setErr(null);
+            }}
+            disabled={recording}
+          >
             <Text style={styles.linkText}>Cancel</Text>
           </Pressable>
         </View>
@@ -139,6 +202,7 @@ const styles = StyleSheet.create({
   },
   hint: { color: "#cbd5e1", textAlign: "center", padding: 8 },
   error: { color: "#fecaca", textAlign: "center", padding: 8 },
+  errorInline: { color: "#b91c1c", marginBottom: 8 },
   link: { alignItems: "center", padding: 12 },
   linkText: { color: "#93c5fd", fontWeight: "600" },
 });
