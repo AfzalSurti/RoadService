@@ -58,6 +58,7 @@ export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const projectsPath = role === "admin" ? "/projects" : "/executive";
@@ -71,6 +72,7 @@ export function DashboardPage() {
         setStats(s);
         const sorted = [...p].sort((a, b) => b.id - a.id);
         setProjects(sorted);
+        if (sorted[0]) setSelectedId(sorted[0].id);
         const entries = await Promise.all(
           sorted.map(async (proj) => {
             try {
@@ -115,12 +117,14 @@ export function DashboardPage() {
     [projects, showAllProjects]
   );
 
+  const selected = useMemo(
+    () => (selectedId ? projects.find((p) => p.id === selectedId) || null : null),
+    [projects, selectedId]
+  );
+  const selectedSum = selectedId ? summaries[selectedId] : undefined;
+
   const openProject = (project: Project) => {
-    if (role === "admin") {
-      navigate(`/projects?project=${project.id}`);
-      return;
-    }
-    navigate(`${ratesPath}?project=${project.id}`);
+    setSelectedId(project.id);
   };
 
   useEffect(() => {
@@ -131,6 +135,134 @@ export function DashboardPage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+
+      <section className="panel" id="latest-projects">
+        <div className="panel-head-row">
+          <h2>Latest projects</h2>
+          <Link className="btn ghost" to={projectsPath}>
+            Open full list
+          </Link>
+        </div>
+        <table className="data">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Location</th>
+              <th>Chainage</th>
+              <th>Team</th>
+              <th>BOQ amount</th>
+              <th>Executed value</th>
+              <th>% progress</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleProjects.map((p) => {
+              const sum = summaries[p.id];
+              return (
+                <tr
+                  key={p.id}
+                  className={`clickable-row${selectedId === p.id ? " row-active" : ""}`}
+                  onClick={() => openProject(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openProject(p);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <td>{p.id}</td>
+                  <td>{p.name}</td>
+                  <td>{p.location}</td>
+                  <td>
+                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
+                  </td>
+                  <td>
+                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
+                  </td>
+                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
+                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
+                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
+                  <td>
+                    <Link
+                      to={role === "admin" ? `/rates?project=${p.id}` : `${ratesPath}?project=${p.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Rates
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+            {!projects.length ? (
+              <tr>
+                <td colSpan={9}>No projects yet.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+        {projects.length > PREVIEW_COUNT ? (
+          <div className="show-more-row">
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setShowAllProjects((v) => !v)}
+            >
+              {showAllProjects
+                ? "Show less"
+                : `Show more (${projects.length - PREVIEW_COUNT} more)`}
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      {selected ? (
+        <section className="panel">
+          <div className="selected-project-banner">
+            <div>
+              <strong>
+                Selected · #{selected.id} · {selected.name}
+              </strong>
+              <p>
+                {selected.location}
+                {selected.chainage_from || selected.chainage_to
+                  ? ` · ${selected.chainage_from || "—"} – ${selected.chainage_to || "—"}`
+                  : ""}
+              </p>
+              <p className="muted" style={{ marginTop: "0.35rem" }}>
+                {selected.contractors.length} contractors · {selected.surveyors.length} GMC
+                representatives
+                {selectedSum
+                  ? ` · BOQ ₹ ${money(selectedSum.total_boq_amount)} · Executed ₹ ${money(
+                      selectedSum.total_executed_amount
+                    )} · ${
+                      selectedSum.progress_pct == null ? "—" : `${selectedSum.progress_pct}%`
+                    } progress`
+                  : ""}
+              </p>
+            </div>
+            <div className="btn-row">
+              <Link className="btn" to={`${ratesPath}?project=${selected.id}`}>
+                Open rates
+              </Link>
+              <Link className="btn ghost" to={`${projectsPath}?project=${selected.id}`}>
+                Project page
+              </Link>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => navigate(`/issues?project=${selected.id}`)}
+              >
+                Issues
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {stats ? (
         <>
           <section className="stat-grid">
@@ -138,7 +270,7 @@ export function DashboardPage() {
               label="Projects"
               value={stats.total_projects}
               to="#latest-projects"
-              hint="Latest projects ↓"
+              hint="Latest projects ↑"
             />
             <StatCard label="Total issues" value={stats.total_issues} to="/issues" hint="Open Issues →" />
             <StatCard label="Invoices" value={stats.total_invoices ?? 0} to="/billing" hint="Open Billing →" />
@@ -212,89 +344,6 @@ export function DashboardPage() {
           </section>
         </>
       ) : null}
-
-      <section className="panel" id="latest-projects">
-        <div className="panel-head-row">
-          <h2>Latest projects</h2>
-          <Link className="btn ghost" to={projectsPath}>
-            Open full list
-          </Link>
-        </div>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Location</th>
-              <th>Chainage</th>
-              <th>Team</th>
-              <th>BOQ amount</th>
-              <th>Executed value</th>
-              <th>% progress</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleProjects.map((p) => {
-              const sum = summaries[p.id];
-              return (
-                <tr
-                  key={p.id}
-                  className="clickable-row"
-                  onClick={() => openProject(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      openProject(p);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="link"
-                >
-                  <td>{p.id}</td>
-                  <td>{p.name}</td>
-                  <td>{p.location}</td>
-                  <td>
-                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
-                  </td>
-                  <td>
-                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
-                  </td>
-                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
-                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
-                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
-                  <td>
-                    <Link
-                      to={role === "admin" ? `/rates?project=${p.id}` : `${ratesPath}?project=${p.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Rates
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-            {!projects.length ? (
-              <tr>
-                <td colSpan={9}>No projects yet.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-        {projects.length > PREVIEW_COUNT ? (
-          <div className="show-more-row">
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => setShowAllProjects((v) => !v)}
-            >
-              {showAllProjects
-                ? "Show less"
-                : `Show more (${projects.length - PREVIEW_COUNT} more)`}
-            </button>
-          </div>
-        ) : null}
-      </section>
     </>
   );
 }

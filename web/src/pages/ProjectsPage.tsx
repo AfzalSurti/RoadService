@@ -21,7 +21,7 @@ function money(n: number) {
 
 export function ProjectsPage() {
   const { token, isReadonly } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = Number(searchParams.get("project") || 0) || null;
   const [projects, setProjects] = useState<Project[]>([]);
   const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
@@ -31,21 +31,22 @@ export function ProjectsPage() {
   const [form, setForm] = useState(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [showAll, setShowAll] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const sortedProjects = useMemo(
     () => [...projects].sort((a, b) => b.id - a.id),
     [projects]
   );
-  const visibleProjects = useMemo(() => {
-    if (showAll || highlightId) return sortedProjects;
-    return sortedProjects.slice(0, 3);
-  }, [sortedProjects, showAll, highlightId]);
 
   const selected = useMemo(
     () => (highlightId ? sortedProjects.find((p) => p.id === highlightId) || null : null),
     [highlightId, sortedProjects]
   );
+  const selectedSum = selected ? summaries[selected.id] : undefined;
+
+  const selectProject = (id: number) => {
+    setSearchParams({ project: String(id) });
+  };
 
   const load = () => {
     if (!token) return;
@@ -124,7 +125,7 @@ export function ProjectsPage() {
     }
     setError(null);
     try {
-      await api.createProject(token, {
+      const created = await api.createProject(token, {
         name: form.name.trim(),
         location: form.location.trim(),
         description: form.description.trim() || undefined,
@@ -136,7 +137,9 @@ export function ProjectsPage() {
       setForm(emptyForm);
       setTouched({});
       setFieldErrors({});
+      setShowCreate(false);
       load();
+      if (created?.id) selectProject(created.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Create failed");
     }
@@ -145,7 +148,121 @@ export function ProjectsPage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
-      {!isReadonly ? (
+
+      <section className="panel">
+        <div className="panel-head-row">
+          <h2>All projects</h2>
+          {!isReadonly ? (
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={() => setShowCreate((v) => !v)}
+            >
+              {showCreate ? "Hide create form" : "Add project"}
+            </button>
+          ) : null}
+        </div>
+        <table className="data">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Location</th>
+              <th>Chainage</th>
+              <th>Team</th>
+              <th>BOQ amount</th>
+              <th>Executed value</th>
+              <th>% progress</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedProjects.map((p) => {
+              const sum = summaries[p.id];
+              return (
+                <tr
+                  key={p.id}
+                  className={`clickable-row${highlightId === p.id ? " row-active" : ""}`}
+                  onClick={() => selectProject(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectProject(p.id);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <td>{p.id}</td>
+                  <td>{p.name}</td>
+                  <td>{p.location}</td>
+                  <td>
+                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
+                  </td>
+                  <td>
+                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
+                  </td>
+                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
+                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
+                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
+                  <td>
+                    <Link to={`/rates?project=${p.id}`} onClick={(e) => e.stopPropagation()}>
+                      Rates
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+            {!sortedProjects.length ? (
+              <tr>
+                <td colSpan={9}>No projects yet.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </section>
+
+      {selected ? (
+        <section className="panel">
+          <div className="selected-project-banner">
+            <div>
+              <strong>
+                Selected · #{selected.id} · {selected.name}
+              </strong>
+              <p>
+                {selected.location}
+                {selected.chainage_from || selected.chainage_to
+                  ? ` · ${selected.chainage_from || "—"} – ${selected.chainage_to || "—"}`
+                  : ""}
+              </p>
+              {selected.description ? <p className="muted">{selected.description}</p> : null}
+              <p className="muted" style={{ marginTop: "0.35rem" }}>
+                {selected.contractors.length} contractors · {selected.surveyors.length} GMC
+                representatives
+                {selectedSum
+                  ? ` · BOQ ₹ ${money(selectedSum.total_boq_amount)} · Executed ₹ ${money(
+                      selectedSum.total_executed_amount
+                    )} · ${
+                      selectedSum.progress_pct == null ? "—" : `${selectedSum.progress_pct}%`
+                    } progress`
+                  : ""}
+              </p>
+            </div>
+            <div className="btn-row">
+              <Link className="btn" to={`/rates?project=${selected.id}`}>
+                Open rates
+              </Link>
+              <Link className="btn ghost" to={`/issues?project=${selected.id}`}>
+                Issues
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <p className="muted">Select a project row above to see details.</p>
+      )}
+
+      {showCreate && !isReadonly ? (
         <section className="panel">
           <h2>Create project</h2>
           <form className="form-grid" onSubmit={onCreate} noValidate>
@@ -260,73 +377,6 @@ export function ProjectsPage() {
           </form>
         </section>
       ) : null}
-
-      <section className="panel">
-        {selected ? (
-          <div className="selected-project-banner">
-            <div>
-              <strong>
-                #{selected.id} · {selected.name}
-              </strong>
-              <p>
-                {selected.location}
-                {selected.chainage_from || selected.chainage_to
-                  ? ` · ${selected.chainage_from || "—"} – ${selected.chainage_to || "—"}`
-                  : ""}
-              </p>
-            </div>
-            <Link className="btn" to={`/rates?project=${selected.id}`}>
-              Open rates
-            </Link>
-          </div>
-        ) : null}
-        <table className="data">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Location</th>
-              <th>Chainage</th>
-              <th>Team</th>
-              <th>BOQ amount</th>
-              <th>Executed value</th>
-              <th>% progress</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleProjects.map((p) => {
-              const sum = summaries[p.id];
-              return (
-                <tr key={p.id} className={highlightId === p.id ? "row-active" : undefined}>
-                  <td>{p.id}</td>
-                  <td>{p.name}</td>
-                  <td>{p.location}</td>
-                  <td>
-                    {p.chainage_from || "—"} – {p.chainage_to || "—"}
-                  </td>
-                  <td>
-                    {p.contractors.length} contractors · {p.surveyors.length} GMC representatives
-                  </td>
-                  <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
-                  <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
-                  <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
-                  <td>
-                    <Link to={`/rates?project=${p.id}`}>Rates</Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {!highlightId && sortedProjects.length > 3 ? (
-          <div className="show-more-row">
-            <button type="button" className="btn secondary" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? "Show less" : `Show more (${sortedProjects.length - 3} more)`}
-            </button>
-          </div>
-        ) : null}
-      </section>
     </>
   );
 }

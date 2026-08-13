@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { BackButton } from "./BackButton";
 import { DeveloperCredit } from "./DeveloperCredit";
 import { roleLabel } from "../lib/roles";
 import { useTheme } from "../theme";
@@ -90,19 +91,24 @@ export function AppLayout() {
       </aside>
       <main className="main">
         <div className="topbar">
+          <BackButton />
           <h1 id="page-title">RoadService</h1>
           <DeveloperCredit className="navbar" />
-          <div className="topbar-user">
-            <span className="topbar-name">{fullName}</span>
-            <small>{roleLabel(role)}</small>
+          <div className="topbar-actions">
+            <div className="topbar-user">
+              <span className="topbar-name">{fullName}</span>
+              <small>{roleLabel(role)}</small>
+            </div>
+            <button className="theme-toggle" type="button" onClick={toggleTheme}>
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
+            {isReadonly ? <span className="badge view-only">View only</span> : null}
+            {unread ? <span className="badge status-verification_pending">{unread} new</span> : null}
           </div>
-          <button className="theme-toggle" type="button" onClick={toggleTheme}>
-            {theme === "dark" ? "Light mode" : "Dark mode"}
-          </button>
-          {isReadonly ? <span className="badge view-only">View only</span> : null}
-          {unread ? <span className="badge status-verification_pending">{unread} new</span> : null}
         </div>
-        <Outlet />
+        <div className="main-scroll">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
