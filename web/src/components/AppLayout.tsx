@@ -29,10 +29,19 @@ export function AppLayout() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          Road<span>Service</span>
+        <div className="sidebar-head">
+          <div className="brand">
+            Road<span>Service</span>
+          </div>
+          <div className="user-chip">
+            {fullName}
+            <small>{roleLabel(role)}</small>
+          </div>
+          <button className="linkish theme-link" type="button" onClick={toggleTheme}>
+            Switch to {theme === "dark" ? "Light" : "Dark"} mode
+          </button>
+          <DeveloperCredit className="compact sidebar-credit-top" />
         </div>
-        <DeveloperCredit className="compact sidebar-credit-top" />
         <nav>
           <NavLink to="/dashboard" end>
             Dashboard
@@ -69,13 +78,6 @@ export function AppLayout() {
           ) : null}
         </nav>
         <div className="sidebar-foot">
-          <div className="user-chip">
-            {fullName}
-            <small>{roleLabel(role)}</small>
-          </div>
-          <button className="linkish" type="button" onClick={toggleTheme}>
-            Switch to {theme === "dark" ? "Light" : "Dark"} mode
-          </button>
           <button
             className="linkish"
             type="button"
@@ -91,6 +93,10 @@ export function AppLayout() {
       <main className="main">
         <div className="topbar">
           <h1 id="page-title">RoadService</h1>
+          <div className="topbar-user">
+            <span className="topbar-name">{fullName}</span>
+            <small>{roleLabel(role)}</small>
+          </div>
           <button className="theme-toggle" type="button" onClick={toggleTheme}>
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </button>

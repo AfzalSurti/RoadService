@@ -76,8 +76,25 @@ button, input, select, textarea { font: inherit; }
   letter-spacing: -0.02em;
 }
 .brand span { color: var(--accent); }
+.sidebar-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-bottom: 0.25rem;
+}
+.sidebar-head .user-chip {
+  margin: 0 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.sidebar-head .theme-link {
+  margin: 0 0.15rem;
+}
 .sidebar-credit-top {
-  margin: 0 0.5rem;
+  margin: 0.15rem 0.5rem 0;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--line);
 }
@@ -96,8 +113,17 @@ button, input, select, textarea { font: inherit; }
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--ink);
 }
-.sidebar-foot { border-top: 1px solid var(--line); padding-top: 1rem; }
-.user-chip small { display: block; color: var(--muted); text-transform: capitalize; }
+.sidebar-foot { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: auto; }
+.user-chip small { display: block; color: var(--muted); text-transform: capitalize; font-weight: 500; margin-top: 0.15rem; }
+.topbar-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  margin-right: 0.25rem;
+}
+.topbar-name { font-weight: 700; color: var(--ink); font-size: 0.95rem; }
+.topbar-user small { color: var(--muted); text-transform: capitalize; }
 
 .main { padding: 1.5rem 2rem 2.5rem; }
 .topbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
