@@ -11,14 +11,17 @@ import {
   View,
 } from "react-native";
 import { SelectSheet } from "../components/SelectSheet";
+import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { api, type Project, type SiteNcr } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 const CATS = ["Highway", "Structure", "Drainage", "Safety", "Others"];
 const SIDES = ["LHS", "RHS", "Median"];
 
 export default function NcrScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{ rfiId?: string; projectId?: string }>();
   const [rows, setRows] = useState<SiteNcr[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -29,6 +32,7 @@ export default function NcrScreen() {
   const [projectId, setProjectId] = useState<number | null>(null);
   const [hasRef, setHasRef] = useState(false);
   const [sheet, setSheet] = useState<"project" | "category" | "side" | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [form, setForm] = useState({
     startKm: "",
     startM: "",
@@ -97,6 +101,12 @@ export default function NcrScreen() {
     try {
       const start = form.startKm || form.startM ? `${form.startKm || "0"}+${form.startM || "0"}` : undefined;
       const end = form.endKm || form.endM ? `${form.endKm || "0"}+${form.endM || "0"}` : undefined;
+      const mediaNote = media
+        .map((m) => `[${m.kind}] ${m.uri}${m.lat != null ? ` @${m.lat.toFixed(5)},${m.lng?.toFixed(5)}` : ""}`)
+        .join("\n");
+      const description = [form.description.trim(), mediaNote ? `Media:\n${mediaNote}` : ""]
+        .filter(Boolean)
+        .join("\n\n");
       await api.raiseNcr(token, {
         project_id: projectId,
         related_rfi_id: params.rfiId ? Number(params.rfiId) : undefined,
@@ -107,11 +117,12 @@ export default function NcrScreen() {
         item: form.item || undefined,
         layer: form.layer || undefined,
         side: form.side || undefined,
-        description: form.description.trim(),
+        description,
         rectification_duration: form.rectification_duration || undefined,
         block_succeeding_rfis: form.block,
       });
       setStep("list");
+      setMedia([]);
       setForm({
         startKm: "",
         startM: "",
@@ -136,28 +147,34 @@ export default function NcrScreen() {
 
   if (step === "project") {
     return (
-      <View style={st.page}>
+      <View style={[st.page, { backgroundColor: colors.bg }]}>
         <Stack.Screen options={{ title: "Raise NCR" }} />
-        <Text style={st.h}>Select project / UCC</Text>
-        <Pressable style={st.select} onPress={() => setSheet("project")}>
-          <Text style={selected ? st.val : st.ph}>
+        <Text style={[st.h, { color: colors.text }]}>Select project / UCC</Text>
+        <Pressable
+          style={[st.select, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => setSheet("project")}
+        >
+          <Text style={selected ? [st.val, { color: colors.text }] : [st.ph, { color: colors.muted }]}>
             {selected ? `${selected.ucc || selected.name}` : "Search UCC"}
           </Text>
         </Pressable>
         {selected?.description || selected?.name ? (
-          <Text style={st.meta}>{selected.description || selected.name}</Text>
+          <Text style={[st.meta, { color: colors.muted }]}>{selected.description || selected.name}</Text>
         ) : null}
-        {error ? <Text style={st.err}>{error}</Text> : null}
+        {error ? <Text style={[st.err, { color: colors.danger }]}>{error}</Text> : null}
         <View style={st.row}>
-          <Pressable style={st.ghost} onPress={() => setStep("list")}>
-            <Text style={st.ghostText}>Cancel</Text>
+          <Pressable
+            style={[st.ghost, { borderColor: colors.primary, backgroundColor: colors.card }]}
+            onPress={() => setStep("list")}
+          >
+            <Text style={[st.ghostText, { color: colors.primary }]}>Cancel</Text>
           </Pressable>
           <Pressable
-            style={[st.primary, !projectId && st.off]}
+            style={[st.primary, { backgroundColor: colors.primary }, !projectId && st.off]}
             disabled={!projectId}
             onPress={() => setStep("form")}
           >
-            <Text style={st.primaryText}>Done</Text>
+            <Text style={[st.primaryText, { color: colors.primaryText }]}>Done</Text>
           </Pressable>
         </View>
         <SelectSheet
@@ -182,67 +199,144 @@ export default function NcrScreen() {
 
   if (step === "form") {
     return (
-      <ScrollView contentContainerStyle={st.page}>
+      <ScrollView contentContainerStyle={[st.page, { backgroundColor: colors.bg }]}>
         <Stack.Screen options={{ title: "Raise New NCR" }} />
-        <Text style={st.projectLine}>
+        <Text style={[st.projectLine, { color: colors.text }]}>
           {selected?.ucc || `N/${projectId}`} — {selected?.name}
         </Text>
-        <Text style={st.label}>Do you have a Reference RFI ID?</Text>
+        <Text style={[st.label, { color: colors.text }]}>Do you have a Reference RFI ID?</Text>
         <View style={st.row}>
-          <Pressable style={[st.pill, hasRef && st.pillOn]} onPress={() => setHasRef(true)}>
-            <Text style={[st.pillText, hasRef && st.pillTextOn]}>Yes</Text>
+          <Pressable
+            style={[st.pill, { borderColor: colors.border }, hasRef && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+            onPress={() => setHasRef(true)}
+          >
+            <Text style={[st.pillText, { color: colors.text }, hasRef && { color: colors.primaryText }]}>Yes</Text>
           </Pressable>
-          <Pressable style={[st.pill, !hasRef && st.pillOn]} onPress={() => setHasRef(false)}>
-            <Text style={[st.pillText, !hasRef && st.pillTextOn]}>No</Text>
+          <Pressable
+            style={[st.pill, { borderColor: colors.border }, !hasRef && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+            onPress={() => setHasRef(false)}
+          >
+            <Text style={[st.pillText, { color: colors.text }, !hasRef && { color: colors.primaryText }]}>No</Text>
           </Pressable>
         </View>
         {hasRef && params.rfiId ? <Text style={st.ok}>Linked RFI #{params.rfiId}</Text> : null}
 
-        <Text style={st.label}>NCR Chainage start (KM + m)</Text>
+        <Text style={[st.label, { color: colors.text }]}>NCR Chainage start (KM + m)</Text>
         <View style={st.row}>
-          <TextInput style={st.input} placeholder="KM" value={form.startKm} onChangeText={(t) => setForm({ ...form, startKm: t })} keyboardType="decimal-pad" />
-          <TextInput style={st.input} placeholder="+ m" value={form.startM} onChangeText={(t) => setForm({ ...form, startM: t })} keyboardType="decimal-pad" />
+          <TextInput
+            style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+            placeholder="KM"
+            placeholderTextColor={colors.muted}
+            value={form.startKm}
+            onChangeText={(t) => setForm({ ...form, startKm: t })}
+            keyboardType="decimal-pad"
+          />
+          <TextInput
+            style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+            placeholder="+ m"
+            placeholderTextColor={colors.muted}
+            value={form.startM}
+            onChangeText={(t) => setForm({ ...form, startM: t })}
+            keyboardType="decimal-pad"
+          />
         </View>
-        <Text style={st.label}>NCR Chainage end (KM + m)</Text>
+        <Text style={[st.label, { color: colors.text }]}>NCR Chainage end (KM + m)</Text>
         <View style={st.row}>
-          <TextInput style={st.input} placeholder="KM" value={form.endKm} onChangeText={(t) => setForm({ ...form, endKm: t })} keyboardType="decimal-pad" />
-          <TextInput style={st.input} placeholder="+ m" value={form.endM} onChangeText={(t) => setForm({ ...form, endM: t })} keyboardType="decimal-pad" />
+          <TextInput
+            style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+            placeholder="KM"
+            placeholderTextColor={colors.muted}
+            value={form.endKm}
+            onChangeText={(t) => setForm({ ...form, endKm: t })}
+            keyboardType="decimal-pad"
+          />
+          <TextInput
+            style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+            placeholder="+ m"
+            placeholderTextColor={colors.muted}
+            value={form.endM}
+            onChangeText={(t) => setForm({ ...form, endM: t })}
+            keyboardType="decimal-pad"
+          />
         </View>
 
-        <Pressable style={st.select} onPress={() => setSheet("category")}>
-          <Text style={form.category ? st.val : st.ph}>{form.category || "Category"}</Text>
-        </Pressable>
-        <TextInput style={st.input} placeholder="Sub Category" value={form.sub_category} onChangeText={(t) => setForm({ ...form, sub_category: t })} />
-        <TextInput style={st.input} placeholder="Item" value={form.item} onChangeText={(t) => setForm({ ...form, item: t })} />
-        <TextInput style={st.input} placeholder="Layer" value={form.layer} onChangeText={(t) => setForm({ ...form, layer: t })} />
-        <Pressable style={st.select} onPress={() => setSheet("side")}>
-          <Text style={form.side ? st.val : st.ph}>{form.side || "Side"}</Text>
+        <Pressable
+          style={[st.select, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => setSheet("category")}
+        >
+          <Text style={form.category ? [st.val, { color: colors.text }] : [st.ph, { color: colors.muted }]}>
+            {form.category || "Category"}
+          </Text>
         </Pressable>
         <TextInput
-          style={[st.input, { minHeight: 90 }]}
+          style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+          placeholder="Sub Category"
+          placeholderTextColor={colors.muted}
+          value={form.sub_category}
+          onChangeText={(t) => setForm({ ...form, sub_category: t })}
+        />
+        <TextInput
+          style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+          placeholder="Item"
+          placeholderTextColor={colors.muted}
+          value={form.item}
+          onChangeText={(t) => setForm({ ...form, item: t })}
+        />
+        <TextInput
+          style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+          placeholder="Layer"
+          placeholderTextColor={colors.muted}
+          value={form.layer}
+          onChangeText={(t) => setForm({ ...form, layer: t })}
+        />
+        <Pressable
+          style={[st.select, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => setSheet("side")}
+        >
+          <Text style={form.side ? [st.val, { color: colors.text }] : [st.ph, { color: colors.muted }]}>
+            {form.side || "Side"}
+          </Text>
+        </Pressable>
+        <TextInput
+          style={[
+            st.input,
+            { minHeight: 90, backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+          ]}
           placeholder="Enter description"
+          placeholderTextColor={colors.muted}
           value={form.description}
           onChangeText={(t) => setForm({ ...form, description: t })}
           multiline
         />
         <TextInput
-          style={st.input}
+          style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
           placeholder="Rectification Duration"
+          placeholderTextColor={colors.muted}
           value={form.rectification_duration}
           onChangeText={(t) => setForm({ ...form, rectification_duration: t })}
         />
-        <Text style={st.note}>Site Photos to be uploaded through mobile app (use Raise Defect for photos).</Text>
+        <Text style={[st.label, { color: colors.text }]}>Site photos / video</Text>
+        <MediaAttach items={media} onChange={setMedia} />
         <Pressable style={st.checkRow} onPress={() => setForm({ ...form, block: !form.block })}>
-          <View style={[st.box, form.block && st.boxOn]}>{form.block ? <Text>✓</Text> : null}</View>
-          <Text style={st.meta}>RFIs for succeeding work at the same location not allowed</Text>
+          <View style={[st.box, { borderColor: colors.border }, form.block && st.boxOn]}>
+            {form.block ? <Text>✓</Text> : null}
+          </View>
+          <Text style={[st.meta, { color: colors.muted }]}>
+            RFIs for succeeding work at the same location not allowed
+          </Text>
         </Pressable>
-        {error ? <Text style={st.err}>{error}</Text> : null}
+        {error ? <Text style={[st.err, { color: colors.danger }]}>{error}</Text> : null}
         <View style={st.row}>
-          <Pressable style={st.ghost} onPress={() => setStep("list")}>
-            <Text style={st.ghostText}>Cancel</Text>
+          <Pressable
+            style={[st.ghost, { borderColor: colors.primary, backgroundColor: colors.card }]}
+            onPress={() => setStep("list")}
+          >
+            <Text style={[st.ghostText, { color: colors.primary }]}>Cancel</Text>
           </Pressable>
-          <Pressable style={st.primary} disabled={busy} onPress={save}>
-            <Text style={st.primaryText}>{busy ? "Saving…" : "Save as Draft"}</Text>
+          <Pressable style={[st.primary, { backgroundColor: colors.primary }]} disabled={busy} onPress={save}>
+            <Text style={[st.primaryText, { color: colors.primaryText }]}>
+              {busy ? "Saving…" : "Save as Draft"}
+            </Text>
           </Pressable>
         </View>
         <SelectSheet
@@ -281,24 +375,26 @@ export default function NcrScreen() {
   ];
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Issuance Of NCR" }} />
       <View style={st.kpiGrid}>
         {kpis.map((k) => (
-          <View key={k.label} style={[st.kpi, k.dark && st.kpiDark]}>
-            <Text style={[st.kpiVal, k.dark && { color: "#fff" }]}>{k.value}</Text>
-            <Text style={[st.kpiLab, k.dark && { color: "#cfe0f5" }]}>{k.label}</Text>
+          <View key={k.label} style={[st.kpi, { backgroundColor: colors.card }, k.dark && st.kpiDark]}>
+            <Text style={[st.kpiVal, { color: colors.primary }, k.dark && { color: "#fff" }]}>{k.value}</Text>
+            <Text style={[st.kpiLab, { color: colors.muted }, k.dark && { color: "#cfe0f5" }]}>{k.label}</Text>
           </View>
         ))}
       </View>
       {canRaise ? (
-        <Pressable style={st.primary} onPress={() => setStep("project")}>
-          <Text style={st.primaryText}>+ Raise New NCR</Text>
+        <Pressable style={[st.primary, { backgroundColor: colors.primary }]} onPress={() => setStep("project")}>
+          <Text style={[st.primaryText, { color: colors.primaryText }]}>+ Raise New NCR</Text>
         </Pressable>
       ) : (
-        <Text style={st.meta}>Contractor: view NCRs and update status. Only GMC representative can raise.</Text>
+        <Text style={[st.meta, { color: colors.muted }]}>
+          Contractor: view NCRs and update status. Only GMC representative can raise.
+        </Text>
       )}
-      {error ? <Text style={st.err}>{error}</Text> : null}
+      {error ? <Text style={[st.err, { color: colors.danger }]}>{error}</Text> : null}
       <FlatList
         data={rows}
         keyExtractor={(i) => String(i.id)}
@@ -313,14 +409,16 @@ export default function NcrScreen() {
           />
         }
         renderItem={({ item }) => (
-          <View style={st.card}>
-            <Text style={st.val}>{item.ncr_no}</Text>
-            <Text style={st.meta}>
+          <View style={[st.card, { backgroundColor: colors.card }]}>
+            <Text style={[st.val, { color: colors.text }]}>{item.ncr_no}</Text>
+            <Text style={[st.meta, { color: colors.muted }]}>
               {item.status} · {item.stage || "Raised"}
               {item.chainage_start ? ` · ${item.chainage_start}` : ""}
               {item.chainage_end ? ` to ${item.chainage_end}` : ""}
             </Text>
-            <Text numberOfLines={2}>{item.description}</Text>
+            <Text style={{ color: colors.text }} numberOfLines={2}>
+              {item.description}
+            </Text>
             {canAct ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                 {(
@@ -333,16 +431,24 @@ export default function NcrScreen() {
                     key={s}
                     style={{
                       borderWidth: 1,
-                      borderColor: "#1a4b8c",
+                      borderColor: colors.primary,
                       borderRadius: 8,
                       paddingHorizontal: 10,
                       paddingVertical: 6,
-                      backgroundColor: item.status === s || (s === "closed" && item.status === "closed") ? "#1a4b8c" : "#fff",
+                      backgroundColor:
+                        item.status === s || (s === "closed" && item.status === "closed")
+                          ? colors.primary
+                          : colors.card,
                     }}
                     onPress={async () => {
                       if (!token) return;
                       try {
-                        await api.updateNcrStatus(token, item.id, s === "closed" ? "closed" : "open", s === "in_progress" ? "In progress" : "Completed");
+                        await api.updateNcrStatus(
+                          token,
+                          item.id,
+                          s === "closed" ? "closed" : "open",
+                          s === "in_progress" ? "In progress" : "Completed"
+                        );
                         await load();
                       } catch (e: any) {
                         setError(e.message);
@@ -351,7 +457,8 @@ export default function NcrScreen() {
                   >
                     <Text
                       style={{
-                        color: item.status === s || item.stage === lab ? "#fff" : "#1a4b8c",
+                        color:
+                          item.status === s || item.stage === lab ? colors.primaryText : colors.primary,
                         fontWeight: "700",
                         fontSize: 12,
                       }}
@@ -364,83 +471,74 @@ export default function NcrScreen() {
             ) : null}
           </View>
         )}
-        ListEmptyComponent={<Text style={st.meta}>No Data Found.</Text>}
+        ListEmptyComponent={<Text style={[st.meta, { color: colors.muted }]}>No Data Found.</Text>}
       />
-      <Pressable style={st.ghost} onPress={() => router.back()}>
-        <Text style={st.ghostText}>Back</Text>
+      <Pressable
+        style={[st.ghost, { borderColor: colors.primary, backgroundColor: colors.card }]}
+        onPress={() => router.back()}
+      >
+        <Text style={[st.ghostText, { color: colors.primary }]}>Back</Text>
       </Pressable>
     </View>
   );
 }
 
 const st = StyleSheet.create({
-  page: { flexGrow: 1, backgroundColor: "#eef2f6", padding: 14 },
-  h: { fontSize: 18, fontWeight: "800", color: "#12355a", marginBottom: 10 },
+  page: { flexGrow: 1, padding: 14 },
+  h: { fontSize: 18, fontWeight: "800", marginBottom: 10 },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   kpi: {
     width: "31%",
-    backgroundColor: "#fff",
     borderRadius: 10,
     padding: 10,
     alignItems: "center",
   },
   kpiDark: { backgroundColor: "#12355a" },
-  kpiVal: { fontWeight: "800", fontSize: 18, color: "#12355a" },
-  kpiLab: { fontSize: 11, color: "#556", textAlign: "center" },
+  kpiVal: { fontWeight: "800", fontSize: 18 },
+  kpiLab: { fontSize: 11, textAlign: "center" },
   primary: {
-    backgroundColor: "#1a4b8c",
     borderRadius: 12,
     padding: 14,
     alignItems: "center",
     marginBottom: 12,
     flex: 1,
   },
-  primaryText: { color: "#fff", fontWeight: "800" },
+  primaryText: { fontWeight: "800" },
   off: { backgroundColor: "#cfd6df" },
   ghost: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#1a4b8c",
     borderRadius: 12,
     padding: 14,
     alignItems: "center",
     marginBottom: 12,
-    backgroundColor: "#fff",
   },
-  ghostText: { color: "#1a4b8c", fontWeight: "700" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 10 },
-  val: { fontWeight: "800", color: "#111", marginBottom: 4 },
-  meta: { color: "#667", marginBottom: 4 },
-  err: { color: "#b91c1c", marginBottom: 8 },
+  ghostText: { fontWeight: "700" },
+  card: { borderRadius: 12, padding: 14, marginBottom: 10 },
+  val: { fontWeight: "800", marginBottom: 4 },
+  meta: { marginBottom: 4 },
+  err: { marginBottom: 8 },
   ok: { color: "#157347", marginBottom: 8 },
   select: {
     borderWidth: 1,
-    borderColor: "#d5dbe3",
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
-    backgroundColor: "#fff",
   },
-  ph: { color: "#8b97a8" },
+  ph: {},
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#d5dbe3",
     borderRadius: 10,
     padding: 12,
-    backgroundColor: "#fff",
     marginBottom: 10,
-    color: "#111",
   },
   row: { flexDirection: "row", gap: 8 },
-  label: { fontWeight: "700", color: "#334", marginBottom: 6 },
-  projectLine: { fontWeight: "700", color: "#12355a", marginBottom: 12 },
-  note: { backgroundColor: "#fef9c3", padding: 10, borderRadius: 8, color: "#854d0e", marginBottom: 10 },
+  label: { fontWeight: "700", marginBottom: 6 },
+  projectLine: { fontWeight: "700", marginBottom: 12 },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  box: { width: 20, height: 20, borderWidth: 1, borderColor: "#667", alignItems: "center", justifyContent: "center" },
+  box: { width: 20, height: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: "#dbeafe" },
-  pill: { borderWidth: 1, borderColor: "#c5ccd6", borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 10 },
-  pillOn: { backgroundColor: "#1a4b8c", borderColor: "#1a4b8c" },
-  pillText: { color: "#334", fontWeight: "700" },
-  pillTextOn: { color: "#fff" },
+  pill: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 10 },
+  pillText: { fontWeight: "700" },
 });

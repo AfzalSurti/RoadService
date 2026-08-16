@@ -23,10 +23,6 @@ from app.services.storage import save_upload
 router = APIRouter(prefix="/queries", tags=["queries"])
 
 MODULE_AREAS = [
-    "billing",
-    "documents",
-    "mpr",
-    "toll",
     "incidents",
     "its",
     "civil_assets",

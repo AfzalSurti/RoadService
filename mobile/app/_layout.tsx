@@ -1,13 +1,31 @@
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { AuthProvider } from "../lib/auth";
-import { ThemeProvider } from "../lib/theme";
+import { ThemeProvider, useTheme } from "../lib/theme";
+
+function ThemedStack() {
+  const { colors, mode } = useTheme();
+  return (
+    <>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.header },
+          headerTintColor: "#fff",
+          headerTitleStyle: { fontWeight: "700" },
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      />
+    </>
+  );
+}
 
 export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Stack screenOptions={{ headerStyle: { backgroundColor: "#0b2a43" }, headerTintColor: "#fff" }} />
+        <ThemedStack />
       </AuthProvider>
     </ThemeProvider>
   );

@@ -13,19 +13,16 @@ import {
 } from "react-native";
 import { api, type PortalQueryTicket, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 const MODULES = [
-  "billing",
-  "documents",
-  "mpr",
   "attendance",
-  "other",
-  "toll",
   "incidents",
   "its",
   "civil_assets",
   "vendors",
   "staff_details",
+  "other",
 ];
 
 /**
@@ -34,6 +31,7 @@ const MODULES = [
  */
 export default function QueryScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [rows, setRows] = useState<PortalQueryTicket[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,18 +99,18 @@ export default function QueryScreen() {
   };
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Query Raise" }} />
-      <Text style={st.hint}>
+      <Text style={[st.hint, { color: colors.muted }]}>
         Raise a portal query / ticket. Status only here — resolve is done by GMC MIS Expert on the
         web portal.
       </Text>
       {canRaise ? (
-        <Pressable style={st.primary} onPress={() => setShowRaise(true)}>
-          <Text style={st.primaryText}>Raise query</Text>
+        <Pressable style={[st.primary, { backgroundColor: colors.primary }]} onPress={() => setShowRaise(true)}>
+          <Text style={[st.primaryText, { color: colors.primaryText }]}>Raise query</Text>
         </Pressable>
       ) : null}
-      {error ? <Text style={st.err}>{error}</Text> : null}
+      {error ? <Text style={[st.err, { color: colors.danger }]}>{error}</Text> : null}
       {msg ? <Text style={st.ok}>{msg}</Text> : null}
       <FlatList
         data={rows}
@@ -128,65 +126,96 @@ export default function QueryScreen() {
           />
         }
         renderItem={({ item }) => (
-          <View style={st.card}>
-            <Text style={st.title}>{item.ticket_no}</Text>
-            <Text style={st.meta}>
+          <View style={[st.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[st.title, { color: colors.text }]}>{item.ticket_no}</Text>
+            <Text style={[st.meta, { color: colors.muted }]}>
               Status: {item.status} · {item.module_area} · Client #{item.raised_by_id}
             </Text>
-            <Text style={st.subject}>{item.subject}</Text>
-            <Text numberOfLines={2}>{item.description}</Text>
+            <Text style={[st.subject, { color: colors.text }]}>{item.subject}</Text>
+            <Text style={{ color: colors.text }} numberOfLines={2}>
+              {item.description}
+            </Text>
           </View>
         )}
-        ListEmptyComponent={<Text style={st.meta}>No queries yet.</Text>}
+        ListEmptyComponent={<Text style={[st.meta, { color: colors.muted }]}>No queries yet.</Text>}
       />
-      <Pressable style={st.ghost} onPress={() => router.back()}>
-        <Text style={st.ghostText}>Back</Text>
+      <Pressable style={[st.ghost, { borderColor: colors.primary, backgroundColor: colors.card }]} onPress={() => router.back()}>
+        <Text style={[st.ghostText, { color: colors.primary }]}>Back</Text>
       </Pressable>
 
       <Modal visible={showRaise} animationType="slide">
-        <ScrollView contentContainerStyle={st.modal} keyboardShouldPersistTaps="handled">
-          <Text style={st.title}>New query</Text>
-          <Text style={st.label}>Project</Text>
+        <ScrollView
+          contentContainerStyle={[st.modal, { backgroundColor: colors.bg }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={[st.title, { color: colors.text }]}>New query</Text>
+          <Text style={[st.label, { color: colors.text }]}>Project</Text>
           {projects.map((p) => (
             <Pressable
               key={p.id}
-              style={[st.select, form.project_id === String(p.id) && st.selectOn]}
+              style={[
+                st.select,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                form.project_id === String(p.id) && { borderColor: colors.primary, backgroundColor: colors.inputBg },
+              ]}
               onPress={() => setForm({ ...form, project_id: String(p.id) })}
             >
-              <Text>{p.name}</Text>
+              <Text style={{ color: colors.text }}>{p.name}</Text>
             </Pressable>
           ))}
-          <Text style={st.label}>Module</Text>
+          <Text style={[st.label, { color: colors.text }]}>Module</Text>
           <View style={st.pills}>
-            {MODULES.slice(0, 6).map((m) => (
+            {MODULES.map((m) => (
               <Pressable
                 key={m}
-                style={[st.pill, form.module_area === m && st.pillOn]}
+                style={[
+                  st.pill,
+                  { borderColor: colors.primary },
+                  form.module_area === m && { backgroundColor: colors.primary },
+                ]}
                 onPress={() => setForm({ ...form, module_area: m })}
               >
-                <Text style={[st.pillText, form.module_area === m && { color: "#fff" }]}>{m}</Text>
+                <Text
+                  style={[
+                    st.pillText,
+                    { color: colors.primary },
+                    form.module_area === m && { color: colors.primaryText },
+                  ]}
+                >
+                  {m}
+                </Text>
               </Pressable>
             ))}
           </View>
           <TextInput
-            style={st.input}
+            style={[st.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
             placeholder="Subject"
+            placeholderTextColor={colors.muted}
             value={form.subject}
             onChangeText={(t) => setForm({ ...form, subject: t })}
           />
           <TextInput
-            style={[st.input, { minHeight: 90 }]}
+            style={[
+              st.input,
+              { minHeight: 90, backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+            ]}
             placeholder="Description"
+            placeholderTextColor={colors.muted}
             multiline
             value={form.description}
             onChangeText={(t) => setForm({ ...form, description: t })}
           />
-          {error ? <Text style={st.err}>{error}</Text> : null}
-          <Pressable style={st.primary} disabled={busy} onPress={raise}>
-            <Text style={st.primaryText}>{busy ? "Submitting…" : "Submit"}</Text>
+          {error ? <Text style={[st.err, { color: colors.danger }]}>{error}</Text> : null}
+          <Pressable style={[st.primary, { backgroundColor: colors.primary }]} disabled={busy} onPress={raise}>
+            <Text style={[st.primaryText, { color: colors.primaryText }]}>
+              {busy ? "Submitting…" : "Submit"}
+            </Text>
           </Pressable>
-          <Pressable style={st.ghost} onPress={() => setShowRaise(false)}>
-            <Text style={st.ghostText}>Cancel</Text>
+          <Pressable
+            style={[st.ghost, { borderColor: colors.primary, backgroundColor: colors.card }]}
+            onPress={() => setShowRaise(false)}
+          >
+            <Text style={[st.ghostText, { color: colors.primary }]}>Cancel</Text>
           </Pressable>
         </ScrollView>
       </Modal>
@@ -195,53 +224,44 @@ export default function QueryScreen() {
 }
 
 const st = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#eef2f6", padding: 14 },
-  hint: { color: "#556", marginBottom: 12, lineHeight: 18 },
-  primary: { backgroundColor: "#1a4b8c", borderRadius: 12, padding: 14, alignItems: "center", marginBottom: 10 },
-  primaryText: { color: "#fff", fontWeight: "800" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 10 },
-  title: { fontWeight: "800", color: "#111", marginBottom: 4, fontSize: 16 },
+  page: { flex: 1, padding: 14 },
+  hint: { marginBottom: 12, lineHeight: 18 },
+  primary: { borderRadius: 12, padding: 14, alignItems: "center", marginBottom: 10 },
+  primaryText: { fontWeight: "800" },
+  card: { borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1 },
+  title: { fontWeight: "800", marginBottom: 4, fontSize: 16 },
   subject: { fontWeight: "700", marginBottom: 4 },
-  meta: { color: "#667", marginBottom: 4 },
-  err: { color: "#b91c1c", marginBottom: 8 },
+  meta: { marginBottom: 4 },
+  err: { marginBottom: 8 },
   ok: { color: "#15803d", marginBottom: 8 },
   ghost: {
     borderWidth: 1,
-    borderColor: "#1a4b8c",
     borderRadius: 12,
     padding: 12,
     alignItems: "center",
-    backgroundColor: "#fff",
     marginTop: 8,
   },
-  ghostText: { color: "#1a4b8c", fontWeight: "700" },
-  modal: { padding: 16, paddingTop: 48, backgroundColor: "#eef2f6", flexGrow: 1 },
+  ghostText: { fontWeight: "700" },
+  modal: { padding: 16, paddingTop: 48, flexGrow: 1 },
   label: { fontWeight: "700", marginBottom: 6, marginTop: 8 },
   input: {
     borderWidth: 1,
-    borderColor: "#d5dbe3",
     borderRadius: 10,
     padding: 12,
-    backgroundColor: "#fff",
     marginBottom: 10,
   },
   select: {
     borderWidth: 1,
-    borderColor: "#d5dbe3",
     borderRadius: 10,
     padding: 12,
-    backgroundColor: "#fff",
     marginBottom: 6,
   },
-  selectOn: { borderColor: "#1a4b8c", backgroundColor: "#eef4fb" },
   pills: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   pill: {
     borderWidth: 1,
-    borderColor: "#1a4b8c",
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  pillOn: { backgroundColor: "#1a4b8c" },
-  pillText: { color: "#1a4b8c", fontSize: 12, fontWeight: "600" },
+  pillText: { fontSize: 12, fontWeight: "600" },
 });

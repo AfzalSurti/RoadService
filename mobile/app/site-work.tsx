@@ -10,12 +10,14 @@ import {
 } from "react-native";
 import { api, type Issue } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 /**
  * Contractor site work queue — view GMC-raised defects and set In progress / Completed.
  */
 export default function SiteWorkScreen() {
   const { token } = useAuth();
+  const { colors } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,7 +54,7 @@ export default function SiteWorkScreen() {
   };
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Site Work" }} />
       <Text style={st.hint}>
         Defects raised by GMC representative. Use In progress / Completed only — you cannot raise new
@@ -120,7 +122,7 @@ export default function SiteWorkScreen() {
 }
 
 const st = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#eef2f6", padding: 14 },
+  page: { flex: 1, padding: 14 },
   hint: { color: "#556", marginBottom: 12, lineHeight: 18 },
   err: { color: "#b91c1c", marginBottom: 8 },
   ok: { color: "#15803d", fontWeight: "700", marginTop: 6 },

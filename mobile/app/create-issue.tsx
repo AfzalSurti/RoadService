@@ -7,6 +7,7 @@ import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { SelectSheet } from "../components/SelectSheet";
 import { api, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { enqueueOfflineJob, isNetworkError } from "../lib/offline";
 
 type DefectType = { id: string; label: string; category_id: string };
@@ -25,16 +26,17 @@ function fmtChain(km: string, m: string) {
 
 export default function CreateIssueScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   if (role === "contractor") {
     return (
-      <View style={{ flex: 1, backgroundColor: "#eef2f6", padding: 24, justifyContent: "center" }}>
+      <View style={{ flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: "center" }}>
         <Stack.Screen options={{ title: "Raise Defect" }} />
-        <Text style={{ color: "#334", marginBottom: 16, lineHeight: 20 }}>
+        <Text style={{ color: colors.text, marginBottom: 16, lineHeight: 20 }}>
           Contractor cannot raise defects. Open Site Work to view GMC items and set In progress /
           Completed.
         </Text>
         <Pressable
-          style={{ backgroundColor: "#1a4b8c", padding: 14, borderRadius: 12, alignItems: "center" }}
+          style={{ backgroundColor: colors.primary, padding: 14, borderRadius: 12, alignItems: "center" }}
           onPress={() => router.replace("/site-work")}
         >
           <Text style={{ color: "#fff", fontWeight: "800" }}>Go to Site Work</Text>
@@ -194,7 +196,7 @@ export default function CreateIssueScreen() {
   const ready = !!(projectId && photo && description.trim().length >= 5 && issueTypeId && coords);
 
   return (
-    <ScrollView contentContainerStyle={s.page}>
+    <ScrollView contentContainerStyle={[s.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Raise Defect", headerStyle: { backgroundColor: "#0b2a43" } }} />
 
       <View style={s.card}>
@@ -387,7 +389,7 @@ export default function CreateIssueScreen() {
 }
 
 const s = StyleSheet.create({
-  page: { padding: 14, paddingBottom: 40, backgroundColor: "#eef2f6" },
+  page: { padding: 14, paddingBottom: 40 },
   card: { backgroundColor: "#fff", borderRadius: 14, padding: 14, marginBottom: 12 },
   sec: { fontWeight: "800", color: "#12355a", marginBottom: 10, fontSize: 16 },
   label: { fontWeight: "700", color: "#334", marginBottom: 6, marginTop: 4 },

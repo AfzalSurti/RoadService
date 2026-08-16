@@ -3,6 +3,7 @@ import React, { useCallback, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 type Note = {
   id: number;
@@ -15,6 +16,7 @@ type Note = {
 
 export default function NotificationsScreen() {
   const { token } = useAuth();
+  const { colors } = useTheme();
   const [items, setItems] = useState<Note[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +37,7 @@ export default function NotificationsScreen() {
   );
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Notifications" }} />
       <Pressable
         style={styles.markAll}
@@ -76,7 +78,7 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#0a0c10", padding: 16 },
+  page: { flex: 1, padding: 16 },
   markAll: { alignSelf: "flex-end", marginBottom: 10 },
   markAllText: { color: "#3b9eff", fontWeight: "600" },
   card: {

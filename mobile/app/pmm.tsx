@@ -15,6 +15,7 @@ import { PackageCheckboxes } from "../components/PackageCheckboxes";
 import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { api, type PmmSurvey, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { matchProjectsToPackages } from "../lib/packages";
 
 const TYPES = ["Contractual Obligations", "Structure", "Road Safety", "Others"];
@@ -23,6 +24,7 @@ const PRIORITIES = ["high", "medium", "low"];
 
 export default function PmmScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [rows, setRows] = useState<PmmSurvey[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +162,7 @@ export default function PmmScreen() {
   };
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "PMM List" }} />
       <Text style={st.crumb}>Home › Priority Maintenance (PMM)</Text>
       <TextInput style={st.search} placeholder="Search" value={q} onChangeText={setQ} />
@@ -332,7 +334,7 @@ export default function PmmScreen() {
 }
 
 const st = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#eef2f6", padding: 14 },
+  page: { flex: 1, padding: 14 },
   crumb: { color: "#667", marginBottom: 8 },
   search: {
     borderWidth: 1,

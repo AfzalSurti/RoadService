@@ -1,5 +1,5 @@
 import { Link, Stack, router, useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -46,7 +46,7 @@ function firstName(full?: string | null) {
 
 function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
   const { token, fullName, logout } = useAuth();
-  const { mode, toggle } = useTheme();
+  const { mode, toggle, colors } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [rfis, setRfis] = useState<SiteRfi[]>([]);
   const [unread, setUnread] = useState(0);
@@ -98,8 +98,8 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
   ];
 
   return (
-    <View style={dash.page}>
-      <Stack.Screen options={{ title: "Home", headerStyle: { backgroundColor: "#0b2a43" } }} />
+    <View style={[dash.page, { backgroundColor: colors.bg }]}>
+      <Stack.Screen options={{ title: "Home", headerStyle: { backgroundColor: colors.header } }} />
       <ScrollView
         refreshControl={
           <RefreshControl
@@ -112,7 +112,7 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
           />
         }
       >
-        <View style={dash.top}>
+        <View style={[dash.top, { backgroundColor: colors.header }]}>
           <View>
             <Text style={dash.hi}>Hi, {firstName(fullName)}</Text>
             <Text style={dash.sub}>{subtitle}</Text>
@@ -135,15 +135,18 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
           </View>
         </View>
 
-        <Pressable style={dash.noteBanner} onPress={() => router.push("/notifications")}>
-          <Text style={dash.noteText}>
+        <Pressable
+          style={[dash.noteBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push("/notifications")}
+        >
+          <Text style={[dash.noteText, { color: colors.text }]}>
             You have {unread} new notification{unread === 1 ? "" : "s"}
           </Text>
-          <Text style={dash.noteLink}>View all</Text>
+          <Text style={[dash.noteLink, { color: colors.primary }]}>View all</Text>
         </Pressable>
 
         {role === "contractor" ? (
-          <Text style={dash.hintBanner}>
+          <Text style={[dash.hintBanner, { color: colors.muted }]}>
             Raise RFI and Query only. GMC activities: view and set In progress / Completed.
           </Text>
         ) : null}
@@ -151,33 +154,45 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
         {pendingOffline ? (
           <Text style={dash.warn}>{pendingOffline} offline capture(s) saved — will sync when online</Text>
         ) : null}
-        {error ? <Text style={dash.err}>{error}</Text> : null}
+        {error ? <Text style={[dash.err, { color: colors.danger }]}>{error}</Text> : null}
 
         <View style={dash.kpiGrid}>
           {kpis.map((k) => (
-            <View key={k.label} style={[dash.kpi, k.dark && dash.kpiDark]}>
-              <Text style={[dash.kpiVal, k.dark && { color: "#fff" }]}>{k.value}</Text>
-              <Text style={[dash.kpiLab, k.dark && { color: "#cfe0f5" }]}>{k.label}</Text>
+            <View
+              key={k.label}
+              style={[dash.kpi, { backgroundColor: colors.card }, k.dark && dash.kpiDark]}
+            >
+              <Text style={[dash.kpiVal, { color: colors.primary }, k.dark && { color: "#fff" }]}>
+                {k.value}
+              </Text>
+              <Text style={[dash.kpiLab, { color: colors.muted }, k.dark && { color: "#cfe0f5" }]}>
+                {k.label}
+              </Text>
             </View>
           ))}
         </View>
 
-        <Text style={dash.section}>QuickLinks</Text>
+        <Text style={[dash.section, { color: colors.text }]}>QuickLinks</Text>
         <View style={dash.links}>
           {links.map((item) => (
             <Pressable key={item.href} style={dash.linkItem} onPress={() => router.push(item.href as any)}>
               <View style={dash.circle}>
                 <Text style={dash.circleIcon}>{item.icon}</Text>
               </View>
-              <Text style={dash.linkLabel}>{item.label}</Text>
+              <Text style={[dash.linkLabel, { color: colors.text }]}>{item.label}</Text>
             </Pressable>
           ))}
         </View>
 
-        <View style={dash.tabs}>
-          <Text style={dash.tabOn}>Home</Text>
+        <View
+          style={[
+            dash.tabs,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[dash.tabOn, { color: colors.primary }]}>Home</Text>
           <Pressable onPress={() => router.push("/notifications")}>
-            <Text style={dash.tab}>Alerts</Text>
+            <Text style={[dash.tab, { color: colors.muted }]}>Alerts</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -187,7 +202,7 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
 
 export default function HomeScreen() {
   const { token, role, fullName, logout } = useAuth();
-  const { mode, toggle } = useTheme();
+  const { mode, toggle, colors } = useTheme();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -215,19 +230,21 @@ export default function HomeScreen() {
   if (role === "contractor") return <FieldHome role="contractor" />;
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Issues" }} />
       <View style={styles.header}>
         <View>
-          <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.role}>
+          <Text style={[styles.name, { color: colors.text }]}>{fullName}</Text>
+          <Text style={[styles.role, { color: colors.muted }]}>
             {roleLabel(role)}
             {unread ? ` · ${unread} alerts` : ""}
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
           <Pressable onPress={toggle}>
-            <Text style={styles.link}>{mode === "dark" ? "Light" : "Dark"}</Text>
+            <Text style={[styles.link, { color: colors.primary }]}>
+              {mode === "dark" ? "Light" : "Dark"}
+            </Text>
           </Pressable>
           <Pressable
             onPress={async () => {
@@ -235,11 +252,11 @@ export default function HomeScreen() {
               router.replace("/login");
             }}
           >
-            <Text style={styles.link}>Sign out</Text>
+            <Text style={[styles.link, { color: colors.primary }]}>Sign out</Text>
           </Pressable>
         </View>
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
       <FlatList
         data={issues}
         keyExtractor={(i) => String(i.id)}
@@ -255,27 +272,33 @@ export default function HomeScreen() {
         }
         renderItem={({ item }) => (
           <Link href={`/issue/${item.id}`} asChild>
-            <Pressable style={styles.card}>
-              <Text style={styles.cardTitle}>
+            <Pressable
+              style={[
+                styles.card,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
                 #{item.id} · {item.issue_type}
               </Text>
-              <Text style={styles.meta}>
+              <Text style={[styles.meta, { color: colors.muted }]}>
                 {item.status} · {item.remaining_days ?? "?"} days left
               </Text>
-              <Text numberOfLines={2}>{item.description}</Text>
+              <Text style={{ color: colors.text }} numberOfLines={2}>
+                {item.description}
+              </Text>
             </Pressable>
           </Link>
         )}
-        ListEmptyComponent={<Text style={styles.meta}>No issues yet.</Text>}
+        ListEmptyComponent={<Text style={[styles.meta, { color: colors.muted }]}>No issues yet.</Text>}
       />
     </View>
   );
 }
 
 const dash = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#eef2f6" },
+  page: { flex: 1 },
   top: {
-    backgroundColor: "#0b2a43",
     paddingHorizontal: 18,
     paddingTop: 8,
     paddingBottom: 18,
@@ -296,37 +319,35 @@ const dash = StyleSheet.create({
   signOut: { color: "#8ec5ff", fontWeight: "600" },
   noteBanner: {
     margin: 14,
-    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderWidth: 1,
   },
   hintBanner: {
     marginHorizontal: 14,
     marginBottom: 8,
-    color: "#334",
     fontSize: 13,
     lineHeight: 18,
   },
-  noteText: { color: "#223", fontWeight: "600", flex: 1 },
-  noteLink: { color: "#1a4b8c", fontWeight: "700" },
+  noteText: { fontWeight: "600", flex: 1 },
+  noteLink: { fontWeight: "700" },
   warn: { color: "#b45309", marginHorizontal: 14, marginBottom: 8 },
-  err: { color: "#b91c1c", marginHorizontal: 14, marginBottom: 8 },
+  err: { marginHorizontal: 14, marginBottom: 8 },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 10, gap: 8 },
   kpi: {
     width: "31%",
-    backgroundColor: "#fff",
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 8,
     alignItems: "center",
   },
   kpiDark: { backgroundColor: "#12355a" },
-  kpiVal: { fontSize: 20, fontWeight: "800", color: "#12355a" },
-  kpiLab: { fontSize: 11, color: "#556", textAlign: "center", marginTop: 4 },
-  section: { marginTop: 18, marginHorizontal: 16, fontWeight: "800", fontSize: 16, color: "#12355a" },
+  kpiVal: { fontSize: 20, fontWeight: "800" },
+  kpiLab: { fontSize: 11, textAlign: "center", marginTop: 4 },
+  section: { marginTop: 18, marginHorizontal: 16, fontWeight: "800", fontSize: 16 },
   links: { flexDirection: "row", flexWrap: "wrap", padding: 10 },
   linkItem: { width: "25%", alignItems: "center", marginBottom: 16 },
   circle: {
@@ -339,35 +360,31 @@ const dash = StyleSheet.create({
     marginBottom: 6,
   },
   circleIcon: { fontSize: 22 },
-  linkLabel: { fontSize: 11, fontWeight: "700", color: "#1a2a3a", textAlign: "center" },
+  linkLabel: { fontSize: 11, fontWeight: "700", textAlign: "center" },
   tabs: {
     flexDirection: "row",
     justifyContent: "space-around",
-    backgroundColor: "#fff",
     paddingVertical: 14,
     marginTop: 8,
     borderTopWidth: 1,
-    borderColor: "#dde3ea",
   },
-  tabOn: { color: "#1a4b8c", fontWeight: "800" },
-  tab: { color: "#667", fontWeight: "600" },
+  tabOn: { fontWeight: "800" },
+  tab: { fontWeight: "600" },
 });
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#0a0c10", padding: 16 },
+  page: { flex: 1, padding: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  name: { fontWeight: "700", fontSize: 18, color: "#e8eef6" },
-  role: { color: "#8b9bb0" },
-  link: { color: "#3b9eff", fontWeight: "600" },
+  name: { fontWeight: "700", fontSize: 18 },
+  role: {},
+  link: { fontWeight: "600" },
   card: {
-    backgroundColor: "#12161d",
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#243041",
   },
-  cardTitle: { fontWeight: "700", marginBottom: 4, color: "#e8eef6" },
-  meta: { color: "#8b9bb0", marginBottom: 4 },
-  error: { color: "#fb7185", marginBottom: 8 },
+  cardTitle: { fontWeight: "700", marginBottom: 4 },
+  meta: { marginBottom: 4 },
+  error: { marginBottom: 8 },
 });

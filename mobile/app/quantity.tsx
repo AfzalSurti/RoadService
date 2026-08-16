@@ -11,9 +11,11 @@ import {
 } from "react-native";
 import { api, type RateItemSurveyor } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 export default function QuantityScreen() {
   const { token } = useAuth();
+  const { colors } = useTheme();
   const [items, setItems] = useState<RateItemSurveyor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function QuantityScreen() {
   };
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Quantity" }} />
       <Text style={styles.lead}>
         Enter executed quantity for BOQ items. Rate is applied automatically on the project (not shown
@@ -126,7 +128,7 @@ export default function QuantityScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#0a0c10", padding: 16 },
+  page: { flex: 1, padding: 16 },
   lead: { color: "#8b9bb0", marginBottom: 12, lineHeight: 20 },
   card: {
     backgroundColor: "#12161d",

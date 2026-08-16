@@ -15,6 +15,7 @@ import { PackageCheckboxes } from "../components/PackageCheckboxes";
 import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { api, type CriticalIssue, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { matchProjectsToPackages } from "../lib/packages";
 
 const TYPES = ["Contractual Obligations", "Structure", "Road Safety", "Others"];
@@ -23,6 +24,7 @@ const PRIORITIES = ["high", "medium", "low"];
 
 export default function CriticalScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [rows, setRows] = useState<CriticalIssue[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +160,7 @@ export default function CriticalScreen() {
 
   if (step === "form") {
     return (
-      <ScrollView contentContainerStyle={st.page} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[st.page, { backgroundColor: colors.bg }]} keyboardShouldPersistTaps="handled">
         <Stack.Screen options={{ title: "Raise Critical Issue" }} />
         <PackageCheckboxes selected={pkgs} onChange={setPkgs} label="Select package(s) *" />
         <Text style={st.label}>Issue Description *</Text>
@@ -263,7 +265,7 @@ export default function CriticalScreen() {
   }
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Critical Issues" }} />
       <View style={st.kpiGrid}>
         {[
@@ -340,7 +342,7 @@ export default function CriticalScreen() {
 }
 
 const st = StyleSheet.create({
-  page: { flexGrow: 1, backgroundColor: "#eef2f6", padding: 14 },
+  page: { flexGrow: 1, padding: 14 },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   kpi: { width: "48%", backgroundColor: "#fff", borderRadius: 10, padding: 12, alignItems: "center" },
   kpiDark: { backgroundColor: "#12355a" },

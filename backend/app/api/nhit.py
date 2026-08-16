@@ -4,6 +4,7 @@ import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,6 +40,21 @@ from app.models.project import Project
 from app.models.user import User
 from app.services.audit import write_audit
 from app.services.storage import save_upload
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _ist_now() -> datetime:
+    return datetime.now(IST)
+
+
+def _ist_today() -> date:
+    return _ist_now().date()
+
+
+def _ist_hm() -> str:
+    return _ist_now().strftime("%H:%M")
+
 
 router = APIRouter(prefix="/nhit", tags=["nhit-portal"])
 
@@ -543,15 +559,15 @@ async def punch_attendance(
         )
         db.add(person)
         await db.flush()
-    now = datetime.now(timezone.utc)
-    time_str = now.strftime("%H:%M")
-    note_bits = ["Punched from mobile app"]
+    now_ist = _ist_now()
+    time_str = now_ist.strftime("%H:%M")
+    note_bits = ["Punched from mobile app", "tz=Asia/Kolkata"]
     if punch_type:
         note_bits.append(f"punch={punch_type}")
     if selfie_note:
         note_bits.append(f"selfie={selfie_note[:400]}")
 
-    today = date.today()
+    today = now_ist.date()
     existing = (
         await db.execute(
             select(AttendanceRecord)
@@ -627,7 +643,7 @@ async def attendance_today(
     row = (
         await db.execute(
             select(AttendanceRecord)
-            .where(AttendanceRecord.personnel_id == person.id, AttendanceRecord.work_date == date.today())
+            .where(AttendanceRecord.personnel_id == person.id, AttendanceRecord.work_date == _ist_today())
             .order_by(AttendanceRecord.id.desc())
         )
     ).scalars().first()
@@ -715,7 +731,7 @@ async def attendance_summary(
     present = (
         await db.execute(
             select(func.count(AttendanceRecord.id)).where(
-                AttendanceRecord.work_date == date.today(), AttendanceRecord.status == "present"
+                AttendanceRecord.work_date == _ist_today(), AttendanceRecord.status == "present"
             )
         )
     ).scalar_one()

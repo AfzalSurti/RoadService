@@ -10,7 +10,7 @@ import type { PortalQueryTicket, Project } from "../types";
 const empty = {
   subject: "",
   description: "",
-  module_area: "billing",
+  module_area: "other",
   priority: "medium",
   project_id: "",
 };
@@ -164,7 +164,7 @@ export function QueriesPage() {
           <div>
             <h2>Query Raise (Tickets)</h2>
             <p className="muted" style={{ margin: 0 }}>
-              Raise portal-operations queries (billing, documents, toll, ITS, etc.). GMC / NHIPMPL
+              Raise portal-operations queries (attendance, incidents, ITS, civil assets, etc.). GMC / NHIPMPL
               take up and resolve (GMC MIS Expert only). Others can raise and view status.
             </p>
           </div>
@@ -440,7 +440,7 @@ export function QueriesPage() {
                   value={form.module_area}
                   onChange={(e) => setForm({ ...form, module_area: e.target.value })}
                 >
-                  {(metaAreas.length ? metaAreas : ["billing", "documents", "other"]).map((a) => (
+                  {(metaAreas.length ? metaAreas : ["attendance", "other"]).map((a) => (
                     <option key={a} value={a}>
                       {formatLabel(a)}
                     </option>

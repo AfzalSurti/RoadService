@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { CameraCapture, type CapturedPhoto } from "../../components/CameraCapture";
 import { api, API_URL, type Issue } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { useTheme } from "../../lib/theme";
 import { enqueueOfflineJob, isNetworkError } from "../../lib/offline";
 
 function mediaUrl(path?: string | null) {
@@ -15,6 +16,7 @@ function mediaUrl(path?: string | null) {
 export default function IssueDetailScreen() {
   const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [mode, setMode] = useState<"none" | "complete" | "approve" | "reject">("none");
   const [pendingAction, setPendingAction] = useState<"complete" | "approve" | "reject">("complete");
@@ -113,7 +115,7 @@ export default function IssueDetailScreen() {
 
   if (!issue) {
     return (
-      <View style={styles.page}>
+      <View style={[styles.page, { backgroundColor: colors.bg }]}>
         <Text style={{ color: "#e8eef6" }}>{error || "Loading…"}</Text>
       </View>
     );
@@ -123,7 +125,7 @@ export default function IssueDetailScreen() {
   const showSubmitFocus = action === "submit" && issue.status === "in_progress";
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: `Issue #${issue.id}` }} />
       <Text style={styles.title}>
         {issue.issue_type} · {issue.status === "open" ? "To Do" : issue.status}
@@ -296,7 +298,7 @@ export default function IssueDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 16, backgroundColor: "#0a0c10", flexGrow: 1 },
+  page: { padding: 16, flexGrow: 1 },
   title: { fontSize: 20, fontWeight: "800", color: "#e8eef6" },
   meta: { color: "#8b9bb0", marginBottom: 8 },
   section: { color: "#e8eef6", fontWeight: "700", marginBottom: 8, marginTop: 4 },

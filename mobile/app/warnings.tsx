@@ -14,10 +14,12 @@ import { MediaAttach, type MediaItem } from "../components/MediaAttach";
 import { PackageCheckboxes } from "../components/PackageCheckboxes";
 import { api, type Project, type RoadWarning } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { matchProjectsToPackages } from "../lib/packages";
 
 export default function WarningsScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [rows, setRows] = useState<RoadWarning[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function WarningsScreen() {
   };
 
   return (
-    <View style={st.page}>
+    <View style={[st.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: "Road Warnings" }} />
       {canRaise ? (
         <Pressable style={st.primary} onPress={() => setShow((v) => !v)}>
@@ -162,7 +164,7 @@ export default function WarningsScreen() {
 }
 
 const st = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#eef2f6", padding: 14 },
+  page: { flex: 1, padding: 14 },
   primary: { backgroundColor: "#1a4b8c", borderRadius: 12, padding: 14, alignItems: "center", marginBottom: 10 },
   primaryText: { color: "#fff", fontWeight: "800" },
   card: { backgroundColor: "#fff", borderRadius: 12, padding: 14, marginBottom: 10 },

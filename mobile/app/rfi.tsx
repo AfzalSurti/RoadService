@@ -13,9 +13,11 @@ import {
 } from "react-native";
 import { api, type Project, type SiteRfi } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 export default function RfiScreen() {
   const { token, role } = useAuth();
+  const { colors } = useTheme();
   const [rows, setRows] = useState<SiteRfi[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export default function RfiScreen() {
   };
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { backgroundColor: colors.bg }]}>
       <Stack.Screen options={{ title: role === "contractor" ? "RFI Raised" : "Request For Inspection" }} />
       <View style={styles.row}>
         <Pressable style={styles.secondary} onPress={() => router.back()}>
@@ -295,7 +297,7 @@ export default function RfiScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#0a0c10", padding: 16 },
+  page: { flex: 1, padding: 16 },
   row: { flexDirection: "row", gap: 8, marginBottom: 12 },
   primary: {
     flex: 1,
