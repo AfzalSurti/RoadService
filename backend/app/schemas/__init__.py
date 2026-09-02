@@ -465,6 +465,10 @@ class MprOut(BaseModel):
     last_remarks: str | None
     pdf_path: str | None
     submitted_by_id: int | None
+    review_status: str | None = "pending"
+    review_remark: str | None = None
+    reviewed_by_id: int | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

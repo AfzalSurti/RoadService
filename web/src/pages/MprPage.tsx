@@ -47,6 +47,34 @@ export function MprPage() {
   const [reportBusy, setReportBusy] = useState<"daily" | "weekly" | null>(null);
   const [preparedBy, setPreparedBy] = useState(fullName || "");
   const [reportProjectId, setReportProjectId] = useState("");
+  const [review, setReview] = useState<
+    Record<number, { status: NonNullable<MprReport["review_status"]>; remark: string }>
+  >({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const isAdmin = role === "admin" && !isReadonly;
+
+  const reviewLabel = (s: MprReport["review_status"]) =>
+    s === "approved" ? "Approved" : s === "not_approved" ? "Not Approved" : "Pending";
+
+  const saveReview = async (r: MprReport) => {
+    if (!token) return;
+    const rv = review[r.id] ?? {
+      status: r.review_status ?? "pending",
+      remark: r.review_remark ?? "",
+    };
+    setSavingId(r.id);
+    setError(null);
+    setMsg(null);
+    try {
+      await api.reviewMpr(token, r.id, { review_status: rv.status, review_remark: rv.remark });
+      setMsg("MPR review saved.");
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not save review");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const packageProjects = useMemo(() => {
     const byName = new Map(projects.map((p) => [p.name, p]));
@@ -338,6 +366,8 @@ export function MprPage() {
               <th>Physical</th>
               <th>Financial</th>
               <th>PDF</th>
+              <th>Status</th>
+              <th>Remark</th>
             </tr>
           </thead>
           <tbody>
@@ -384,11 +414,71 @@ export function MprPage() {
                     ) : null}
                   </div>
                 </td>
+                {(() => {
+                  const rv =
+                    review[r.id] ?? {
+                      status: r.review_status ?? "pending",
+                      remark: r.review_remark ?? "",
+                    };
+                  const setRv = (patch: Partial<typeof rv>) =>
+                    setReview((m) => ({ ...m, [r.id]: { ...rv, ...patch } }));
+                  return (
+                    <>
+                      <td>
+                        {isAdmin ? (
+                          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                            <select
+                              value={rv.status}
+                              onChange={(e) =>
+                                setRv({ status: e.target.value as typeof rv.status })
+                              }
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approved</option>
+                              <option value="not_approved">Not Approved</option>
+                            </select>
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              disabled={savingId === r.id}
+                              onClick={() => void saveReview(r)}
+                            >
+                              {savingId === r.id ? "…" : "Save"}
+                            </button>
+                          </div>
+                        ) : (
+                          <span
+                            className={`badge${
+                              r.review_status === "approved"
+                                ? " status-closed"
+                                : r.review_status === "not_approved"
+                                  ? " status-under_review"
+                                  : ""
+                            }`}
+                          >
+                            {reviewLabel(r.review_status)}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {isAdmin ? (
+                          <input
+                            value={rv.remark}
+                            placeholder="Remark"
+                            onChange={(e) => setRv({ remark: e.target.value })}
+                          />
+                        ) : (
+                          r.review_remark || "—"
+                        )}
+                      </td>
+                    </>
+                  );
+                })()}
               </tr>
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={6} className="muted">
+                <td colSpan={8} className="muted">
                   No MPR submitted yet.
                 </td>
               </tr>

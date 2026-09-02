@@ -269,6 +269,10 @@ export type MprReport = {
   last_remarks: string | null;
   pdf_path: string | null;
   submitted_by_id: number | null;
+  review_status: "pending" | "approved" | "not_approved" | null;
+  review_remark: string | null;
+  reviewed_by_id: number | null;
+  reviewed_at: string | null;
   created_at: string;
   updated_at: string;
 };

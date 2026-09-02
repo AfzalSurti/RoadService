@@ -466,6 +466,17 @@ export const api = {
     return request<MprReport>(`/api/v1/mpr/${id}/pdf`, { method: "POST", token, body: fd });
   },
 
+  reviewMpr: (
+    token: string,
+    id: number,
+    body: { review_status: "pending" | "approved" | "not_approved"; review_remark?: string }
+  ) => {
+    const fd = new FormData();
+    fd.append("review_status", body.review_status);
+    if (body.review_remark != null) fd.append("review_remark", body.review_remark);
+    return request<MprReport>(`/api/v1/mpr/${id}/review`, { method: "POST", token, body: fd });
+  },
+
   staffMeta: (token: string) => request<StaffMeta>("/api/v1/staff-details/meta", { token }),
 
   staffDetails: (token: string, organization?: string) =>

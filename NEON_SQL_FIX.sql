@@ -192,3 +192,9 @@ CREATE TABLE IF NOT EXISTS monthly_progress_reports (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_mpr_project_id ON monthly_progress_reports (project_id);
+
+-- 020: MPR review by GMC MIS Expert (Approved / Not Approved + remark)
+ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS review_status VARCHAR(32) NOT NULL DEFAULT 'pending';
+ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS review_remark TEXT;
+ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS reviewed_by_id INTEGER REFERENCES users(id);
+ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;

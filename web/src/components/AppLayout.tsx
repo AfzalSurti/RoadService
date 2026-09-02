@@ -47,28 +47,40 @@ export function AppLayout() {
           <NavLink to="/dashboard" end>
             Dashboard
           </NavLink>
+
+          <div className="nav-group-label">Civil Dashboard</div>
+          {staff ? <NavLink to="/civil-assets">Civil Assets</NavLink> : null}
+          <NavLink to="/issues">Issues</NavLink>
+          {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
+          <NavLink to="/map">Map</NavLink>
+
+          <div className="nav-group-label">TMS Dashboard</div>
+          {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
+          {staff ? <NavLink to="/highway-incidents">Incidents</NavLink> : null}
+          {staff ? <NavLink to="/its">ATMS/TMS/ITS</NavLink> : null}
+
+          {adminGov ? (
+            <>
+              <div className="nav-group-label">ATMS Dashboard</div>
+              <NavLink to="/integrations">Integrations</NavLink>
+              <NavLink to="/backup-dr">Backup/DR</NavLink>
+            </>
+          ) : null}
+
+          <div className="nav-group-label">General / MIS</div>
           <NavLink to="/staff-details">Staff Details</NavLink>
           {staff ? <NavLink to="/queries">Query Raise</NavLink> : null}
           {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
           {staff ? <NavLink to="/executive">Executive</NavLink> : null}
-          <NavLink to="/issues">Issues</NavLink>
           {adminGov ? <NavLink to="/billing">Billing</NavLink> : null}
           {billingRoles ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
-          {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
-          {role === "admin" || role === "government" ? <NavLink to="/attendance">Attendance</NavLink> : null}
-          {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
-          {staff ? <NavLink to="/highway-incidents">Incidents</NavLink> : null}
-          {staff ? <NavLink to="/its">ATMS/TMS/ITS</NavLink> : null}
-          {staff ? <NavLink to="/civil-assets">Civil Assets</NavLink> : null}
-          {adminGov ? <NavLink to="/integrations">Integrations</NavLink> : null}
-          {adminGov ? <NavLink to="/backup-dr">Backup/DR</NavLink> : null}
+          {adminGov ? <NavLink to="/attendance">Attendance</NavLink> : null}
           {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
           {staff ? <NavLink to="/security">Security</NavLink> : null}
           <NavLink to="/notifications">
             Notifications{unread ? ` (${unread})` : ""}
           </NavLink>
-          <NavLink to="/map">Map</NavLink>
           <NavLink to="/reports">Reports</NavLink>
           {role === "admin" ? (
             <>

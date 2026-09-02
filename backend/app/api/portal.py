@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -24,200 +25,270 @@ STRETCHES = [
     "Lakhnadon - Khawasa",
     "Bokhedi - Kelapur",
 ]
-DISCIPLINES = ["Civil Related", "Toll/ATMS/TMS"]
-DOC_TYPES = [
-    "Contract agreement",
-    "Drawing (Approved, As Built Drawing)",
-    "Extension time (EOT)",
-    "Monthly Progress Report (MPR)",
+# Four disciplines under every package. Civil Related and Toll/ATMS/TMS carry a
+# group level (Contract / Project / ITS...) then leaf doc-types; Statutory and
+# Financial carry leaf doc-types directly.
+DISCIPLINES = [
+    "Civil Related",
+    "Toll/ATMS/TMS",
+    "Statutory & Compliance Documents",
+    "Financial Documents",
 ]
 
-STANDARD_REPO: list[tuple[str, list[str]]] = [
-    (
-        "Contract Documents",
-        [
-            "Concession Agreement (CA)",
-            "EPC/HAM/BOT Contract Agreement",
-            "O&M Agreement",
-            "Letter of Award (LoA)",
-            "Letter of Acceptance (LoA)",
-            "Work Orders",
-            "Change of Scope Orders",
-            "Supplementary Agreements",
-            "Contract Amendments",
-            "Equipment inventory, warranties, AMC, lifecycle records",
-            "Digital approvals, comments, review history",
-            "Pending approvals, expiring contracts, document status",
-        ],
-    ),
-    (
-        "Project Documents",
-        [
-            "DPR",
-            "Approved Drawings",
-            "Good for Construction (GFC) Drawings",
-            "As-Built Drawings",
-            "BOQ",
-            "Technical Specifications",
-            "Design Calculations",
-            "Project Schedule",
-            "Baseline Programme",
-            "Monthly Progress Reports (MPR)",
-            "Inspection Reports",
-            "Audit Reports",
-            "Commissioning Certificates",
-            "Completion Certificate",
-            "O&M Manuals",
-        ],
-    ),
-    (
-        "ITS/TMS/ATMS Documents",
-        [
-            "ATMS drawings and specs",
-            "TMS drawings and specs",
-            "ITS architecture",
-            "MLFF / ETC records",
-            "Equipment inventory",
-            "As-built ITS",
-        ],
-    ),
+CONTRACT_DOCS = [
+    "Concession Agreement (CA)",
+    "EPC/HAM/BOT Contract Agreement",
+    "O&M Agreement",
+    "Letter of Award (LoA)",
+    "Letter of Acceptance (LoA)",
+    "Work Orders",
+    "Change of Scope Orders",
+    "Supplementary Agreements",
+    "Contract Amendments",
+    "Equipment inventory, warranties, AMC, lifecycle records",
+    "Digital approvals, comments, review history",
+    "Pending approvals, expiring contracts, document status",
+]
+PROJECT_DOCS = [
+    "DPR",
+    "Approved Drawings",
+    "Good for Construction (GFC) Drawings",
+    "As-Built Drawings",
+    "BOQ",
+    "Technical Specifications",
+    "Design Calculations",
+    "Project Schedule",
+    "Baseline Programme",
+    "Monthly Progress Reports (MPR)",
+    "Inspection Reports",
+    "Audit Reports",
+    "Commissioning Certificates",
+    "Completion Certificate",
+    "O&M Manuals",
+]
+ITS_DOCS = [
+    "System Design Documents (SDD)",
+    "FAT Reports",
+    "SAT Reports",
+    "POC Reports",
+    "Network Architecture",
+    "IP Addressing Plan",
+    "Asset Register",
+    "Device Configuration Files",
+    "Software Versions",
+    "Firmware Repository",
+    "OEM Manuals",
+    "Warranty Documents",
+    "AMC Documents",
+]
+STATUTORY_DOCS = [
+    "NHAI Approvals",
+    "IE Certificates",
+    "Safety Audit Reports",
+    "Environmental Clearances",
+    "Insurance Documents",
+    "Licenses",
+    "Statutory Permissions",
+    "Incident Investigation Reports",
+]
+FINANCIAL_DOCS = [
+    "Invoices",
+    "Running Account Bills",
+    "Payment Certificates",
+    "Performance Bank Guarantees",
+    "Security Deposits",
+    "Insurance Policies",
+    "Cost Estimates",
+    "Budget Approvals",
 ]
 
+# discipline -> {group: [leaves]}  OR  discipline -> [leaves]
+PACKAGE_TREE: dict[str, object] = {
+    "Civil Related": {
+        "Contract Documents": CONTRACT_DOCS,
+        "Project Documents": PROJECT_DOCS,
+    },
+    "Toll/ATMS/TMS": {
+        "ITS/TMS/ATMS Documents": ITS_DOCS,
+    },
+    "Statutory & Compliance Documents": STATUTORY_DOCS,
+    "Financial Documents": FINANCIAL_DOCS,
+}
 
-async def _ensure_standard_repo(db: AsyncSession) -> None:
-    for r_idx, (root_name, children) in enumerate(STANDARD_REPO):
-        root = (
+
+async def _folder_has_documents(db: AsyncSession, folder_id: int) -> bool:
+    """True if this folder or any descendant holds a PortalDocument."""
+    stack = [folder_id]
+    seen: set[int] = set()
+    while stack:
+        cur = stack.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        cnt = (
             await db.execute(
-                select(DocumentFolder).where(
-                    DocumentFolder.name == root_name,
-                    DocumentFolder.parent_id.is_(None),
-                )
+                select(func.count(PortalDocument.id)).where(PortalDocument.folder_id == cur)
             )
-        ).scalar_one_or_none()
-        if not root:
-            root = DocumentFolder(
-                name=root_name,
-                folder_type="discipline",
-                parent_id=None,
-                sort_order=100 + r_idx,
+        ).scalar_one()
+        if cnt:
+            return True
+        kids = (
+            await db.execute(select(DocumentFolder.id).where(DocumentFolder.parent_id == cur))
+        ).scalars().all()
+        stack.extend(kids)
+    return False
+
+
+async def _ensure_child(
+    db: AsyncSession,
+    *,
+    name: str,
+    folder_type: str,
+    parent_id: int | None,
+    project_id: int | None,
+    sort_order: int,
+) -> DocumentFolder:
+    q = select(DocumentFolder).where(DocumentFolder.name == name)
+    q = (
+        q.where(DocumentFolder.parent_id == parent_id)
+        if parent_id is not None
+        else q.where(DocumentFolder.parent_id.is_(None))
+    )
+    row = (await db.execute(q)).scalars().first()
+    if row:
+        row.folder_type = folder_type
+        row.project_id = project_id
+        row.sort_order = sort_order
+        return row
+    row = DocumentFolder(
+        name=name,
+        folder_type=folder_type,
+        parent_id=parent_id,
+        project_id=project_id,
+        sort_order=sort_order,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def _prune_children(db: AsyncSession, parent_id: int, allowed: set[str]) -> None:
+    """Delete empty child folders whose name is not in the canonical set."""
+    kids = (
+        await db.execute(select(DocumentFolder).where(DocumentFolder.parent_id == parent_id))
+    ).scalars().all()
+    for k in kids:
+        if k.name not in allowed and not await _folder_has_documents(db, k.id):
+            await db.delete(k)
+    await db.flush()
+
+
+async def _find_mpr_leaf(db: AsyncSession, project_id: int) -> int | None:
+    """Folder id of the 'Monthly Progress Reports (MPR)' leaf for a package project."""
+    pkg = (
+        await db.execute(
+            select(DocumentFolder).where(
+                DocumentFolder.project_id == project_id,
+                DocumentFolder.folder_type == "stretch",
             )
-            db.add(root)
-            await db.flush()
-        for t_idx, child in enumerate(children):
-            found = (
-                await db.execute(
-                    select(DocumentFolder).where(
-                        DocumentFolder.parent_id == root.id,
-                        DocumentFolder.name == child,
-                    )
-                )
-            ).scalar_one_or_none()
-            if not found:
-                db.add(
-                    DocumentFolder(
-                        name=child,
-                        folder_type="doctype",
-                        parent_id=root.id,
-                        sort_order=t_idx,
-                    )
-                )
+        )
+    ).scalars().first()
+    if not pkg:
+        return None
+    civil = (
+        await db.execute(
+            select(DocumentFolder).where(
+                DocumentFolder.parent_id == pkg.id,
+                DocumentFolder.name == "Civil Related",
+            )
+        )
+    ).scalars().first()
+    if not civil:
+        return None
+    proj_docs = (
+        await db.execute(
+            select(DocumentFolder).where(
+                DocumentFolder.parent_id == civil.id,
+                DocumentFolder.name == "Project Documents",
+            )
+        )
+    ).scalars().first()
+    parents = [p.id for p in (proj_docs, civil) if p]
+    leaf = (
+        await db.execute(
+            select(DocumentFolder).where(
+                DocumentFolder.parent_id.in_(parents),
+                DocumentFolder.name.like("Monthly Progress Report%"),
+            )
+        )
+    ).scalars().first()
+    return leaf.id if leaf else None
 
 
 async def _ensure_folder_tree(db: AsyncSession) -> None:
-    """Create stretch tree plus standard Contract / Project / ITS folders."""
-    existing = (await db.execute(select(func.count(DocumentFolder.id)))).scalar_one()
+    """Idempotently build 3 package roots -> 4 disciplines -> groups/leaves.
 
-    if not existing:
-        for s_idx, stretch in enumerate(STRETCHES):
-            project = (await db.execute(select(Project).where(Project.name == stretch))).scalar_one_or_none()
-            if not project:
-                project = Project(
-                    name=stretch,
-                    location=stretch,
-                    description=f"Corridor stretch folder project: {stretch}",
-                    chainage_from="0+000",
-                    chainage_to="0+000",
-                )
-                db.add(project)
-                await db.flush()
+    Prunes empty stray folders so the tree shows only the canonical structure.
+    """
+    # 1) drop stray top-level folders (not one of the 3 packages) that hold no documents
+    roots = (
+        await db.execute(select(DocumentFolder).where(DocumentFolder.parent_id.is_(None)))
+    ).scalars().all()
+    for r in roots:
+        if r.name not in STRETCHES and not await _folder_has_documents(db, r.id):
+            await db.delete(r)
+    await db.flush()
 
-            stretch_folder = DocumentFolder(
+    # 2) (re)build the canonical tree for each package
+    for s_idx, stretch in enumerate(STRETCHES):
+        project = (
+            await db.execute(select(Project).where(Project.name == stretch))
+        ).scalar_one_or_none()
+        if not project:
+            project = Project(
                 name=stretch,
-                folder_type="stretch",
-                parent_id=None,
-                project_id=project.id,
-                sort_order=s_idx,
+                location=stretch,
+                description=f"Corridor stretch folder project: {stretch}",
+                chainage_from="0+000",
+                chainage_to="0+000",
             )
-            db.add(stretch_folder)
+            db.add(project)
             await db.flush()
 
-            for d_idx, discipline in enumerate(DISCIPLINES):
-                disc_folder = DocumentFolder(
-                    name=discipline,
-                    folder_type="discipline",
-                    parent_id=stretch_folder.id,
-                    project_id=project.id,
-                    sort_order=d_idx,
-                )
-                db.add(disc_folder)
-                await db.flush()
-                for t_idx, doc_type in enumerate(DOC_TYPES):
-                    db.add(
-                        DocumentFolder(
-                            name=doc_type,
-                            folder_type="doctype",
-                            parent_id=disc_folder.id,
-                            project_id=project.id,
-                            sort_order=t_idx,
-                        )
-                    )
-        await _ensure_standard_repo(db)
-        await db.commit()
-        return
+        pkg = await _ensure_child(
+            db, name=stretch, folder_type="stretch", parent_id=None,
+            project_id=project.id, sort_order=s_idx,
+        )
 
-    # Backfill MPR (and any missing doctypes) under Civil Related for each package stretch
-    for stretch in STRETCHES:
-        stretch_folder = (
-            await db.execute(
-                select(DocumentFolder).where(
-                    DocumentFolder.name == stretch,
-                    DocumentFolder.folder_type == "stretch",
-                )
+        for d_idx, discipline in enumerate(DISCIPLINES):
+            disc = await _ensure_child(
+                db, name=discipline, folder_type="discipline", parent_id=pkg.id,
+                project_id=project.id, sort_order=d_idx,
             )
-        ).scalar_one_or_none()
-        if not stretch_folder:
-            continue
-        civil = (
-            await db.execute(
-                select(DocumentFolder).where(
-                    DocumentFolder.parent_id == stretch_folder.id,
-                    DocumentFolder.name == "Civil Related",
-                    DocumentFolder.folder_type == "discipline",
-                )
-            )
-        ).scalar_one_or_none()
-        if not civil:
-            continue
-        for t_idx, doc_type in enumerate(DOC_TYPES):
-            found = (
-                await db.execute(
-                    select(DocumentFolder).where(
-                        DocumentFolder.parent_id == civil.id,
-                        DocumentFolder.name == doc_type,
+            spec = PACKAGE_TREE.get(discipline, [])
+            if isinstance(spec, dict):
+                for g_idx, (group, leaves) in enumerate(spec.items()):
+                    grp = await _ensure_child(
+                        db, name=group, folder_type="discipline", parent_id=disc.id,
+                        project_id=project.id, sort_order=g_idx,
                     )
-                )
-            ).scalar_one_or_none()
-            if not found:
-                db.add(
-                    DocumentFolder(
-                        name=doc_type,
-                        folder_type="doctype",
-                        parent_id=civil.id,
-                        project_id=stretch_folder.project_id,
-                        sort_order=t_idx,
+                    for l_idx, leaf in enumerate(leaves):
+                        await _ensure_child(
+                            db, name=leaf, folder_type="doctype", parent_id=grp.id,
+                            project_id=project.id, sort_order=l_idx,
+                        )
+                    await _prune_children(db, grp.id, set(leaves))
+                await _prune_children(db, disc.id, set(spec.keys()))
+            else:
+                for l_idx, leaf in enumerate(spec):
+                    await _ensure_child(
+                        db, name=leaf, folder_type="doctype", parent_id=disc.id,
+                        project_id=project.id, sort_order=l_idx,
                     )
-                )
-    await _ensure_standard_repo(db)
+                await _prune_children(db, disc.id, set(spec))
+
+        await _prune_children(db, pkg.id, set(DISCIPLINES))
+
     await db.commit()
 
 
@@ -555,36 +626,8 @@ async def create_mpr(
         if not vendor:
             raise HTTPException(404, "Vendor not found")
 
-    # Link to package MPR folder under Civil Related
-    stretch = (
-        await db.execute(
-            select(DocumentFolder).where(
-                DocumentFolder.project_id == project_id,
-                DocumentFolder.folder_type == "stretch",
-            )
-        )
-    ).scalar_one_or_none()
-    folder_id = None
-    if stretch:
-        civil = (
-            await db.execute(
-                select(DocumentFolder).where(
-                    DocumentFolder.parent_id == stretch.id,
-                    DocumentFolder.name == "Civil Related",
-                )
-            )
-        ).scalar_one_or_none()
-        if civil:
-            mpr_folder = (
-                await db.execute(
-                    select(DocumentFolder).where(
-                        DocumentFolder.parent_id == civil.id,
-                        DocumentFolder.name == "Monthly Progress Report (MPR)",
-                    )
-                )
-            ).scalar_one_or_none()
-            if mpr_folder:
-                folder_id = mpr_folder.id
+    # Link to the "Monthly Progress Reports (MPR)" leaf under Civil Related > Project Documents
+    folder_id = await _find_mpr_leaf(db, project_id)
 
     pdf_path = None
     if pdf_file and pdf_file.filename:
@@ -698,6 +741,45 @@ async def upload_mpr_pdf(
         action="mpr_pdf_upload",
         entity_type="mpr",
         entity_id=str(row.id),
+    )
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+_MPR_REVIEW_STATES = {"pending", "approved", "not_approved"}
+
+
+@mpr_router.post("/{mpr_id}/review", response_model=MprOut)
+async def review_mpr(
+    mpr_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    review_status: Annotated[str, Form()],
+    review_remark: Annotated[str | None, Form()] = None,
+):
+    """GMC MIS Expert marks a contractor MPR Approved / Not Approved with a remark."""
+    row = (
+        await db.execute(select(MonthlyProgressReport).where(MonthlyProgressReport.id == mpr_id))
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="MPR not found")
+    status = (review_status or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if status == "not_approved" or status == "notapproved":
+        status = "not_approved"
+    if status not in _MPR_REVIEW_STATES:
+        raise HTTPException(status_code=400, detail="review_status must be approved, not_approved or pending")
+    row.review_status = status
+    row.review_remark = (review_remark or "").strip() or None
+    row.reviewed_by_id = user.id
+    row.reviewed_at = datetime.now(timezone.utc)
+    await write_audit(
+        db,
+        actor_id=user.id,
+        action="mpr_review",
+        entity_type="mpr",
+        entity_id=str(row.id),
+        detail=f"{status}: {row.review_remark or ''}".strip(),
     )
     await db.commit()
     await db.refresh(row)

@@ -10,6 +10,9 @@ export function DeveloperCredit({ className = "" }: { className?: string }) {
       >
         Afzal N. Surti
       </a>
+      <span className="developer-credit-guide">
+        {" "}&middot; Guided by Nirav Chaudhary, Rohit Yadav, Atik Ghanchi
+      </span>
       <span className="developer-credit-sep">&amp;</span>
       Powered By{" "}
       <a
