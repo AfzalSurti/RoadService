@@ -344,7 +344,7 @@ export function DashboardPage() {
                     label="Invoices"
                     value={stats.total_invoices ?? 0}
                     to={withProjectQuery("/billing", pid)}
-                    hint="Open CONTRACTOR BILLING →"
+                    hint="Open GMC Billing →"
                   />
                 ) : null}
                 <StatCard
@@ -372,10 +372,10 @@ export function DashboardPage() {
                   hint="This project’s RFIs →"
                 />
                 <StatCard
-                  label="Executive"
+                  label="Project Overview"
                   value="Summary"
                   to={withProjectQuery("/executive", pid)}
-                  hint="Executive for package →"
+                  hint="Project overview for package →"
                 />
                 <StatCard
                   label="MPR"
@@ -399,13 +399,13 @@ export function DashboardPage() {
                   label="BOQ amount ₹"
                   value={(stats.total_boq_amount ?? 0).toLocaleString("en-IN")}
                   to={withProjectQuery(ratesPath, pid)}
-                  hint="Open Rates / BOQ →"
+                  hint="Open BOQ →"
                 />
                 <StatCard
                   label="Executed ₹"
                   value={(stats.total_executed_amount ?? 0).toLocaleString("en-IN")}
                   to={withProjectQuery(ratesPath, pid)}
-                  hint="Open Rates / BOQ →"
+                  hint="Open BOQ →"
                 />
                 <StatCard
                   label="Delayed issues"

@@ -50,7 +50,7 @@ export function RatesPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Rates (BOQ)";
+    if (el) el.textContent = "BOQ";
   }, []);
 
   useEffect(() => {

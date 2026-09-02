@@ -390,8 +390,9 @@ export function AttendancePage() {
     <>
       {error ? <div className="error">{error}</div> : null}
       <p className="muted">
-        Linked to the mobile attendance punch (same database). NHIPMPL and GMC MIS Expert can view
-        punches; GMC MIS Expert can download PDF.
+        Linked to the mobile attendance punch (same database) — GMC representatives (surveyors) and
+        contractors punch in/out from the app and the rows land here. NHIPMPL and GMC MIS Expert can
+        view punches; GMC MIS Expert can download PDF.
       </p>
       {summary ? (
         <section className="stat-grid">
@@ -475,10 +476,12 @@ export function AttendancePage() {
               type="button"
               onClick={() => {
                 const rows = attendance
-                  .map(
-                    (a) =>
-                      `<tr><td>${String(a.work_date)}</td><td>#${String(a.personnel_id)}</td><td>${String(a.status)}</td><td>${String(a.in_time || "—")} / ${String(a.out_time || "—")}</td><td>${a.latitude != null ? `${a.latitude}, ${a.longitude}` : "—"}</td><td>${a.biometric_verified ? "Yes" : "No"}</td></tr>`
-                  )
+                  .map((a) => {
+                    const who = a.personnel_name
+                      ? `${String(a.personnel_name)}${a.personnel_designation ? ` (${roleLabel(String(a.personnel_designation))})` : ""}`
+                      : `#${String(a.personnel_id)}`;
+                    return `<tr><td>${String(a.work_date)}</td><td>${who}</td><td>${String(a.status)}</td><td>${String(a.in_time || "—")} / ${String(a.out_time || "—")}</td><td>${a.latitude != null ? `${a.latitude}, ${a.longitude}` : "—"}</td><td>${a.biometric_verified ? "Yes" : "No"}</td></tr>`;
+                  })
                   .join("");
                 const w = window.open("", "_blank");
                 if (!w) return;
@@ -513,7 +516,12 @@ export function AttendancePage() {
             {attendance.map((a) => (
               <tr key={String(a.id)}>
                 <td>{String(a.work_date)}</td>
-                <td>#{String(a.personnel_id)}</td>
+                <td>
+                  {a.personnel_name ? String(a.personnel_name) : `#${String(a.personnel_id)}`}
+                  {a.personnel_designation ? (
+                    <div className="muted">{roleLabel(String(a.personnel_designation))}</div>
+                  ) : null}
+                </td>
                 <td>{formatLabel(String(a.status))}</td>
                 <td>
                   {String(a.in_time || "—")} / {String(a.out_time || "—")}

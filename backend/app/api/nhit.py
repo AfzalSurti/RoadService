@@ -532,7 +532,26 @@ async def list_attendance(
             stmt = stmt.where(AttendanceRecord.personnel_id.in_(mine))
         elif user.role != UserRole.ADMIN:
             return []
-    return [_orm_dict(r) for r in (await db.execute(stmt)).scalars().all()]
+    records = list((await db.execute(stmt)).scalars().all())
+    people = {
+        p.id: p
+        for p in (
+            await db.execute(
+                select(Personnel).where(
+                    Personnel.id.in_([r.personnel_id for r in records] or [-1])
+                )
+            )
+        ).scalars().all()
+    }
+    out: list[dict[str, Any]] = []
+    for r in records:
+        row = _orm_dict(r)
+        person = people.get(r.personnel_id)
+        row["personnel_name"] = person.full_name if person else None
+        row["personnel_designation"] = person.designation if person else None
+        row["personnel_code"] = person.employee_code if person else None
+        out.append(row)
+    return out
 
 
 @router.post("/attendance/punch", status_code=201)
@@ -1042,6 +1061,39 @@ async def create_executive(
     await db.commit()
     await db.refresh(row)
     return _orm_dict(row)
+
+
+@router.patch("/executive/{snap_id}")
+async def update_executive(
+    snap_id: int,
+    body: ExecutiveIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+):
+    row = (await db.execute(select(ExecutiveSnapshot).where(ExecutiveSnapshot.id == snap_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Stretch snapshot not found")
+    data = body.model_dump()
+    data["planned_expenditure"] = Decimal(str(data["planned_expenditure"]))
+    data["actual_expenditure"] = Decimal(str(data["actual_expenditure"]))
+    for k, v in data.items():
+        setattr(row, k, v)
+    await db.commit()
+    await db.refresh(row)
+    return _orm_dict(row)
+
+
+@router.delete("/executive/{snap_id}", status_code=204)
+async def delete_executive(
+    snap_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT))],
+):
+    row = (await db.execute(select(ExecutiveSnapshot).where(ExecutiveSnapshot.id == snap_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Stretch snapshot not found")
+    await db.delete(row)
+    await db.commit()
 
 
 @router.get("/executive/overview")

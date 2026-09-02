@@ -633,6 +633,9 @@ export const api = {
   nhitForm: <T>(token: string, path: string, form: FormData) =>
     request<T>(`/api/v1/nhit${path}`, { method: "POST", token, body: form }),
 
+  nhitDelete: <T>(token: string, path: string) =>
+    request<T>(`/api/v1/nhit${path}`, { method: "DELETE", token }),
+
   seedNhitDemo: (token: string) =>
     request<{ ok: boolean; message: string }>("/api/v1/nhit/seed-demo", { method: "POST", token }),
 };

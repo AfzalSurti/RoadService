@@ -51,7 +51,10 @@ export function AppLayout() {
           <div className="nav-group-label">Civil Dashboard</div>
           {staff ? <NavLink to="/civil-assets">Civil Assets</NavLink> : null}
           <NavLink to="/issues">Issues</NavLink>
+          {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
+          {staff ? <NavLink to="/executive">Project Overview</NavLink> : null}
+          {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
           <NavLink to="/map">Map</NavLink>
 
           <div className="nav-group-label">TMS Dashboard</div>
@@ -64,19 +67,17 @@ export function AppLayout() {
               <div className="nav-group-label">ATMS Dashboard</div>
               <NavLink to="/integrations">Integrations</NavLink>
               <NavLink to="/backup-dr">Backup/DR</NavLink>
+              <NavLink to="/vendors">Vendors</NavLink>
             </>
           ) : null}
 
           <div className="nav-group-label">General / MIS</div>
           <NavLink to="/staff-details">Staff Details</NavLink>
           {staff ? <NavLink to="/queries">Query Raise</NavLink> : null}
-          {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
-          {staff ? <NavLink to="/executive">Executive</NavLink> : null}
-          {adminGov ? <NavLink to="/billing">Billing</NavLink> : null}
+          {adminGov ? <NavLink to="/billing">GMC Billing</NavLink> : null}
           {billingRoles ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
           {adminGov ? <NavLink to="/attendance">Attendance</NavLink> : null}
-          {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
           {staff ? <NavLink to="/security">Security</NavLink> : null}
           <NavLink to="/notifications">
             Notifications{unread ? ` (${unread})` : ""}
@@ -85,7 +86,7 @@ export function AppLayout() {
           {role === "admin" ? (
             <>
               <NavLink to="/projects">Projects</NavLink>
-              <NavLink to="/rates">Rates</NavLink>
+              <NavLink to="/rates">BOQ</NavLink>
               <NavLink to="/users">Users</NavLink>
             </>
           ) : null}
