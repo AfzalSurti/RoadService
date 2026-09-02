@@ -116,7 +116,7 @@ export function BillingPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "CONTRACTOR BILLING";
+    if (el) el.textContent = "Billing";
   }, []);
 
   useEffect(() => {
@@ -292,10 +292,10 @@ export function BillingPage() {
           </tr>`
       )
       .join("");
-    w.document.write(`<!doctype html><html><head><title>CONTRACTOR BILLING</title>
+    w.document.write(`<!doctype html><html><head><title>Billing</title>
       <style>body{font-family:Arial;padding:16px}table{border-collapse:collapse;width:100%}
       th,td{border:1px solid #ccc;padding:6px;font-size:12px}th{background:#eee}</style></head>
-      <body><h2>CONTRACTOR BILLING</h2>
+      <body><h2>Billing</h2>
       <table><thead><tr><th>Txn</th><th>Invoice</th><th>Amount</th><th>Status</th><th>NHIPMPL HQ</th></tr></thead>
       <tbody>${rows || "<tr><td colspan=5>No rows</td></tr>"}</tbody></table>
       <script>window.print()</script></body></html>`);
@@ -314,8 +314,8 @@ export function BillingPage() {
 
       <div className="billing-toolbar">
         <div>
-          <div className="muted">Home / Finance / CONTRACTOR BILLING</div>
-          <h2 style={{ margin: "0.2rem 0 0" }}>CONTRACTOR BILLING</h2>
+          <div className="muted">Home / Finance / Billing</div>
+          <h2 style={{ margin: "0.2rem 0 0" }}>Billing</h2>
         </div>
         <div className="btn-row">
           {canUpload ? (
@@ -803,7 +803,7 @@ export function BillingPage() {
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onCreate} style={{ maxWidth: 920 }}>
             <div className="panel-head-row">
-              <h2>CONTRACTOR BILLING — New claim</h2>
+              <h2>Billing — New claim</h2>
               <button type="button" className="btn ghost" onClick={() => setShowCreate(false)}>
                 Back to Grid
               </button>
