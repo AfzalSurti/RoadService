@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { formatLabel } from "../components/StatusBadge";
 import type { Invoice, Project } from "../types";
 
 const PAYMENT_TYPES = [
@@ -28,6 +29,26 @@ function fmtDate(v?: string | null) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
   return d.toLocaleDateString("en-GB");
+}
+
+function gmTeamRecommendation(inv: Invoice) {
+  const gmc = inv.gmc_review_status || "approved";
+  if (gmc === "pending") return "—";
+  const decision = gmc === "approved" ? "Approved" : "Not approved";
+  return inv.gmc_remark ? `${decision} — ${inv.gmc_remark}` : decision;
+}
+
+function nhipmplRecommendation(inv: Invoice) {
+  if (inv.authority_engineer) return inv.authority_engineer;
+  if (inv.recommended_piu_amount != null) return `₹ ${money(inv.recommended_piu_amount)}`;
+  if ((inv.gmc_review_status || "approved") === "approved") return "At NHIPMPL";
+  return "—";
+}
+
+function netAmountReleased(inv: Invoice) {
+  if (inv.net_amount_released != null) return money(inv.net_amount_released);
+  if (inv.status === "approved") return money(inv.approved_amount);
+  return "Yet to receive";
 }
 
 export function ContractorBillingPage() {
@@ -60,6 +81,8 @@ export function ContractorBillingPage() {
 
   const [reviewInv, setReviewInv] = useState<Invoice | null>(null);
   const [reviewRemark, setReviewRemark] = useState("");
+  const [selected, setSelected] = useState<Invoice | null>(null);
+  const [viewMode, setViewMode] = useState<"submission" | "activity">("submission");
 
   const load = async () => {
     if (!token) return;
@@ -68,6 +91,7 @@ export function ContractorBillingPage() {
       setInvoices(inv);
       setProjects(proj);
       if (!projectId && proj[0]) setProjectId(String(proj[0].id));
+      setSelected((cur) => (cur ? inv.find((i) => i.id === cur.id) || null : null));
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -332,59 +356,80 @@ export function ContractorBillingPage() {
           <table className="data">
             <thead>
               <tr>
-                {canReview ? <th>Action</th> : null}
+                <th>Action</th>
+                <th>View</th>
                 <th>Current Status of Invoice</th>
                 <th>Transaction ID</th>
                 <th>Contractor</th>
                 <th>Project / Package</th>
+                <th>UPC</th>
+                <th>PIU</th>
                 <th>Payment Type</th>
                 <th>Invoice No.</th>
                 <th>Invoice Date</th>
                 <th>Invoice Amount (INR)</th>
-                <th>Cumulative (INR)</th>
+                <th>Invoice Submission Date</th>
                 <th>Bill Duration From</th>
                 <th>Bill Duration To</th>
+                <th>Recommendation by GM team</th>
+                <th>Recommendation by NHIPMPL</th>
+                <th>Net Amount Released (INR)</th>
                 <th>Invoice PDF</th>
-                <th>GMC Remark</th>
-                <th>Reviewed On</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((inv) => {
                 const gmc = inv.gmc_review_status || "approved";
                 return (
-                  <tr key={inv.id}>
-                    {canReview ? (
-                      <td>
-                        {gmc === "pending" ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => {
-                              setReviewInv(inv);
-                              setReviewRemark(inv.gmc_remark || "");
-                            }}
-                          >
-                            Review
-                          </button>
-                        ) : (
-                          <span className="muted">Done</span>
-                        )}
-                      </td>
-                    ) : null}
+                  <tr key={inv.id} className={selected?.id === inv.id ? "selected-row" : undefined}>
                     <td>
-                      <span className={`badge gmc-${gmc}`}>{GMC_LABEL[gmc] || gmc}</span>
+                      {canReview && gmc === "pending" ? (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            setReviewInv(inv);
+                            setReviewRemark(inv.gmc_remark || "");
+                          }}
+                        >
+                          Review
+                        </button>
+                      ) : (
+                        <span className="muted">{gmc === "pending" ? "Pending" : "Done"}</span>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => {
+                          setSelected(inv);
+                          setViewMode("submission");
+                        }}
+                      >
+                        View ▾
+                      </button>
+                    </td>
+                    <td>
+                      <span className={`badge gmc-${gmc}`}>
+                        {inv.status_detail || GMC_LABEL[gmc] || gmc}
+                      </span>
                     </td>
                     <td>{inv.transaction_id}</td>
                     <td>{inv.contractor_name || "—"}</td>
                     <td>{projectName(inv.project_id)}</td>
+                    <td>{inv.upc || "—"}</td>
+                    <td>{inv.piu || "—"}</td>
                     <td>{inv.payment_type}</td>
                     <td>{inv.invoice_no}</td>
                     <td>{fmtDate(inv.invoice_date)}</td>
                     <td>{money(inv.this_bill_amount ?? inv.amount)}</td>
-                    <td>{money(inv.cumulative_amount)}</td>
+                    <td>{fmtDate(inv.created_at)}</td>
                     <td>{fmtDate(inv.bill_from)}</td>
                     <td>{fmtDate(inv.bill_to)}</td>
+                    <td>{gmTeamRecommendation(inv)}</td>
+                    <td>{nhipmplRecommendation(inv)}</td>
+                    <td>{netAmountReleased(inv)}</td>
                     <td>
                       {inv.invoice_pdf_path ? (
                         <a href={mediaUrl(inv.invoice_pdf_path)} target="_blank" rel="noreferrer">
@@ -394,14 +439,12 @@ export function ContractorBillingPage() {
                         "—"
                       )}
                     </td>
-                    <td>{inv.gmc_remark || "—"}</td>
-                    <td>{fmtDate(inv.gmc_reviewed_at)}</td>
                   </tr>
                 );
               })}
               {!pageRows.length ? (
                 <tr>
-                  <td colSpan={canReview ? 15 : 14}>No invoices yet.</td>
+                  <td colSpan={19}>No invoices yet.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -429,6 +472,100 @@ export function ContractorBillingPage() {
           </div>
         </div>
       </section>
+
+      {selected ? (
+        <section className="panel">
+          <div className="panel-head-row">
+            <h2>
+              {selected.transaction_id} · {selected.invoice_no}
+            </h2>
+            <div className="btn-row">
+              <button
+                type="button"
+                className={viewMode === "submission" ? "btn" : "btn ghost"}
+                onClick={() => setViewMode("submission")}
+              >
+                Submission
+              </button>
+              <button
+                type="button"
+                className={viewMode === "activity" ? "btn" : "btn ghost"}
+                onClick={() => setViewMode("activity")}
+              >
+                Activity Log
+              </button>
+              <button type="button" className="linkish" onClick={() => setSelected(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+          {viewMode === "submission" ? (
+            <div className="detail-grid">
+              <div>
+                <strong>Contractor</strong>
+                <div>{selected.contractor_name || "—"}</div>
+              </div>
+              <div>
+                <strong>Project / Package</strong>
+                <div>{projectName(selected.project_id)}</div>
+              </div>
+              <div>
+                <strong>Payment Type</strong>
+                <div>{selected.payment_type}</div>
+              </div>
+              <div>
+                <strong>Invoice Amount</strong>
+                <div>₹ {money(selected.this_bill_amount ?? selected.amount)}</div>
+              </div>
+              <div>
+                <strong>Cumulative</strong>
+                <div>₹ {money(selected.cumulative_amount)}</div>
+              </div>
+              <div>
+                <strong>Bill Duration</strong>
+                <div>
+                  {fmtDate(selected.bill_from)} — {fmtDate(selected.bill_to)}
+                </div>
+              </div>
+              <div>
+                <strong>Current Status</strong>
+                <div>{selected.status_detail || formatLabel(selected.status)}</div>
+              </div>
+              <div>
+                <strong>Recommendation by GM team</strong>
+                <div>{gmTeamRecommendation(selected)}</div>
+              </div>
+              <div>
+                <strong>Recommendation by NHIPMPL</strong>
+                <div>{nhipmplRecommendation(selected)}</div>
+              </div>
+              <div>
+                <strong>Invoice PDF</strong>
+                <div>
+                  {selected.invoice_pdf_path ? (
+                    <a href={mediaUrl(selected.invoice_pdf_path)} target="_blank" rel="noreferrer">
+                      Open PDF
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <ul className="activity-list" style={{ marginTop: "1rem" }}>
+              {(selected.activities || []).map((a) => (
+                <li key={a.id}>
+                  <strong>{formatLabel(a.action)}</strong>
+                  {a.note ? ` — ${a.note}` : ""}
+                  <span className="muted"> · {new Date(a.created_at).toLocaleString()}</span>
+                </li>
+              ))}
+              {!selected.activities?.length ? <li className="muted">No activity yet.</li> : null}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {showCreate && canEdit ? (
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>

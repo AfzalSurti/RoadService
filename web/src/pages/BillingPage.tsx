@@ -403,7 +403,8 @@ export function BillingPage() {
                 <th>View</th>
                 <th>Current Status of Invoice</th>
                 <th>Transaction ID</th>
-                <th>NHIPMPL HQ</th>
+                <th>UPC</th>
+                <th>PIU</th>
                 <th>Payment Type</th>
                 <th>Invoice No.</th>
                 <th>Invoice Date</th>
@@ -411,8 +412,8 @@ export function BillingPage() {
                 <th>Invoice Submission Date</th>
                 <th>Bill Duration From</th>
                 <th>Bill Duration To</th>
-                <th>Recommended Amount by GMC (INR)</th>
-                <th>Recommended Amount By NHIPMPL (INR)</th>
+                <th>Recommendation by GM team</th>
+                <th>Recommendation by NHIPMPL</th>
                 <th>Net Amount Released (INR)</th>
                 <th>Voucher</th>
                 <th>Recommendation Document</th>
@@ -495,7 +496,8 @@ export function BillingPage() {
                   </td>
                   <td>{inv.status_detail || formatLabel(inv.status)}</td>
                   <td>{inv.transaction_id}</td>
-                  <td>{inv.piu || "NHIPMPL HQ"}</td>
+                  <td>{inv.upc || "—"}</td>
+                  <td>{inv.piu || "—"}</td>
                   <td>{inv.payment_type}</td>
                   <td>{inv.invoice_no}</td>
                   <td>{fmtDate(inv.invoice_date)}</td>
@@ -550,7 +552,7 @@ export function BillingPage() {
               ))}
               {!pageRows.length ? (
                 <tr>
-                  <td colSpan={18}>No invoices yet.</td>
+                  <td colSpan={19}>No invoices yet.</td>
                 </tr>
               ) : null}
             </tbody>
