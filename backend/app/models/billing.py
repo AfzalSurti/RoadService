@@ -69,7 +69,8 @@ class Invoice(Base):
     )
 
     project = relationship("Project")
-    submitted_by = relationship("User")
+    submitted_by = relationship("User", foreign_keys=[submitted_by_id])
+    gmc_reviewed_by = relationship("User", foreign_keys=[gmc_reviewed_by_id])
     activities = relationship(
         "InvoiceActivity",
         back_populates="invoice",
