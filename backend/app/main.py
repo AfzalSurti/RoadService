@@ -21,6 +21,7 @@ from app.api import (
     rfis,
     field_ops,
     staff_details,
+    toll_perf,
     users,
 )
 from app.core.config import settings
@@ -89,6 +90,7 @@ app.include_router(queries.router, prefix="/api/v1")
 app.include_router(rfis.router, prefix="/api/v1")
 app.include_router(field_ops.router, prefix="/api/v1")
 app.include_router(nhit.router, prefix="/api/v1")
+app.include_router(toll_perf.router, prefix="/api/v1/nhit")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")

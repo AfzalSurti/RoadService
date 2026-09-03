@@ -996,54 +996,251 @@ export function HighwayIncidentsPage() {
   );
 }
 
+type TollPerfData = {
+  columns: Record<string, string[]>;
+  rows: Record<string, Record<string, string>[]>;
+  notes: Record<string, string>;
+};
+
+const TOLL_PERF_STEPS: { key: string; label: string; title: string }[] = [
+  { key: "etc_monthly", label: "Monthly ETC Report", title: "Monthly ETC Report" },
+  {
+    key: "infrastructure",
+    label: "On-Ground Infrastructure Report",
+    title: "On-Ground Infrastructure Report",
+  },
+  {
+    key: "sla_adherence",
+    label: "On-Ground ETC Operations And SLA Adherence",
+    title: "On-Ground ETC Operations And SLA Adherence",
+  },
+  {
+    key: "toll_collection_summary",
+    label: "Summary Report : Monthly Toll Collection Report",
+    title: "Summary Report : Monthly Toll Collection Report",
+  },
+];
+
+const EMPTY_TOLL_PERF: TollPerfData = { columns: {}, rows: {}, notes: {} };
+
+function csvCell(v: unknown) {
+  return `"${String(v ?? "").replace(/"/g, '""')}"`;
+}
+
 export function ItsPage() {
-  const { token } = useAuth();
-  const [rows, setRows] = useState<Row[]>([]);
+  const { token, role, isReadonly } = useAuth();
+  const canEdit = (role === "admin" || role === "government") && !isReadonly;
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState<TollPerfData>(EMPTY_TOLL_PERF);
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  usePageTitle("ATMS / TMS / MLFF / ITS");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  usePageTitle("Toll Plaza Performances");
+
+  const current = TOLL_PERF_STEPS[step];
+  const columns = data.columns[current.key] || [];
+  const rows = data.rows[current.key] || [];
+
+  const load = async () => {
+    if (!token) return;
+    try {
+      const d = await api.nhitGet<TollPerfData>(token, "/toll-perf");
+      setData(d);
+      setNotes(d.notes || {});
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load toll performances");
+    }
+  };
 
   useEffect(() => {
-    if (!token) return;
-    api
-      .nhitGet<Row[]>(token, "/its")
-      .then(setRows)
-      .catch((e: Error) => setError(e.message));
+    void load();
   }, [token]);
+
+  const onImport = async (file: File) => {
+    if (!token || !canEdit) return;
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await api.tollPerfImport(token, current.key, file);
+      setMsg(`${current.label}: data imported.`);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportExcel = () => {
+    const lines = [
+      columns.map(csvCell).join(","),
+      ...rows.map((r) => columns.map((c) => csvCell(r[c])).join(",")),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${current.key}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const head = columns.map((c) => `<th>${c}</th>`).join("");
+    const body =
+      rows
+        .map((r) => `<tr>${columns.map((c) => `<td>${String(r[c] ?? "")}</td>`).join("")}</tr>`)
+        .join("") || `<tr><td colspan="${columns.length || 1}">No data</td></tr>`;
+    const extra =
+      current.key === "toll_collection_summary"
+        ? `<h3>PD's comments/observations on perusal of AEs/IEs MPR</h3><p>${notes.pd_comments || "—"}</p>
+           <h3>AE's Compliance on PD's comments/observations</h3><p>${notes.ae_compliance || "—"}</p>`
+        : "";
+    w.document.write(`<!doctype html><html><head><title>${current.title}</title>
+      <style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}h1{color:#0b2a43}
+      table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;font-size:12px}
+      th{background:#0b2a43;color:#fff;text-align:left}</style></head><body>
+      <h1>${current.title}</h1><p>Generated ${new Date().toLocaleString()}</p>
+      <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${extra}
+      <script>window.onload=()=>window.print()</script></body></html>`);
+    w.document.close();
+  };
+
+  const saveNotes = async () => {
+    if (!token || !canEdit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await api.nhitPut<Record<string, string>>(token, "/toll-perf/notes", {
+        pd_comments: notes.pd_comments || "",
+        ae_compliance: notes.ae_compliance || "",
+      });
+      setNotes(saved);
+      setMsg("Comments saved.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not save comments");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      {msg ? <div className="ok">{msg}</div> : null}
+
       <section className="panel">
-        <h2>System health monitoring</h2>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>System</th>
-              <th>Name</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Health</th>
-              <th>Heartbeat</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={String(r.id)}>
-                <td>{String(r.system_type).toUpperCase()}</td>
-                <td>{String(r.name)}</td>
-                <td>{String(r.location || "—")}</td>
-                <td>{formatLabel(String(r.status))}</td>
-                <td>{Number(r.health_pct || 0)}%</td>
-                <td>{String(r.last_heartbeat || "—")}</td>
-              </tr>
-            ))}
-            {!rows.length ? (
-              <tr>
-                <td colSpan={6}>No ITS devices yet. Use Executive → Load demo data.</td>
-              </tr>
+        <h2 style={{ marginTop: 0 }}>Toll Plaza Performances</h2>
+        <div className="toll-perf-stepper">
+          {TOLL_PERF_STEPS.map((s, i) => (
+            <button
+              key={s.key}
+              type="button"
+              className={`toll-perf-step${i === step ? " active" : ""}`}
+              onClick={() => setStep(i)}
+            >
+              <span className="toll-perf-step-num">{i + 1}</span>
+              <span className="toll-perf-step-label">{s.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head-row">
+          <div>
+            <h2 style={{ margin: 0 }}>{current.title}</h2>
+            <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+              Step {step + 1} of {TOLL_PERF_STEPS.length}
+            </p>
+          </div>
+          <div className="btn-row">
+            <button className="btn ghost" type="button" onClick={exportPdf}>
+              PDF
+            </button>
+            <button className="btn ghost" type="button" onClick={exportExcel}>
+              Excel
+            </button>
+            {canEdit ? (
+              <label className={`btn${busy ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
+                {busy ? "Importing…" : "Import Data"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  hidden
+                  disabled={busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void onImport(f);
+                  }}
+                />
+              </label>
             ) : null}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
+              <tr>
+                {columns.map((c) => (
+                  <th key={c}>{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {columns.map((c) => (
+                    <td key={c}>{r[c] ?? ""}</td>
+                  ))}
+                </tr>
+              ))}
+              {!rows.length ? (
+                <tr>
+                  <td colSpan={columns.length || 1} className="muted">
+                    No data available in table. {canEdit ? "Use Import Data to upload an Excel file." : ""}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <p className="muted">Showing {rows.length ? 1 : 0} to {rows.length} of {rows.length} entries</p>
+
+        {current.key === "toll_collection_summary" ? (
+          <div className="form-grid" style={{ marginTop: "1rem" }}>
+            <label className="span-2">
+              PD&apos;s comments/observations on perusal of AEs/IEs MPR
+              <textarea
+                value={notes.pd_comments || ""}
+                disabled={!canEdit}
+                onChange={(e) => setNotes({ ...notes, pd_comments: e.target.value })}
+              />
+            </label>
+            <label className="span-2">
+              AE&apos;s Compliance on PD&apos;s comments/observations
+              <textarea
+                value={notes.ae_compliance || ""}
+                disabled={!canEdit}
+                onChange={(e) => setNotes({ ...notes, ae_compliance: e.target.value })}
+              />
+            </label>
+            {canEdit ? (
+              <div className="span-2">
+                <button className="btn" type="button" disabled={busy} onClick={() => void saveNotes()}>
+                  {busy ? "Saving…" : "Save comments"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
     </>
   );

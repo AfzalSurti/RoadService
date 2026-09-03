@@ -636,6 +636,23 @@ export const api = {
   nhitDelete: <T>(token: string, path: string) =>
     request<T>(`/api/v1/nhit${path}`, { method: "DELETE", token }),
 
+  nhitPut: <T>(token: string, path: string, body?: unknown) =>
+    request<T>(`/api/v1/nhit${path}`, {
+      method: "PUT",
+      token,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+
+  tollPerfImport: <T>(token: string, reportType: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<T>(`/api/v1/nhit/toll-perf/${reportType}/import`, {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
   seedNhitDemo: (token: string) =>
     request<{ ok: boolean; message: string }>("/api/v1/nhit/seed-demo", { method: "POST", token }),
 };

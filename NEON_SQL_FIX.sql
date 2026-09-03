@@ -198,3 +198,20 @@ ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS review_status VARC
 ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS review_remark TEXT;
 ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS reviewed_by_id INTEGER REFERENCES users(id);
 ALTER TABLE monthly_progress_reports ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+
+-- 021: Toll Plaza Performances (imported report rows + summary notes)
+CREATE TABLE IF NOT EXISTS toll_perf_rows (
+  id SERIAL PRIMARY KEY,
+  report_type VARCHAR(48) NOT NULL,
+  payload TEXT NOT NULL DEFAULT '{}',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_toll_perf_rows_report_type ON toll_perf_rows (report_type);
+CREATE TABLE IF NOT EXISTS toll_perf_notes (
+  id SERIAL PRIMARY KEY,
+  note_key VARCHAR(64) NOT NULL,
+  note_value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_toll_perf_notes_note_key ON toll_perf_notes (note_key);

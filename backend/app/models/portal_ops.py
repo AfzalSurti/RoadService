@@ -498,3 +498,32 @@ class RoadWarning(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
     raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TollPerfRow(Base):
+    """One imported data row for a Toll Plaza Performances step.
+
+    report_type: etc_monthly | infrastructure | sla_adherence | toll_collection_summary
+    payload: JSON object of {column label: cell value} for that row.
+    """
+
+    __tablename__ = "toll_perf_rows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_type: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TollPerfNote(Base):
+    """Free-text fields on the Summary step (PD comments / AE compliance)."""
+
+    __tablename__ = "toll_perf_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    note_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    note_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
