@@ -95,6 +95,10 @@ def _out(inv: Invoice) -> InvoiceOut:
         diary_note=state.get("diary_note"),
         diary_signature=state.get("diary_signature"),
         correspondence_path=state.get("correspondence_path"),
+        submitted_by_role=getattr(inv, "submitted_by_role", None),
+        gmc_review_status=getattr(inv, "gmc_review_status", None) or "approved",
+        gmc_remark=getattr(inv, "gmc_remark", None),
+        gmc_reviewed_at=getattr(inv, "gmc_reviewed_at", None),
         created_at=inv.created_at,
         updated_at=inv.updated_at,
         activities=[
@@ -150,6 +154,14 @@ async def list_invoices(
             stmt = stmt.where(
                 or_(Invoice.submitted_by_id == user.id, Invoice.contractor_name.ilike(f"%{user.full_name}%"))
             )
+        if user.role == UserRole.GOVERNMENT:
+            # NHIPMPL only sees invoices the GMC MIS Expert has approved (or non-contractor ones)
+            stmt = stmt.where(
+                or_(
+                    Invoice.gmc_review_status == "approved",
+                    Invoice.gmc_review_status.is_(None),
+                )
+            )
         rows = (await db.execute(stmt)).scalars().unique().all()
         return [_out(i) for i in rows]
     except Exception as exc:  # noqa: BLE001
@@ -201,8 +213,12 @@ async def create_invoice(
         status=InvoiceStatus.SUBMITTED,
         status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
+        submitted_by_role=user.role.value,
+        gmc_review_status="pending" if user.role == UserRole.CONTRACTOR else "approved",
         notes=body.notes,
     )
+    if user.role == UserRole.CONTRACTOR:
+        inv.status_detail = "Awaiting GMC MIS Expert review"
     db.add(inv)
     await db.flush()
     await _add_activity(db, inv, user, "submitted", body.notes or "Invoice submitted")
@@ -482,8 +498,12 @@ async def create_invoice_claim(
         status=InvoiceStatus.SUBMITTED,
         status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
+        submitted_by_role=user.role.value,
+        gmc_review_status="pending" if user.role == UserRole.CONTRACTOR else "approved",
         notes=notes,
     )
+    if user.role == UserRole.CONTRACTOR:
+        inv.status_detail = "Awaiting GMC MIS Expert review"
     db.add(inv)
     await db.flush()
     await _add_activity(db, inv, user, "submitted", notes or "Invoice submitted")
@@ -543,5 +563,35 @@ async def save_invoice_diary(
     if user.role == UserRole.GOVERNMENT and not inv.authority_engineer:
         inv.authority_engineer = user.full_name
     await _add_activity(db, inv, user, "diary", note.strip())
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.post("/invoices/{invoice_id}/gmc-review", response_model=InvoiceOut)
+async def gmc_review_invoice(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    status: Annotated[str, Form()],
+    remark: Annotated[str | None, Form()] = None,
+):
+    """GMC MIS Expert approves / rejects a contractor invoice before it reaches NHIPMPL."""
+    decision = (status or "").strip().lower()
+    if decision not in {"approved", "not_approved"}:
+        raise HTTPException(status_code=400, detail="status must be 'approved' or 'not_approved'")
+    inv = await _load(db, invoice_id)
+    inv.gmc_review_status = decision
+    inv.gmc_remark = (remark or "").strip() or None
+    inv.gmc_reviewed_by_id = user.id
+    inv.gmc_reviewed_at = datetime.now(timezone.utc)
+    if decision == "approved":
+        inv.status_detail = "Forwarded to NHIPMPL by GMC MIS Expert"
+    else:
+        inv.status_detail = "Not approved by GMC MIS Expert"
+    await _add_activity(
+        db, inv, user,
+        "gmc_approved" if decision == "approved" else "gmc_not_approved",
+        inv.gmc_remark or "",
+    )
     await db.commit()
     return _out(await _load(db, inv.id))

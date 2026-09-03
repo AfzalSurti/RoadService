@@ -8,14 +8,23 @@ function money(n: number | null | undefined) {
   return Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const GMC_LABEL: Record<string, string> = {
+  pending: "Awaiting GMC review",
+  approved: "Approved by GMC",
+  not_approved: "Not approved by GMC",
+};
+
 export function ContractorBillingPage() {
   const { token, fullName, role, isReadonly } = useAuth();
   const canEdit = role === "contractor" && !isReadonly;
+  const canReview = role === "admin" && !isReadonly;
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [reviewId, setReviewId] = useState<number | null>(null);
+  const [reviewRemark, setReviewRemark] = useState("");
   const [projectId, setProjectId] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
@@ -43,9 +52,31 @@ export function ContractorBillingPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Contractor — Invoice upload";
+    if (el) el.textContent = "Contractor Billing";
     void load();
   }, [token]);
+
+  const submitReview = async (id: number, status: "approved" | "not_approved") => {
+    if (!token || !canReview) return;
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await api.gmcReviewInvoice(token, id, status, reviewRemark.trim());
+      setMsg(
+        status === "approved"
+          ? "Invoice approved and forwarded to NHIPMPL."
+          : "Invoice marked not approved."
+      );
+      setReviewId(null);
+      setReviewRemark("");
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Review failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -104,10 +135,10 @@ export function ContractorBillingPage() {
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Contractor invoice upload</h1>
+          <h1>Contractor Billing</h1>
           <p>
-            Contractor fills This bill Amount, Cumulative up to date, and uploads the bill PDF. GMC MIS
-            Expert and NHIPMPL can view the same records.
+            Contractor submits the invoice → it lands with the <strong>GMC MIS Expert</strong> for
+            approval and remark → once approved it is forwarded to the <strong>NHIPMPL</strong> portal.
           </p>
         </div>
       </header>
@@ -228,44 +259,109 @@ export function ContractorBillingPage() {
       )}
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Submitted invoices</h2>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Txn</th>
-              <th>Invoice</th>
-              <th>This bill</th>
-              <th>Cumulative</th>
-              <th>Status</th>
-              <th>PDF</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr key={inv.id}>
-                <td>{inv.transaction_id}</td>
-                <td>{inv.invoice_no}</td>
-                <td>₹ {money(inv.this_bill_amount ?? inv.amount)}</td>
-                <td>₹ {money(inv.cumulative_amount)}</td>
-                <td>{inv.status_detail || inv.status}</td>
-                <td>
-                  {inv.invoice_pdf_path ? (
-                    <a href={mediaUrl(inv.invoice_pdf_path)} target="_blank" rel="noreferrer">
-                      Open
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-            {!invoices.length ? (
+        <h2>{canReview ? "Contractor invoices — GMC review" : "Submitted invoices"}</h2>
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
               <tr>
-                <td colSpan={6}>No invoices yet.</td>
+                <th>Txn</th>
+                <th>Invoice</th>
+                <th>This bill</th>
+                <th>Cumulative</th>
+                <th>GMC review</th>
+                <th>GMC remark</th>
+                <th>PDF</th>
+                {canReview ? <th>Action</th> : null}
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => {
+                const gmc = inv.gmc_review_status || "approved";
+                return (
+                  <tr key={inv.id}>
+                    <td>{inv.transaction_id}</td>
+                    <td>{inv.invoice_no}</td>
+                    <td>₹ {money(inv.this_bill_amount ?? inv.amount)}</td>
+                    <td>₹ {money(inv.cumulative_amount)}</td>
+                    <td>
+                      <span className={`badge gmc-${gmc}`}>{GMC_LABEL[gmc] || gmc}</span>
+                    </td>
+                    <td>{inv.gmc_remark || "—"}</td>
+                    <td>
+                      {inv.invoice_pdf_path ? (
+                        <a href={mediaUrl(inv.invoice_pdf_path)} target="_blank" rel="noreferrer">
+                          Open
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    {canReview ? (
+                      <td>
+                        {gmc === "pending" ? (
+                          reviewId === inv.id ? (
+                            <div className="btn-row" style={{ flexWrap: "wrap", gap: "0.35rem" }}>
+                              <input
+                                placeholder="Remark"
+                                value={reviewRemark}
+                                onChange={(e) => setReviewRemark(e.target.value)}
+                                style={{ minWidth: 140 }}
+                              />
+                              <button
+                                type="button"
+                                className="btn"
+                                disabled={busy}
+                                onClick={() => void submitReview(inv.id, "approved")}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                className="btn danger"
+                                disabled={busy}
+                                onClick={() => void submitReview(inv.id, "not_approved")}
+                              >
+                                Not approve
+                              </button>
+                              <button
+                                type="button"
+                                className="linkish"
+                                onClick={() => {
+                                  setReviewId(null);
+                                  setReviewRemark("");
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              onClick={() => {
+                                setReviewId(inv.id);
+                                setReviewRemark(inv.gmc_remark || "");
+                              }}
+                            >
+                              Review
+                            </button>
+                          )
+                        ) : (
+                          <span className="muted">Done</span>
+                        )}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+              {!invoices.length ? (
+                <tr>
+                  <td colSpan={canReview ? 8 : 7}>No invoices yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

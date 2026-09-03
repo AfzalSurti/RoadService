@@ -215,3 +215,10 @@ CREATE TABLE IF NOT EXISTS toll_perf_notes (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ix_toll_perf_notes_note_key ON toll_perf_notes (note_key);
+
+-- 022: GMC MIS Expert review gate on contractor invoices before NHIPMPL
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS submitted_by_role VARCHAR(32);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_review_status VARCHAR(16) NOT NULL DEFAULT 'approved';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_remark TEXT;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_reviewed_by_id INTEGER REFERENCES users(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_reviewed_at TIMESTAMPTZ;

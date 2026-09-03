@@ -1203,6 +1203,7 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   inset: 0;
   background:
     linear-gradient(120deg, rgba(8, 20, 34, 0.72), rgba(8, 20, 34, 0.35)),
+    url("/dash-hero.jpg") center / cover no-repeat,
     url("/landing-road.jpg") center / cover no-repeat;
   transition: transform 12s ease-in-out;
 }
@@ -1276,3 +1277,8 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .toll-perf-step.active .toll-perf-step-num { background: var(--accent); color: #fff; }
 .toll-perf-step-label { font-size: 0.78rem; font-weight: 600; line-height: 1.25; }
 .btn.disabled { opacity: 0.55; pointer-events: none; }
+
+/* Contractor Billing — GMC review badges */
+.badge.gmc-pending { background: #fef3c7; color: #92400e; }
+.badge.gmc-approved { background: #dcfce7; color: #166534; }
+.badge.gmc-not_approved { background: #fee2e2; color: #991b1b; }

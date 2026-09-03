@@ -367,6 +367,10 @@ class InvoiceOut(BaseModel):
     diary_note: str | None = None
     diary_signature: str | None = None
     correspondence_path: str | None = None
+    submitted_by_role: str | None = None
+    gmc_review_status: str = "approved"
+    gmc_remark: str | None = None
+    gmc_reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     activities: list[InvoiceActivityOut] = []

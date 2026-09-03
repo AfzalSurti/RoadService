@@ -196,6 +196,10 @@ export type Invoice = {
   diary_note?: string | null;
   diary_signature?: string | null;
   correspondence_path?: string | null;
+  submitted_by_role?: string | null;
+  gmc_review_status?: string | null;
+  gmc_remark?: string | null;
+  gmc_reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
   activities: InvoiceActivity[];

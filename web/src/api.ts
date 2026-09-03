@@ -385,6 +385,17 @@ export const api = {
   createInvoiceClaim: (token: string, form: FormData) =>
     request<Invoice>("/api/v1/billing/invoices/claim", { method: "POST", token, body: form }),
 
+  gmcReviewInvoice: (token: string, id: number, status: "approved" | "not_approved", remark: string) => {
+    const fd = new FormData();
+    fd.append("status", status);
+    if (remark) fd.append("remark", remark);
+    return request<Invoice>(`/api/v1/billing/invoices/${id}/gmc-review`, {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
   uploadFinalBill: (token: string, id: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);

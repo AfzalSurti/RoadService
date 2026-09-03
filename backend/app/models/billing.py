@@ -57,6 +57,12 @@ class Invoice(Base):
     diary_note: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     diary_signature: Mapped[str | None] = mapped_column(String(255), nullable=True, deferred=True)
     correspondence_path: Mapped[str | None] = mapped_column(String(512), nullable=True, deferred=True)
+    # GMC MIS Expert gate on contractor-submitted invoices before they reach NHIPMPL
+    submitted_by_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    gmc_review_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="approved")
+    gmc_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gmc_reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    gmc_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
