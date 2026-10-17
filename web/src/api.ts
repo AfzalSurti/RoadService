@@ -91,6 +91,7 @@ export const api = {
     token: string,
     body: {
       name: string;
+      title?: string;
       location: string;
       description?: string;
       chainage_from?: string;

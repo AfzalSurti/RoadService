@@ -21,6 +21,8 @@ export type User = {
 export type Project = {
   id: number;
   name: string;
+  /** Full official package title; `name` is the short package key. */
+  title?: string | null;
   location: string;
   description?: string | null;
   chainage_from?: string | null;

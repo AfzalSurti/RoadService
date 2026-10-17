@@ -1,3 +1,10 @@
+import type { Project } from "../types";
+
+/** Official title when set, else the short package name. */
+export function projectTitle(p: Pick<Project, "name" | "title">): string {
+  return p.title?.trim() || p.name;
+}
+
 /** Persist the active project across portal pages (dashboard → issues/RFI/…). */
 
 const KEY = "roadservice.selectedProjectId";

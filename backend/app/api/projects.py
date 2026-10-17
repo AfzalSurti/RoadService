@@ -34,6 +34,7 @@ async def list_projects(
 ):
     stmt = (
         select(Project)
+        .where(Project.is_active.is_(True))
         .options(selectinload(Project.contractors), selectinload(Project.surveyors))
         .order_by(Project.id.desc())
     )
@@ -53,6 +54,7 @@ async def create_project(
 ):
     project = Project(
         name=body.name,
+        title=body.title,
         location=body.location,
         description=body.description,
         chainage_from=body.chainage_from,

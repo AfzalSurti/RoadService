@@ -16,6 +16,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
 import {
+  projectTitle,
   resolveProjectId,
   setSelectedProjectId,
   withProjectQuery,
@@ -33,9 +34,6 @@ const COLORS: Record<string, string> = {
 
 const PREVIEW_COUNT = 3;
 
-const PROJECT_TITLE =
-  "General Management Consultant for Consultancy Services for Operation and Management of InvIT Project " +
-  "(i) Jabalpur-Lakhnadon (ii) Lakhnadon-Mahagaon-Khawasa (iii) Borkhedi-Wadner-Kelapur.";
 
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -84,7 +82,7 @@ export function DashboardPage() {
     api
       .projects(token)
       .then(async (p) => {
-        const sorted = [...p].sort((a, b) => b.id - a.id);
+        const sorted = [...p].sort((a, b) => a.id - b.id);
         setProjects(sorted);
         setError(null);
         const entries = await Promise.all(
@@ -161,6 +159,14 @@ export function DashboardPage() {
     if (el) el.textContent = selected ? `Dashboard · ${selected.name}` : "Dashboard";
   }, [selected]);
 
+  // Drop a stale selection (e.g. a retired project still in session storage).
+  useEffect(() => {
+    if (projects.length && selectedId && !projects.some((p) => p.id === selectedId)) {
+      setSelectedId(null);
+      setSelectedProjectId(null);
+    }
+  }, [projects, selectedId]);
+
   const pid = selectedId;
 
   if (showHero) {
@@ -170,12 +176,16 @@ export function DashboardPage() {
         className="dash-hero"
         onClick={() => setShowHero(false)}
         title="Open the dashboard"
-        aria-label={`${PROJECT_TITLE} — open the dashboard`}
+        aria-label="Open the dashboard"
       >
         <span className="dash-hero-bg" />
         <span className="dash-hero-wash" />
         <span className="dash-hero-inner">
-          <span className="dash-hero-title">{PROJECT_TITLE}</span>
+          <ol className="dash-hero-projects">
+            {projects.map((p) => (
+              <li key={p.id}>{projectTitle(p)}</li>
+            ))}
+          </ol>
         </span>
       </button>
     );
@@ -225,7 +235,10 @@ export function DashboardPage() {
                   role="button"
                 >
                   <td>{p.id}</td>
-                  <td>{p.name}</td>
+                  <td className="project-name-cell">
+                    <strong>{projectTitle(p)}</strong>
+                    {p.title ? <span className="muted">{p.name}</span> : null}
+                  </td>
                   <td>{p.location}</td>
                   <td>
                     {p.chainage_from || "—"} – {p.chainage_to || "—"}
@@ -282,6 +295,7 @@ export function DashboardPage() {
                 <strong>
                   Selected · #{selected.id} · {selected.name}
                 </strong>
+                {selected.title ? <p>{selected.title}</p> : null}
                 <p>
                   {selected.location}
                   {selected.chainage_from || selected.chainage_to

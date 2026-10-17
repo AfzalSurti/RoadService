@@ -2,11 +2,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { projectTitle } from "../lib/projectScope";
 import * as v from "../lib/validation";
 import type { Project, ProjectRateSummary, User } from "../types";
 
 const emptyForm = {
   name: "",
+  title: "",
   location: "",
   description: "",
   chainage_from: "",
@@ -34,7 +36,7 @@ export function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false);
 
   const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => b.id - a.id),
+    () => [...projects].sort((a, b) => a.id - b.id),
     [projects]
   );
 
@@ -127,6 +129,7 @@ export function ProjectsPage() {
     try {
       const created = await api.createProject(token, {
         name: form.name.trim(),
+        title: form.title.trim() || undefined,
         location: form.location.trim(),
         description: form.description.trim() || undefined,
         chainage_from: form.chainage_from.trim() || undefined,
@@ -194,7 +197,10 @@ export function ProjectsPage() {
                   role="button"
                 >
                   <td>{p.id}</td>
-                  <td>{p.name}</td>
+                  <td className="project-name-cell">
+                    <strong>{projectTitle(p)}</strong>
+                    {p.title ? <span className="muted">{p.name}</span> : null}
+                  </td>
                   <td>{p.location}</td>
                   <td>
                     {p.chainage_from || "—"} – {p.chainage_to || "—"}
@@ -229,6 +235,7 @@ export function ProjectsPage() {
               <strong>
                 Selected · #{selected.id} · {selected.name}
               </strong>
+              {selected.title ? <p>{selected.title}</p> : null}
               <p>
                 {selected.location}
                 {selected.chainage_from || selected.chainage_to
@@ -280,6 +287,14 @@ export function ProjectsPage() {
               {touched.name && fieldErrors.name ? (
                 <span className="field-error">{fieldErrors.name}</span>
               ) : null}
+            </label>
+            <label>
+              Official title
+              <textarea
+                value={form.title}
+                onChange={(e) => setField("title", e.target.value)}
+                placeholder="e.g. Tolling, Operation, Maintenance & Transfer of …"
+              />
             </label>
             <label>
               Location

@@ -25,6 +25,9 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Full official package title shown in the portal; `name` stays the short key
+    # (e.g. "Jabalpur - Lakhnadon") that document folders / MPR / NHIT match on.
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)

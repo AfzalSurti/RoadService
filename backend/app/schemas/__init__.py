@@ -48,6 +48,7 @@ class UserOut(UserBase):
 
 class ProjectCreate(BaseModel):
     name: str
+    title: str | None = None
     location: str
     description: str | None = None
     chainage_from: str | None = None
@@ -58,6 +59,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
+    title: str | None = None
     location: str | None = None
     description: str | None = None
     chainage_from: str | None = None
@@ -71,6 +73,7 @@ class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    title: str | None = None
     location: str
     description: str | None
     chainage_from: str | None

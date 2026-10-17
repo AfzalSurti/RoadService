@@ -25,6 +25,38 @@ STRETCHES = [
     "Lakhnadon - Khawasa",
     "Bokhedi - Kelapur",
 ]
+# Official package details, keyed by the short stretch name above.
+PACKAGE_DETAILS = {
+    "Jabalpur - Lakhnadon": {
+        "title": (
+            "Tolling, Operation, Maintenance & Transfer of four lane section from Jabalpur to "
+            "Lakhnadon section of NH-30 (Km 880.600 to Km 891.780) and NH-34 (Km 1358.000 to "
+            "Km 1428.557) in the State of Madhya Pradesh."
+        ),
+        "location": "NH-30 & NH-34, Madhya Pradesh",
+        "chainage_from": "880+600 (NH-30) / 1358+000 (NH-34)",
+        "chainage_to": "891+780 (NH-30) / 1428+557 (NH-34)",
+    },
+    "Lakhnadon - Khawasa": {
+        "title": (
+            "Tolling, Operation, Maintenance & Transfer of Lakhnadon-Mohagaon-Khawasa Section of "
+            "NH-44 in the State of Madhya Pradesh (Mohagaon-Khawasa Section existing Chainage "
+            "624+480 km to 653+770 km, Length of the Section = 29.29 km)."
+        ),
+        "location": "NH-44, Madhya Pradesh",
+        "chainage_from": "624+480",
+        "chainage_to": "653+770",
+    },
+    "Bokhedi - Kelapur": {
+        "title": (
+            "Tolling, Operation, Maintenance & Transfer of Borkhedi–Wadner–Deodhari from "
+            "km 36+600 to km 175+000 of NH-44 section in the State of Maharashtra."
+        ),
+        "location": "NH-44, Maharashtra",
+        "chainage_from": "36+600",
+        "chainage_to": "175+000",
+    },
+}
 # Four disciplines under every package. Civil Related and Toll/ATMS/TMS carry a
 # group level (Contract / Project / ITS...) then leaf doc-types; Statutory and
 # Financial carry leaf doc-types directly.
@@ -245,12 +277,14 @@ async def _ensure_folder_tree(db: AsyncSession) -> None:
             await db.execute(select(Project).where(Project.name == stretch))
         ).scalar_one_or_none()
         if not project:
+            details = PACKAGE_DETAILS.get(stretch, {})
             project = Project(
                 name=stretch,
-                location=stretch,
+                title=details.get("title"),
+                location=details.get("location", stretch),
                 description=f"Corridor stretch folder project: {stretch}",
-                chainage_from="0+000",
-                chainage_to="0+000",
+                chainage_from=details.get("chainage_from", "0+000"),
+                chainage_to=details.get("chainage_to", "0+000"),
             )
             db.add(project)
             await db.flush()
