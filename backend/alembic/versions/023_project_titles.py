@@ -47,8 +47,11 @@ PACKAGES = [
 
 
 def upgrade() -> None:
-    op.add_column("projects", sa.Column("title", sa.String(512), nullable=True))
     conn = op.get_bind()
+    # The app's startup schema guard may already have added and filled the column.
+    if "title" in {c["name"] for c in sa.inspect(conn).get_columns("projects")}:
+        return
+    op.add_column("projects", sa.Column("title", sa.String(512), nullable=True))
     for name, title, location, ch_from, ch_to in PACKAGES:
         params = {"n": name, "t": title, "l": location, "f": ch_from, "c": ch_to}
         updated = conn.execute(

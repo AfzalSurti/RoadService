@@ -7,7 +7,6 @@ Create Date: 2026-10-17
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
 
 revision: str = "024_notification_link"
@@ -17,7 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("notifications", sa.Column("link", sa.String(255), nullable=True))
+    # IF NOT EXISTS: the app's startup schema guard may already have added it.
+    op.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)")
 
 
 def downgrade() -> None:

@@ -222,3 +222,9 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_review_status VARCHAR(16) NOT 
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_remark TEXT;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_reviewed_by_id INTEGER REFERENCES users(id);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gmc_reviewed_at TIMESTAMPTZ;
+
+-- 023: official project titles (the API also applies this automatically on startup)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS title VARCHAR(512);
+
+-- 024: notification link to the portal page (also applied automatically on startup)
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255);

@@ -1,9 +1,11 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
@@ -25,6 +27,7 @@ from app.api import (
     users,
 )
 from app.core.config import settings
+from app.core.schema_guard import ensure_schema
 from app.jobs.verification import (
     flip_stale_completed_to_verification_pending,
     warn_approaching_verification_deadline,
@@ -36,6 +39,7 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    await ensure_schema()
     if settings.scheduler_enabled:
         scheduler.add_job(
             flip_stale_completed_to_verification_pending,
@@ -62,6 +66,19 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+
+# Registered before CORSMiddleware so it runs *inside* it: unhandled errors become
+# JSON 500s that still carry CORS headers, instead of a misleading browser CORS error.
+@app.middleware("http")
+async def json_server_errors(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("app").exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": f"Server error: {exc}"})
+
 
 app.add_middleware(
     CORSMiddleware,
