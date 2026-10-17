@@ -36,7 +36,6 @@ const PREVIEW_COUNT = 3;
 const PROJECT_TITLE =
   "General Management Consultant for Consultancy Services for Operation and Management of InvIT Project " +
   "(i) Jabalpur-Lakhnadon (ii) Lakhnadon-Mahagaon-Khawasa (iii) Borkhedi-Wadner-Kelapur.";
-const HERO_SEEN_KEY = "rs-dash-hero-seen";
 
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -72,13 +71,9 @@ export function DashboardPage() {
     resolveProjectId(params.get("project"))
   );
   const [showAllProjects, setShowAllProjects] = useState(false);
-  const [showHero, setShowHero] = useState(() => {
-    try {
-      return sessionStorage.getItem(HERO_SEEN_KEY) !== "1";
-    } catch {
-      return true;
-    }
-  });
+  // Splash photo shows on every visit to the dashboard; clicking it reveals the
+  // dashboard as it was left (selected project is kept via URL / projectScope).
+  const [showHero, setShowHero] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const projectsPath = role === "admin" ? "/projects" : "/executive";
   const ratesPath = role === "admin" ? "/rates" : "/executive";
@@ -168,24 +163,19 @@ export function DashboardPage() {
 
   const pid = selectedId;
 
-  const enterDashboard = () => {
-    try {
-      sessionStorage.setItem(HERO_SEEN_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-    setShowHero(false);
-  };
-
   if (showHero) {
     return (
-      <button type="button" className="dash-hero" onClick={enterDashboard}>
+      <button
+        type="button"
+        className="dash-hero"
+        onClick={() => setShowHero(false)}
+        title="Open the dashboard"
+        aria-label={`${PROJECT_TITLE} — open the dashboard`}
+      >
         <span className="dash-hero-bg" />
         <span className="dash-hero-wash" />
         <span className="dash-hero-inner">
-          <span className="dash-hero-eyebrow">Project name</span>
           <span className="dash-hero-title">{PROJECT_TITLE}</span>
-          <span className="dash-hero-hint">Click to open the dashboard →</span>
         </span>
       </button>
     );

@@ -600,6 +600,7 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   position: absolute;
   inset: 0;
   background:
+    url("/dash-hero.jpg") center / cover no-repeat,
     url("/landing-road.jpg") center / cover no-repeat;
   transform: scale(1.06);
   animation: landing-kenburns 28s ease-in-out infinite alternate;
@@ -1221,24 +1222,11 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   max-width: 900px;
   padding: clamp(2rem, 6vw, 5rem);
 }
-.dash-hero-eyebrow {
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #7dd3fc;
-}
 .dash-hero-title {
   font-size: clamp(1.4rem, 3.4vw, 2.6rem);
   font-weight: 800;
   line-height: 1.28;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
-}
-.dash-hero-hint {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  opacity: 0.9;
 }
 
 /* Toll Plaza Performances stepper */
