@@ -6,6 +6,7 @@ import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
 import { projectIdFromUrl } from "../lib/projectScope";
 import type { Issue, Project, SiteRfi } from "../types";
+import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const empty = {
   project_id: "",
@@ -44,6 +45,16 @@ export function RfiPage() {
     contractor: "",
     status: "",
   });
+
+  // Deep link from a notification: /rfi?id=12
+  const linkedId = Number(searchParams.get("id") || 0) || null;
+  useEffect(() => {
+    if (!token || !linkedId) return;
+    api
+      .getRfi(token, linkedId)
+      .then(setSelected)
+      .catch(() => undefined);
+  }, [token, linkedId]);
 
   const isAdminViewOnly = role === "admin";
   // Contractor + NHIPMPL raise; GMC representative (surveyor) view / answer only
@@ -318,10 +329,15 @@ export function RfiPage() {
                   <td>{r.contractor_name || "—"}</td>
                   <td>{r.subject}</td>
                   <td>{formatLabel(r.status)}</td>
-                  <td>
+                  <td className="btn-row">
                     <button className="btn ghost" type="button" onClick={() => setSelected(r)}>
                       View
                     </button>
+                    <PdfDownloadButton
+                      path={`/api/v1/rfis/${r.id}/pdf`}
+                      filename={`${r.rfi_no.replace(/\//g, "-")}.pdf`}
+                      label="PDF"
+                    />
                   </td>
                 </tr>
               ))}
@@ -345,6 +361,10 @@ export function RfiPage() {
               <p>
                 <strong>{selected.rfi_no}</strong> · {formatLabel(selected.status)}
               </p>
+              <PdfDownloadButton
+                path={`/api/v1/rfis/${selected.id}/pdf`}
+                filename={`${selected.rfi_no.replace(/\//g, "-")}.pdf`}
+              />
               <p className="muted">
                 {projects.find((p) => p.id === selected.project_id)?.name || `Project #${selected.project_id}`}
                 {selected.chainage ? ` · Ch. ${selected.chainage}` : ""}

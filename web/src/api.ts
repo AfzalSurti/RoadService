@@ -24,6 +24,7 @@ export type Notification = {
   id: number;
   user_id: number;
   issue_id: number | null;
+  link?: string | null;
   title: string;
   message: string;
   is_read: boolean;
@@ -206,6 +207,21 @@ export const api = {
       imported_by: string;
       filename: string;
     }>("/api/v1/analytics/import/excel", { method: "POST", token, body: fd });
+  },
+
+  /** Fetch a single-record PDF (issue / RFI / query) as a Blob. */
+  downloadPdf: async (token: string, path: string) => {
+    const res = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      let detail = "PDF download failed";
+      try {
+        detail = (await res.json()).detail || detail;
+      } catch {
+        /* not JSON */
+      }
+      throw new ApiError(detail, res.status);
+    }
+    return res.blob();
   },
 
   exportPdf: async (token: string) => {

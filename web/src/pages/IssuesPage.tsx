@@ -6,6 +6,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import type { Issue, IssueStatus } from "../types";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
 import { projectIdFromUrl } from "../lib/projectScope";
+import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
   { key: "all", label: "All Issues" },
@@ -127,6 +128,7 @@ export function IssuesPage() {
               <th>Reporter</th>
               <th>Assignee</th>
               <th>Created</th>
+              <th>PDF</th>
               {showContractorActions ? <th>Quick action</th> : null}
             </tr>
           </thead>
@@ -151,6 +153,13 @@ export function IssuesPage() {
                 <td>{i.reported_by_id}</td>
                 <td>{i.assigned_contractor_id}</td>
                 <td>{i.created_at.slice(0, 10)}</td>
+                <td>
+                  <PdfDownloadButton
+                    path={`/api/v1/issues/${i.id}/pdf`}
+                    filename={`issue_${i.id}.pdf`}
+                    label="PDF"
+                  />
+                </td>
                 {showContractorActions ? (
                   <td onClick={(e) => e.stopPropagation()}>
                     {i.status === "open" || i.status === "under_review" ? (
@@ -188,7 +197,7 @@ export function IssuesPage() {
             ))}
             {!issues.length ? (
               <tr>
-                <td colSpan={showContractorActions ? 10 : 9}>No issues found.</td>
+                <td colSpan={showContractorActions ? 11 : 10}>No issues found.</td>
               </tr>
             ) : null}
           </tbody>

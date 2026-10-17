@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.enums import IssueStatus
 from app.models.issue import Issue
-from app.services.issue_service import ensure_transition, notify, record_status
+from app.services.issue_service import ensure_transition, notify, notify_issue_event, record_status
 
 
 async def warn_approaching_verification_deadline() -> int:
@@ -80,12 +80,12 @@ async def flip_stale_completed_to_verification_pending() -> int:
                 actor=None,
                 note=f"Auto-transition after {settings.verification_pending_hours}h without verification",
             )
-            await notify(
+            await notify_issue_event(
                 db,
-                issue.reported_by_id,
+                issue,
+                None,
                 "Verification overdue",
                 f"Issue #{issue.id} moved to Verification Pending.",
-                issue.id,
             )
             flipped += 1
         await db.commit()

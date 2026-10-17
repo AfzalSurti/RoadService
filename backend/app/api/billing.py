@@ -224,8 +224,13 @@ async def create_invoice(
     await _add_activity(db, inv, user, "submitted", body.notes or "Invoice submitted")
     # notify admins
     admins = (await db.execute(select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True)))).scalars().all()
+    link = "/contractor-billing" if user.role == UserRole.CONTRACTOR else "/billing"
     for admin in admins:
-        await notify(db, admin.id, "New invoice submitted", f"{txn} needs review.", None)
+        if admin.id != user.id:
+            await notify(
+                db, admin.id, "New invoice submitted",
+                f"{txn} submitted by {user.full_name} needs review.", None, link=link,
+            )
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -329,7 +334,7 @@ async def recommend_invoice(
     )
     govs = (await db.execute(select(User).where(User.role == UserRole.GOVERNMENT, User.is_active.is_(True)))).scalars().all()
     for g in govs:
-        await notify(db, g.id, "Invoice recommended", f"{inv.transaction_id} awaits approval.", None)
+        await notify(db, g.id, "Invoice recommended", f"{inv.transaction_id} awaits approval.", None, link="/billing")
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -358,6 +363,7 @@ async def seek_clarification(
         "Clarification required",
         f"{inv.transaction_id}: {body.note or 'Please clarify'}",
         None,
+        link="/billing",
     )
     await db.commit()
     return _out(await _load(db, inv.id))
@@ -376,6 +382,12 @@ async def submit_clarification(
     inv.status = InvoiceStatus.RECOMMENDED
     inv.status_detail = _status_detail(inv.status)
     await _add_activity(db, inv, user, "clarification_submitted", body.note or "Clarification submitted")
+    govs = (await db.execute(select(User).where(User.role == UserRole.GOVERNMENT, User.is_active.is_(True)))).scalars().all()
+    for g in govs:
+        await notify(
+            db, g.id, "Clarification submitted",
+            f"{inv.transaction_id}: {body.note or 'Clarification submitted'}", None, link="/billing",
+        )
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -402,7 +414,7 @@ async def approve_invoice(
         inv.recommended_piu_amount = inv.approved_amount
     inv.status_detail = _status_detail(InvoiceStatus.APPROVED)
     await _add_activity(db, inv, user, "approved", body.note or f"Approved with UPC {body.upc}")
-    await notify(db, inv.submitted_by_id, "Invoice approved", f"{inv.transaction_id} approved.", None)
+    await notify(db, inv.submitted_by_id, "Invoice approved", f"{inv.transaction_id} approved.", None, link="/billing")
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -418,7 +430,7 @@ async def reject_invoice(
     inv.status = InvoiceStatus.REJECTED
     inv.status_detail = _status_detail(InvoiceStatus.REJECTED)
     await _add_activity(db, inv, user, "rejected", body.note or "Invoice rejected")
-    await notify(db, inv.submitted_by_id, "Invoice rejected", f"{inv.transaction_id} was rejected.", None)
+    await notify(db, inv.submitted_by_id, "Invoice rejected", f"{inv.transaction_id} was rejected.", None, link="/billing")
     await db.commit()
     return _out(await _load(db, inv.id))
 
@@ -593,5 +605,19 @@ async def gmc_review_invoice(
         "gmc_approved" if decision == "approved" else "gmc_not_approved",
         inv.gmc_remark or "",
     )
+    verdict = "approved and forwarded to NHIPMPL" if decision == "approved" else "not approved"
+    remark_txt = f" Remark: {inv.gmc_remark}" if inv.gmc_remark else ""
+    await notify(
+        db, inv.submitted_by_id, "Invoice approved by GMC" if decision == "approved" else "Invoice not approved by GMC",
+        f"{inv.transaction_id} {verdict} by {user.full_name}.{remark_txt}", None, link="/contractor-billing",
+    )
+    if decision == "approved":
+        govs = (await db.execute(select(User).where(User.role == UserRole.GOVERNMENT, User.is_active.is_(True)))).scalars().all()
+        for g in govs:
+            await notify(
+                db, g.id, "Invoice forwarded by GMC",
+                f"{inv.transaction_id} approved by GMC MIS Expert and awaits NHIPMPL review.", None,
+                link="/contractor-billing",
+            )
     await db.commit()
     return _out(await _load(db, inv.id))

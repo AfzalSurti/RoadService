@@ -191,6 +191,7 @@ class NotificationOut(BaseModel):
     id: int
     user_id: int
     issue_id: int | None
+    link: str | None = None
     title: str
     message: str
     is_read: bool

@@ -18,6 +18,9 @@ __all__ = [
     "save_upload",
     "record_status",
     "notify",
+    "notify_many",
+    "user_ids_with_roles",
+    "notify_issue_event",
     "get_issue_or_404",
     "get_project_or_404",
     "assert_surveyor",
@@ -62,14 +65,64 @@ async def record_status(
     db.add(history)
 
 
-async def notify(db: AsyncSession, user_id: int, title: str, message: str, issue_id: int | None = None) -> None:
+async def notify(
+    db: AsyncSession,
+    user_id: int,
+    title: str,
+    message: str,
+    issue_id: int | None = None,
+    link: str | None = None,
+) -> None:
     db.add(
         Notification(
             user_id=user_id,
             issue_id=issue_id,
+            link=link,
             title=title,
             message=message,
         )
+    )
+
+
+async def user_ids_with_roles(db: AsyncSession, *roles: UserRole) -> list[int]:
+    rows = await db.execute(select(User.id).where(User.is_active.is_(True), User.role.in_(roles)))
+    return list(rows.scalars().all())
+
+
+async def notify_many(
+    db: AsyncSession,
+    user_ids,
+    title: str,
+    message: str,
+    issue_id: int | None = None,
+    link: str | None = None,
+    exclude: int | None = None,
+) -> None:
+    """Notify each distinct user once, skipping `exclude` (usually the actor)."""
+    seen: set[int] = set()
+    for uid in user_ids:
+        if uid is None or uid == exclude or uid in seen:
+            continue
+        seen.add(uid)
+        await notify(db, uid, title, message, issue_id, link)
+
+
+async def notify_issue_event(
+    db: AsyncSession,
+    issue: Issue,
+    actor: User | None,
+    title: str,
+    message: str,
+) -> None:
+    """Every issue event reaches GMC Experts, NHIPMPL, the reporter and the contractor."""
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    await notify_many(
+        db,
+        [*oversight, issue.reported_by_id, issue.assigned_contractor_id],
+        title,
+        message,
+        issue.id,
+        exclude=actor.id if actor else None,
     )
 
 

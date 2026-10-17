@@ -5,6 +5,7 @@ import * as v from "../lib/validation";
 import type { Issue } from "../types";
 import { CameraCapture, type CapturedShot } from "./CameraCapture";
 import { StatusBadge } from "./StatusBadge";
+import { PdfDownloadButton } from "./PdfDownloadButton";
 
 type Props = {
   issueId: number;
@@ -128,9 +129,12 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             #{issue.id} · {issue.issue_type}
             {issue.issue_type_label ? ` · ${issue.issue_type_label}` : ""}
           </h2>
-          <button className="btn ghost" type="button" onClick={onClose}>
-            Close
-          </button>
+          <div className="btn-row">
+            <PdfDownloadButton path={`/api/v1/issues/${issue.id}/pdf`} filename={`issue_${issue.id}.pdf`} />
+            <button className="btn ghost" type="button" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
         <p className="muted">{issue.description}</p>

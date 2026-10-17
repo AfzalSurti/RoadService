@@ -6,6 +6,7 @@ import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
 import { projectIdFromUrl } from "../lib/projectScope";
 import type { PortalQueryTicket, Project } from "../types";
+import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const empty = {
   subject: "",
@@ -78,6 +79,12 @@ export function QueriesPage() {
   useEffect(() => {
     void load();
   }, [token, filterStatus, projectId]);
+
+  // Deep link from a notification: /queries?id=12
+  const linkedId = Number(searchParams.get("id") || 0) || null;
+  useEffect(() => {
+    if (token && linkedId) void openTicket(linkedId);
+  }, [token, linkedId]);
 
   useEffect(() => {
     const refresh = () => void load();
@@ -229,10 +236,15 @@ export function QueriesPage() {
                     <td>{t.subject}</td>
                     <td>{formatLabel(t.priority)}</td>
                     <td>{formatLabel(t.status)}</td>
-                    <td>
+                    <td className="btn-row">
                       <button className="btn ghost" type="button" onClick={() => void openTicket(t.id)}>
                         Open
                       </button>
+                      <PdfDownloadButton
+                        path={`/api/v1/queries/${t.id}/pdf`}
+                        filename={`${t.ticket_no.replace(/\//g, "-")}.pdf`}
+                        label="PDF"
+                      />
                     </td>
                   </tr>
                 ))}
@@ -258,6 +270,10 @@ export function QueriesPage() {
                 <strong>{selected.ticket_no}</strong> · {formatLabel(selected.status)} ·{" "}
                 {formatLabel(selected.priority)}
               </p>
+              <PdfDownloadButton
+                path={`/api/v1/queries/${selected.id}/pdf`}
+                filename={`${selected.ticket_no.replace(/\//g, "-")}.pdf`}
+              />
               <p className="muted">
                 Module: {formatLabel(selected.module_area)}
                 {` · Client ID: #${selected.raised_by_id}`}

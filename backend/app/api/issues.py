@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.enums import IssuePriority, IssueStatus, UserRole
 from app.models.issue import Issue, IssueRejection, IssueStatusHistory
+from app.models.project import Project
 from app.models.user import User
 from app.schemas import IssueAdminUpdate, IssueOut
 from app.services.issue_service import (
@@ -21,14 +22,25 @@ from app.services.issue_service import (
     get_issue_or_404,
     get_project_or_404,
     notify,
+    notify_issue_event,
+    notify_many,
     record_status,
+    user_ids_with_roles,
     remaining_days,
     save_upload,
 )
+from app.services.pdf_reports import build_record_pdf, fetch_images, fmt, label, pdf_response
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
 _CATEGORY_NAMES = {c["id"]: c["name"] for c in CATEGORIES}
+
+
+def _issue_label(issue: Issue) -> str:
+    defect = DEFECT_BY_ID.get(issue.issue_type)
+    label = defect.label if defect else issue.issue_type
+    where = f" at {issue.chainage}" if issue.chainage else ""
+    return f"Issue #{issue.id} ({label}{where})"
 
 
 def _assert_verifier(user: User) -> None:
@@ -203,8 +215,18 @@ async def create_issue(
         db,
         contractor_id,
         "New issue assigned",
-        f"Issue #{issue.id} assigned to you. Deadline: {deadline_days} days.",
+        f"{_issue_label(issue)} assigned to you by {user.full_name}. Deadline: {deadline_days} days.",
         issue.id,
+    )
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    await notify_many(
+        db,
+        oversight,
+        "New issue raised",
+        f"{_issue_label(issue)} raised by {user.full_name} on {project.name}. "
+        f"Priority: {priority.value}. Deadline: {deadline_days} days.",
+        issue.id,
+        exclude=user.id,
     )
     await db.commit()
     issue = await get_issue_or_404(db, issue.id)
@@ -220,6 +242,96 @@ async def get_issue(
     return _to_out(await get_issue_or_404(db, issue_id))
 
 
+@router.get("/{issue_id}/pdf")
+async def issue_pdf(
+    issue_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Download one issue as a PDF: details, timeline, rework history and photos."""
+    issue = await get_issue_or_404(db, issue_id)
+    if user.role == UserRole.CONTRACTOR and issue.assigned_contractor_id != user.id:
+        raise HTTPException(status_code=403, detail="Not assigned to this issue")
+    if user.role == UserRole.SURVEYOR and issue.reported_by_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your issue")
+    out = _to_out(issue)
+    project = (await db.execute(select(Project).where(Project.id == issue.project_id))).scalar_one_or_none()
+    user_ids = {issue.reported_by_id, issue.assigned_contractor_id}
+    user_ids |= {h.actor_id for h in issue.status_history if h.actor_id}
+    user_ids |= {r.rejected_by_id for r in issue.rejection_history}
+    names = dict((await db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids)))).all())
+
+    # Lane / side / carriageway live in deferred columns that older DBs may lack.
+    extra: dict = {}
+    try:
+        row = (
+            await db.execute(
+                select(Issue.lane, Issue.side, Issue.carriageway, Issue.start_chainage, Issue.end_chainage)
+                .where(Issue.id == issue_id)
+            )
+        ).one()
+        extra = dict(row._mapping)
+    except Exception:  # noqa: BLE001
+        await db.rollback()
+
+    def gps(lat, lng):
+        return f"GPS {lat:.6f}, {lng:.6f}" if lat is not None and lng is not None else None
+
+    def joined(sep, *parts):
+        return sep.join(x for x in parts if x) or None
+
+    project_title = (project.title or project.name) if project else None
+    fields = [
+        ("Issue", f"#{issue.id}"),
+        ("Project", project_title or issue.project_id),
+        ("Package", project.name if project else None),
+        ("Defect type", out.issue_type_label),
+        ("Work category", out.work_category_label),
+        ("Status", issue.status),
+        ("Priority", issue.priority),
+        ("Chainage", issue.chainage),
+        ("Start / end chainage", joined(" – ", extra.get("start_chainage"), extra.get("end_chainage"))),
+        ("Lane / side / carriageway", joined(" · ", extra.get("lane"), extra.get("side"), extra.get("carriageway"))),
+        ("Reported by", names.get(issue.reported_by_id)),
+        ("Assigned contractor", names.get(issue.assigned_contractor_id)),
+        ("Raised on", issue.created_at),
+        ("Deadline", f"{fmt(issue.deadline_date)} ({issue.deadline_days} days)"),
+        ("Completed on", issue.completed_at),
+        ("Verified on", issue.verified_at),
+    ]
+    history = [
+        [
+            h.created_at,
+            label(h.from_status.value) if h.from_status else "—",
+            h.to_status,
+            names.get(h.actor_id, "System"),
+            h.note,
+        ]
+        for h in issue.status_history
+    ]
+    rejections = [
+        [r.created_at, names.get(r.rejected_by_id), r.reason, r.comments] for r in issue.rejection_history
+    ]
+    photos = [
+        ("Before (reported)", issue.before_photo_path, gps(issue.before_lat, issue.before_lng)),
+        ("After (contractor completion)", issue.completion_photo_path, gps(issue.completion_lat, issue.completion_lng)),
+        ("Verification", issue.verification_photo_path, gps(issue.verification_lat, issue.verification_lng)),
+    ]
+    content = build_record_pdf(
+        title=f"Issue #{issue.id} — {out.issue_type_label}",
+        subtitle=project_title,
+        fields=fields,
+        notes=[("Description", issue.description), ("Completion remarks", issue.completion_remarks)],
+        sections=[
+            ("Status timeline", ["When", "From", "To", "By", "Note"], history),
+            ("Rework history", ["When", "By", "Reason", "Comments"], rejections),
+        ],
+        photos=photos,
+        images=await fetch_images([p for _, p, _ in photos]),
+    )
+    return pdf_response(content, f"issue_{issue.id}.pdf")
+
+
 @router.post("/{issue_id}/start", response_model=IssueOut)
 async def start_work(
     issue_id: int,
@@ -232,6 +344,9 @@ async def start_work(
         raise HTTPException(status_code=403, detail="Not assigned to this issue")
     ensure_transition(issue.status, IssueStatus.IN_PROGRESS)
     await record_status(db, issue, IssueStatus.IN_PROGRESS, user, note="Work started")
+    await notify_issue_event(
+        db, issue, user, "Work started", f"{_issue_label(issue)}: {user.full_name} started work."
+    )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
 
@@ -258,12 +373,12 @@ async def complete_work(
     issue.completion_remarks = completion_remarks
     issue.completed_at = datetime.now(timezone.utc)
     await record_status(db, issue, IssueStatus.COMPLETED, user, note="Work completed — pending verification")
-    await notify(
+    await notify_issue_event(
         db,
-        issue.reported_by_id,
+        issue,
+        user,
         "Issue ready for verification",
-        f"Issue #{issue.id} completed. Please verify within 24 hours.",
-        issue.id,
+        f"{_issue_label(issue)} completed by {user.full_name}. Please verify within 24 hours.",
     )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
@@ -288,12 +403,12 @@ async def verify_approve(
     issue.verification_lng = verification_lng
     issue.verified_at = datetime.now(timezone.utc)
     await record_status(db, issue, IssueStatus.CLOSED, user, note="Verification approved")
-    await notify(
+    await notify_issue_event(
         db,
-        issue.assigned_contractor_id,
+        issue,
+        user,
         "Issue closed",
-        f"Issue #{issue.id} verified and closed.",
-        issue.id,
+        f"{_issue_label(issue)} verified and closed by {user.full_name}.",
     )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
@@ -330,12 +445,12 @@ async def verify_reject(
         )
     )
     await record_status(db, issue, IssueStatus.UNDER_REVIEW, user, note=f"Rework required: {reason}")
-    await notify(
+    await notify_issue_event(
         db,
-        issue.assigned_contractor_id,
+        issue,
+        user,
         "Rework required",
-        f"Issue #{issue.id} rejected. Reason: {reason}",
-        issue.id,
+        f"{_issue_label(issue)} sent back by {user.full_name}. Reason: {reason}",
     )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
@@ -354,6 +469,9 @@ async def rework_start(
         raise HTTPException(status_code=403, detail="Not assigned to this issue")
     ensure_transition(issue.status, IssueStatus.IN_PROGRESS)
     await record_status(db, issue, IssueStatus.IN_PROGRESS, user, note="Rework started")
+    await notify_issue_event(
+        db, issue, user, "Rework started", f"{_issue_label(issue)}: {user.full_name} started rework."
+    )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
 
@@ -383,5 +501,20 @@ async def admin_update_issue(
         issue.priority = body.priority
     if body.status is not None and body.status != issue.status:
         await record_status(db, issue, body.status, user, note="Admin status override")
+        await notify_issue_event(
+            db,
+            issue,
+            user,
+            "Issue status changed",
+            f"{_issue_label(issue)} set to {body.status.value.replace('_', ' ')} by {user.full_name}.",
+        )
+    elif body.deadline_days is not None or body.priority is not None:
+        await notify_issue_event(
+            db,
+            issue,
+            user,
+            "Issue updated",
+            f"{_issue_label(issue)} priority/deadline updated by {user.full_name}.",
+        )
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))

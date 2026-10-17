@@ -12,7 +12,16 @@ type Note = {
   is_read: boolean;
   created_at: string;
   issue_id?: number | null;
+  link?: string | null;
 };
+
+/** Map a web portal link from the API to the matching mobile screen (if any). */
+function mobileRoute(n: Note): string | null {
+  if (n.issue_id) return `/issue/${n.issue_id}`;
+  if (n.link?.startsWith("/rfi")) return "/rfi";
+  if (n.link?.startsWith("/queries")) return "/query";
+  return null;
+}
 
 export default function NotificationsScreen() {
   const { token } = useAuth();
@@ -59,7 +68,8 @@ export default function NotificationsScreen() {
             onPress={async () => {
               if (!token) return;
               if (!item.is_read) await api.markNotificationRead(token, item.id);
-              if (item.issue_id) router.push(`/issue/${item.issue_id}`);
+              const route = mobileRoute(item);
+              if (route) router.push(route as never);
               else load();
             }}
           >

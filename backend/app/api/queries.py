@@ -17,7 +17,8 @@ from app.models.enums import UserRole
 from app.models.portal_ops import PortalQueryComment, PortalQueryTicket
 from app.models.project import Project
 from app.models.user import User
-from app.services.issue_service import notify
+from app.services.issue_service import notify, notify_many, user_ids_with_roles
+from app.services.pdf_reports import build_record_pdf, fetch_images, label, pdf_response
 from app.services.storage import save_upload
 
 router = APIRouter(prefix="/queries", tags=["queries"])
@@ -215,6 +216,53 @@ async def list_queries(
         ) from exc
 
 
+@router.get("/{ticket_id}/pdf")
+async def query_pdf(
+    ticket_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(*_QUERY_ROLES))],
+):
+    """Download one Query Raise ticket as a PDF."""
+    row = await _load(db, ticket_id)
+    comments = await _comments(db, ticket_id)
+    project = None
+    if row.project_id:
+        project = (await db.execute(select(Project).where(Project.id == row.project_id))).scalar_one_or_none()
+    project_title = (project.title or project.name) if project else None
+    ids = {i for i in (row.raised_by_id, row.assigned_to_id, row.resolved_by_id) if i}
+    ids |= {c.actor_id for c in comments}
+    names = dict((await db.execute(select(User.id, User.full_name).where(User.id.in_(ids)))).all())
+    paths = _parse_paths(row.attachment_path)
+    content = build_record_pdf(
+        title=f"{row.ticket_no} — Query Raise",
+        subtitle=project_title,
+        fields=[
+            ("Ticket no.", row.ticket_no),
+            ("Subject", row.subject),
+            ("Module", label(row.module_area)),
+            ("Project", project_title),
+            ("Status", label(row.status)),
+            ("Priority", label(row.priority)),
+            ("Raised by", names.get(row.raised_by_id)),
+            ("Raised on", row.created_at),
+            ("Assigned to", names.get(row.assigned_to_id)),
+            ("Resolved by", names.get(row.resolved_by_id)),
+            ("Resolved on", row.resolved_at),
+        ],
+        notes=[("Description", row.description), ("Resolution", row.resolution_note)],
+        sections=[
+            (
+                "Activity",
+                ["When", "By", "Action", "Note"],
+                [[c.created_at, names.get(c.actor_id), label(c.action), c.note] for c in comments],
+            ),
+        ],
+        photos=[(f"Attachment {i + 1}", p, None) for i, p in enumerate(paths)],
+        images=await fetch_images(paths),
+    )
+    return pdf_response(content, f"{row.ticket_no.replace('/', '-')}.pdf")
+
+
 @router.get("/{ticket_id}", response_model=QueryTicketOut)
 async def get_query(
     ticket_id: int,
@@ -292,11 +340,16 @@ async def raise_query(
         )
     )
 
-    # Notify GMC admins
-    admins = (await db.execute(select(User).where(User.role == UserRole.ADMIN, User.is_active.is_(True)))).scalars().all()
-    for admin in admins:
-        if admin.id != user.id:
-            await notify(db, admin.id, "New portal query raised", f"{ticket_no}: {row.subject}", None)
+    # Notify GMC admins + NHIPMPL
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    await notify_many(
+        db,
+        oversight,
+        "New portal query raised",
+        f"{ticket_no}: {row.subject} — raised by {user.full_name}",
+        link=f"/queries?id={row.id}",
+        exclude=user.id,
+    )
 
     await db.commit()
     await db.refresh(row)
@@ -317,7 +370,14 @@ async def start_query(
     row.assigned_to_id = user.id
     note = body.note or "Taken up for resolution"
     db.add(PortalQueryComment(ticket_id=row.id, actor_id=user.id, note=note, action="status"))
-    await notify(db, row.raised_by_id, "Query in progress", f"{row.ticket_no} is being worked on", None)
+    await notify(
+        db,
+        row.raised_by_id,
+        "Query in progress",
+        f"{row.ticket_no} is being worked on by {user.full_name}",
+        None,
+        link=f"/queries?id={row.id}",
+    )
     await db.commit()
     await db.refresh(row)
     return _out(row, user, await _comments(db, row.id))
@@ -354,6 +414,7 @@ async def resolve_query(
         f"Query {status}",
         f"{row.ticket_no}: {body.resolution_note.strip()[:180]}",
         None,
+        link=f"/queries?id={row.id}",
     )
     await db.commit()
     await db.refresh(row)
@@ -377,6 +438,15 @@ async def reopen_query(
     row.resolved_by_id = None
     row.resolved_at = None
     db.add(PortalQueryComment(ticket_id=row.id, actor_id=user.id, note=body.note.strip(), action="reopen"))
+    admins = await user_ids_with_roles(db, UserRole.ADMIN)
+    await notify_many(
+        db,
+        [row.assigned_to_id, *admins],
+        "Query reopened",
+        f"{row.ticket_no} reopened by {user.full_name}: {body.note.strip()[:160]}",
+        link=f"/queries?id={row.id}",
+        exclude=user.id,
+    )
     await db.commit()
     await db.refresh(row)
     return _out(row, user, await _comments(db, row.id))
@@ -391,6 +461,17 @@ async def add_comment(
 ):
     row = await _load(db, ticket_id)
     db.add(PortalQueryComment(ticket_id=row.id, actor_id=user.id, note=body.note.strip(), action="comment"))
+    recipients = [row.raised_by_id, row.assigned_to_id]
+    if not row.assigned_to_id:
+        recipients += await user_ids_with_roles(db, UserRole.ADMIN)
+    await notify_many(
+        db,
+        recipients,
+        "New comment on query",
+        f"{row.ticket_no}: {user.full_name} — {body.note.strip()[:160]}",
+        link=f"/queries?id={row.id}",
+        exclude=user.id,
+    )
     await db.commit()
     await db.refresh(row)
     return _out(row, user, await _comments(db, row.id))

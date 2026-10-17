@@ -16,7 +16,8 @@ from app.models.issue import Issue
 from app.models.portal_ops import SiteRfi
 from app.models.project import Project
 from app.models.user import User
-from app.services.issue_service import notify
+from app.services.issue_service import notify, notify_many, user_ids_with_roles
+from app.services.pdf_reports import build_record_pdf, fetch_images, label, pdf_response
 from app.services.storage import save_upload
 
 router = APIRouter(prefix="/rfis", tags=["rfis"])
@@ -159,6 +160,66 @@ async def get_rfi(
     return _out(row, user)
 
 
+@router.get("/{rfi_id}/pdf")
+async def rfi_pdf(
+    rfi_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR, UserRole.SURVEYOR))],
+):
+    """Download one Request for Inspection as a PDF."""
+    row = (await db.execute(select(SiteRfi).where(SiteRfi.id == rfi_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "RFI not found")
+    extra: dict = {}
+    try:
+        r = (
+            await db.execute(
+                select(
+                    SiteRfi.ae_name,
+                    SiteRfi.contractor_name,
+                    SiteRfi.category,
+                    SiteRfi.inspection_date,
+                    SiteRfi.photo_path,
+                ).where(SiteRfi.id == rfi_id)
+            )
+        ).one()
+        extra = dict(r._mapping)
+    except Exception:  # noqa: BLE001 — migration 015 columns may be missing
+        await db.rollback()
+    project = (await db.execute(select(Project).where(Project.id == row.project_id))).scalar_one_or_none()
+    project_title = (project.title or project.name) if project else None
+    ids = {i for i in (row.raised_by_id, row.answered_by_id) if i}
+    names = dict((await db.execute(select(User.id, User.full_name).where(User.id.in_(ids)))).all())
+    photo = extra.get("photo_path")
+    content = build_record_pdf(
+        title=f"{row.rfi_no} — Request for Inspection",
+        subtitle=project_title,
+        fields=[
+            ("RFI no.", row.rfi_no),
+            ("Subject", row.subject),
+            ("Project", project_title or row.project_id),
+            ("Package", project.name if project else None),
+            ("Status", label(row.status)),
+            ("Priority", label(row.priority)),
+            ("Chainage", row.chainage),
+            ("Category", extra.get("category")),
+            ("Inspection date", extra.get("inspection_date")),
+            ("AE name", extra.get("ae_name")),
+            ("Contractor", extra.get("contractor_name")),
+            ("Related issue", f"#{row.related_issue_id}" if row.related_issue_id else None),
+            ("Raised by", names.get(row.raised_by_id)),
+            ("Raised on", row.created_at),
+            ("Answered by", names.get(row.answered_by_id)),
+            ("Answered on", row.answered_at),
+            ("Closed on", row.closed_at),
+        ],
+        notes=[("Description", row.description), ("Answer", row.answer_text)],
+        photos=[("RFI photo", photo, None)],
+        images=await fetch_images([photo]),
+    )
+    return pdf_response(content, f"{row.rfi_no.replace('/', '-')}.pdf")
+
+
 @router.post("", response_model=RfiOut, status_code=201)
 async def raise_rfi(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -238,7 +299,14 @@ async def raise_rfi(
     ).scalars().all()
     for u in reviewers:
         if u.id != user.id:
-            await notify(db, u.id, "New RFI raised", f"{rfi_no}: {row.subject}", body.related_issue_id)
+            await notify(
+                db,
+                u.id,
+                "New RFI raised",
+                f"{rfi_no}: {row.subject} — raised by {user.full_name}",
+                row.related_issue_id,
+                link=f"/rfi?id={row.id}",
+            )
 
     await db.commit()
     await db.refresh(row)
@@ -261,7 +329,16 @@ async def answer_rfi(
     row.answered_by_id = user.id
     row.answered_at = datetime.now(timezone.utc)
     row.status = "answered"
-    await notify(db, row.raised_by_id, "RFI answered", f"{row.rfi_no}: {body.answer_text.strip()[:160]}", row.related_issue_id)
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    await notify_many(
+        db,
+        [row.raised_by_id, *oversight],
+        "RFI answered",
+        f"{row.rfi_no}: {body.answer_text.strip()[:160]} — by {user.full_name}",
+        row.related_issue_id,
+        link=f"/rfi?id={row.id}",
+        exclude=user.id,
+    )
     await db.commit()
     await db.refresh(row)
     return _out(row, user)
@@ -284,6 +361,16 @@ async def close_rfi(
         raise HTTPException(403, "GMC MIS Expert has view-only access to RFI")
     row.status = "closed"
     row.closed_at = datetime.now(timezone.utc)
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    await notify_many(
+        db,
+        [row.raised_by_id, row.answered_by_id, *oversight],
+        "RFI closed",
+        f"{row.rfi_no}: {row.subject} — closed by {user.full_name}",
+        row.related_issue_id,
+        link=f"/rfi?id={row.id}",
+        exclude=user.id,
+    )
     await db.commit()
     await db.refresh(row)
     return _out(row, user)

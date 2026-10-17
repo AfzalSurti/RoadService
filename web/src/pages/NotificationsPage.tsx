@@ -4,7 +4,7 @@ import { api, type Notification } from "../api";
 import { useAuth } from "../auth";
 
 export function NotificationsPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,10 @@ export function NotificationsPage() {
         /* ignore */
       }
     }
-    if (n.issue_id) navigate(`/issues?id=${n.issue_id}`);
+    if (n.link) {
+      // GMC Billing is admin/NHIPMPL only; contractors track invoices in Contractor Billing.
+      navigate(role === "contractor" && n.link.startsWith("/billing") ? "/contractor-billing" : n.link);
+    } else if (n.issue_id) navigate(`/issues?id=${n.issue_id}`);
     else load();
   };
 
