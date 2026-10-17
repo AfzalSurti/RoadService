@@ -99,7 +99,7 @@ export function RfiPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    const base = isAdminViewOnly ? "RFI — View only" : "RFI — Site Request for Information";
+    const base = isAdminViewOnly ? "RFI — View only" : "RFI — Request for Inspection";
     if (el) el.textContent = scopedProjectId ? `${base} · Project #${scopedProjectId}` : base;
   }, [isAdminViewOnly, scopedProjectId]);
 
@@ -199,7 +199,7 @@ export function RfiPage() {
       <section className="panel">
         <div className="panel-head-row">
           <div>
-            <h2>RFI (Request for Information)</h2>
+            <h2>RFI (Request for Inspection)</h2>
             <p className="muted" style={{ margin: 0 }}>
               {isAdminViewOnly
                 ? "GMC MIS Expert has view-only access. Download the RFI report — raise, answer and close are not available."
@@ -524,7 +524,7 @@ export function RfiPage() {
                 />
               </label>
               <label className="span-2">
-                Work description / clarification needed *
+                Work description / inspection required *
                 <textarea
                   required
                   minLength={5}

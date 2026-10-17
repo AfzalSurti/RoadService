@@ -934,7 +934,7 @@ async def its_heartbeat(
     return _orm_dict(row)
 
 
-# ---- Civil assets ----
+# ---- Project inventory (civil assets) ----
 @router.get("/assets")
 async def list_assets(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(get_current_user)]):
     return [_orm_dict(r) for r in (await db.execute(select(CivilAsset).order_by(CivilAsset.id.desc()))).scalars().all()]

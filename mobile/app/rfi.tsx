@@ -270,7 +270,7 @@ export default function RfiScreen() {
             />
             <TextInput
               style={[styles.input, { minHeight: 90 }]}
-              placeholder="Description / clarification needed"
+              placeholder="Description / inspection required"
               placeholderTextColor="#8b9bb0"
               value={form.description}
               onChangeText={(t) => setForm({ ...form, description: t })}

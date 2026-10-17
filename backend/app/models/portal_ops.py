@@ -395,7 +395,7 @@ class PortalQueryComment(Base):
 
 
 class SiteRfi(Base):
-    """Request for Information raised from site (contractor / field)."""
+    """Request for Inspection raised from site (contractor / field)."""
 
     __tablename__ = "site_rfis"
 

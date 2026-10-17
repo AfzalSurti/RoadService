@@ -49,7 +49,7 @@ export function AppLayout() {
           </NavLink>
 
           <div className="nav-group-label">Civil Dashboard</div>
-          {staff ? <NavLink to="/civil-assets">Civil Assets</NavLink> : null}
+          {staff ? <NavLink to="/civil-assets">Project Inventory</NavLink> : null}
           <NavLink to="/issues">Issues</NavLink>
           {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}

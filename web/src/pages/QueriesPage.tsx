@@ -164,7 +164,7 @@ export function QueriesPage() {
           <div>
             <h2>Query Raise (Tickets)</h2>
             <p className="muted" style={{ margin: 0 }}>
-              Raise portal-operations queries (attendance, incidents, ITS, civil assets, etc.). GMC / NHIPMPL
+              Raise portal-operations queries (attendance, incidents, ITS, project inventory, etc.). GMC / NHIPMPL
               take up and resolve (GMC MIS Expert only). Others can raise and view status.
             </p>
           </div>

@@ -371,9 +371,9 @@ export function DashboardPage() {
                 />
                 <StatCard
                   label="RFI"
-                  value="Site clarifications"
+                  value="Request for Inspection"
                   to={withProjectQuery("/rfi", pid)}
-                  hint="This project’s RFIs →"
+                  hint="This project’s inspection requests →"
                 />
                 <StatCard
                   label="Project Overview"

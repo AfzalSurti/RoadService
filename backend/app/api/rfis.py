@@ -1,4 +1,4 @@
-"""Site RFI — Request for Information raise / answer / close."""
+"""Site RFI — Request for Inspection raise / answer / close."""
 
 from datetime import date, datetime, timezone
 from typing import Annotated

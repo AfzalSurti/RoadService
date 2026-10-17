@@ -1250,7 +1250,7 @@ export function CivilAssetsPage() {
   const { token } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
-  usePageTitle("Civil Assets & GIS");
+  usePageTitle("Project Inventory");
 
   useEffect(() => {
     if (!token) return;
@@ -1264,7 +1264,7 @@ export function CivilAssetsPage() {
     <>
       {error ? <div className="error">{error}</div> : null}
       <section className="panel">
-        <h2>Asset inventory (with map coordinates)</h2>
+        <h2>Project inventory (with map coordinates)</h2>
         <table className="data">
           <thead>
             <tr>
