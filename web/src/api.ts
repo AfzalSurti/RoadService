@@ -168,6 +168,23 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  createInventorySheet: (token: string, projectId: number, body: { name: string; grid: string[][] }) =>
+    request<InventorySheet>(`/api/v1/projects/${projectId}/inventory-sheets`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  renameInventorySheet: (token: string, projectId: number, sheetId: number, name: string) =>
+    request<InventorySheetSummary>(`/api/v1/projects/${projectId}/inventory-sheets/${sheetId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteInventorySheet: (token: string, projectId: number, sheetId: number) =>
+    request<void>(`/api/v1/projects/${projectId}/inventory-sheets/${sheetId}`, { method: "DELETE", token }),
+
   /** Replace a package's inventory tabs with the visible sheets of an .xlsx file. */
   importInventoryWorkbook: (token: string, projectId: number, file: File) => {
     const fd = new FormData();

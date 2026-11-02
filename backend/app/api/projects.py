@@ -17,6 +17,7 @@ from app.schemas import (
     InventoryItemOut,
     InventorySheetIn,
     InventorySheetOut,
+    InventorySheetRename,
     InventorySheetSummary,
     ProjectCreate,
     ProjectOut,
@@ -332,3 +333,67 @@ async def import_inventory_workbook(
         )
     await db.commit()
     return await list_inventory_sheets(project_id, db, _)
+
+
+@router.post("/{project_id}/inventory-sheets", response_model=InventorySheetOut, status_code=201)
+async def create_inventory_sheet(
+    project_id: int,
+    body: InventorySheetIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Add a new tab (sheet) to the package inventory, placed last."""
+    await _load_project(db, project_id)
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Sheet name is required")
+    last = (
+        await db.execute(
+            select(ProjectInventorySheet.sort_order)
+            .where(ProjectInventorySheet.project_id == project_id)
+            .order_by(ProjectInventorySheet.sort_order.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    width = max((len(r) for r in body.grid), default=0)
+    grid = [[str(c) for c in r] + [""] * (width - len(r)) for r in body.grid]
+    sheet = ProjectInventorySheet(
+        project_id=project_id,
+        sort_order=(last or 0) + 1,
+        name=name[:120],
+        grid=json.dumps(grid, ensure_ascii=False),
+        merges=json.dumps([m for m in body.merges if len(m) == 4]),
+    )
+    db.add(sheet)
+    await db.commit()
+    await db.refresh(sheet)
+    return InventorySheetOut(**_sheet_summary(sheet, grid).model_dump(), grid=grid, merges=json.loads(sheet.merges))
+
+
+@router.patch("/{project_id}/inventory-sheets/{sheet_id}", response_model=InventorySheetSummary)
+async def rename_inventory_sheet(
+    project_id: int,
+    sheet_id: int,
+    body: InventorySheetRename,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Rename a tab."""
+    sheet = await _sheet_or_404(db, project_id, sheet_id)
+    sheet.name = body.name.strip()[:120]
+    await db.commit()
+    await db.refresh(sheet)
+    return _sheet_summary(sheet)
+
+
+@router.delete("/{project_id}/inventory-sheets/{sheet_id}", status_code=204)
+async def delete_inventory_sheet(
+    project_id: int,
+    sheet_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Delete a tab and its data."""
+    sheet = await _sheet_or_404(db, project_id, sheet_id)
+    await db.delete(sheet)
+    await db.commit()

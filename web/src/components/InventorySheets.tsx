@@ -7,8 +7,9 @@ const PAGE = 300;
 
 /**
  * Package inventory workbook: one tab per sheet (Major Junctions, Bus Bay, …),
- * shown like the Excel sheet with merged headers. GMC Experts can edit cells,
- * add / delete rows, or replace everything from a new workbook.
+ * shown like the Excel sheet with merged headers. GMC Experts can add, rename
+ * and delete tabs, edit cells, add / delete rows and columns, or replace
+ * everything from a new workbook.
  */
 export function InventorySheets({ projectId }: { projectId: number }) {
   const { token, role, isReadonly } = useAuth();
@@ -85,6 +86,66 @@ export function InventorySheets({ projectId }: { projectId: number }) {
       next[r][c] = value;
       return { ...d, grid: next };
     });
+
+  const addColumn = () =>
+    setDraft((d) =>
+      d ? { ...d, grid: d.grid.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill(""), ""]) } : d
+    );
+
+  // Only the last column can go, and not when a merge reaches into it.
+  const lastColLocked = merges.some(([, c, , cs]) => c <= width - 1 && c + cs - 1 >= width - 1);
+  const removeLastColumn = () =>
+    setDraft((d) => (d && width > 1 ? { ...d, grid: d.grid.map((row) => row.slice(0, width - 1)) } : d));
+
+  const addSheet = async () => {
+    if (!token) return;
+    if (draft && !window.confirm("Discard unsaved changes to this sheet?")) return;
+    const name = window.prompt("Name of the new sheet (tab)", "New sheet")?.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const created = await api.createInventorySheet(token, projectId, {
+        name,
+        grid: [["S. No.", "Chainage", "Description", "Remarks"], ["1", "", "", ""]],
+      });
+      setTabs((t) => [...(t || []), created]);
+      setActiveId(created.id);
+      setMsg(`Sheet “${created.name}” added — click Edit sheet to fill it in.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not add the sheet");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renameSheet = async () => {
+    if (!token || !sheet) return;
+    const name = window.prompt("Rename sheet", sheet.name)?.trim();
+    if (!name || name === sheet.name) return;
+    try {
+      const renamed = await api.renameInventorySheet(token, projectId, sheet.id, name);
+      setTabs((t) => (t || []).map((x) => (x.id === renamed.id ? renamed : x)));
+      setSheet((s) => (s ? { ...s, name: renamed.name } : s));
+      setMsg(`Renamed to “${renamed.name}”.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Rename failed");
+    }
+  };
+
+  const deleteSheet = async () => {
+    if (!token || !sheet) return;
+    if (!window.confirm(`Delete the sheet “${sheet.name}” and all its rows? This cannot be undone.`)) return;
+    try {
+      await api.deleteInventorySheet(token, projectId, sheet.id);
+      const rest = (tabs || []).filter((x) => x.id !== sheet.id);
+      setTabs(rest);
+      setActiveId(rest[0]?.id ?? null);
+      setSheet(null);
+      setMsg(`Sheet “${sheet.name}” deleted.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
 
   const addRow = () =>
     setDraft((d) => (d ? { ...d, grid: [...d.grid, Array.from({ length: width || 1 }, () => "")] } : d));
@@ -184,11 +245,6 @@ export function InventorySheets({ projectId }: { projectId: number }) {
         <h2>Inventory details</h2>
         {canManage ? (
           <div className="btn-row">
-            {sheet && !draft ? (
-              <button type="button" className="btn" onClick={() => setDraft({ grid: sheet.grid, merges: sheet.merges })}>
-                Edit sheet
-              </button>
-            ) : null}
             <label className="btn ghost inventory-photo-pick">
               {busy && !draft ? "Importing…" : "Replace from Excel"}
               <input
@@ -210,7 +266,13 @@ export function InventorySheets({ projectId }: { projectId: number }) {
 
       {tabs && !tabs.length ? (
         <p className="muted">
-          No inventory workbook for this package yet.{canManage ? " Use “Replace from Excel” to import one." : ""}
+          No inventory workbook for this package yet.
+          {canManage ? " Use “Replace from Excel” to import one, or add a sheet. " : ""}
+          {canManage ? (
+            <button type="button" className="btn secondary" onClick={addSheet} disabled={busy}>
+              + Add sheet
+            </button>
+          ) : null}
         </p>
       ) : null}
       {!tabs ? <p className="muted">Loading inventory…</p> : null}
@@ -233,6 +295,11 @@ export function InventorySheets({ projectId }: { projectId: number }) {
                 {t.name}
               </button>
             ))}
+            {canManage ? (
+              <button type="button" className="inv-tab inv-tab-add" onClick={addSheet} disabled={busy} title="Add a new sheet">
+                + Add sheet
+              </button>
+            ) : null}
           </div>
 
           {!sheet ? (
@@ -245,16 +312,47 @@ export function InventorySheets({ projectId }: { projectId: number }) {
                   {grid.length} rows × {width} columns
                 </span>
                 {!draft ? (
-                  <input
-                    type="search"
-                    placeholder="Search in this sheet…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
+                  <>
+                    {canManage ? (
+                      <div className="btn-row">
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setDraft({ grid: sheet.grid, merges: sheet.merges })}
+                        >
+                          Edit sheet
+                        </button>
+                        <button type="button" className="btn ghost" onClick={renameSheet}>
+                          Rename
+                        </button>
+                        <button type="button" className="btn ghost danger" onClick={deleteSheet}>
+                          Delete sheet
+                        </button>
+                      </div>
+                    ) : null}
+                    <input
+                      type="search"
+                      placeholder="Search in this sheet…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </>
                 ) : (
                   <div className="btn-row">
                     <button type="button" className="btn secondary" onClick={addRow}>
                       + Add row
+                    </button>
+                    <button type="button" className="btn secondary" onClick={addColumn}>
+                      + Add column
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={removeLastColumn}
+                      disabled={width <= 1 || lastColLocked}
+                      title={lastColLocked ? "The last column is part of a merged header" : "Remove the last column"}
+                    >
+                      − Remove last column
                     </button>
                     <button type="button" className="btn" onClick={save} disabled={busy}>
                       {busy ? "Saving…" : "Save sheet"}

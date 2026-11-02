@@ -98,9 +98,13 @@ class InventorySheetOut(InventorySheetSummary):
     merges: list[list[int]]
 
 
+class InventorySheetRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class InventorySheetIn(BaseModel):
     name: str | None = None
-    grid: list[list[str]]
+    grid: list[list[str]] = []
     merges: list[list[int]] = []
 
 
