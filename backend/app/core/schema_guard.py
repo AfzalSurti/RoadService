@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-030 and are
+browsers report as a CORS error. These statements mirror alembic 023-031 and are
 safe to run on every boot.
 """
 
@@ -85,6 +85,15 @@ INVENTORY_DDL = (
 )
 
 
+# alembic 031: vendor bills on quantity entries.
+BILL_COLUMNS_DDL = (
+    "ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL",
+    "ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_no VARCHAR(64)",
+    "ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_date DATE",
+    "CREATE INDEX IF NOT EXISTS ix_quantity_entries_vendor_id ON quantity_entries (vendor_id)",
+)
+
+
 async def seed_inventory(conn) -> None:
     """Fill each package's table from the Project Location sheets."""
     for name, rows in PACKAGE_INVENTORY.items():
@@ -163,6 +172,8 @@ async def ensure_schema() -> None:
                 )
             )
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id)"))
+            for stmt in BILL_COLUMNS_DDL:
+                await conn.execute(text(stmt))
             if not await _table_exists(conn, "project_inventory_items"):
                 for stmt in INVENTORY_DDL:
                     await conn.execute(text(stmt))

@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { BoqBillModal } from "../components/BoqBillModal";
 import { ProjectSelect } from "../components/ProjectSelect";
-import type { RateItem, Vendor } from "../types";
+import type { RateItem, Vendor, VendorBill } from "../types";
 import * as v from "../lib/validation";
 import { projectIdFromUrl, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 
@@ -62,6 +63,11 @@ export function RatesPage() {
   const [items, setItems] = useState<RateItem[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorFilter, setVendorFilter] = useState("");
+  const [bills, setBills] = useState<VendorBill[]>([]);
+  // Vendor bill being added (and the item it was opened from).
+  const [billFor, setBillFor] = useState<{ vendor: Vendor; focusItemId: number | null } | null>(null);
+  const [openBill, setOpenBill] = useState<string | null>(null);
+  const canSeeBills = role === "admin" || role === "government";
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<RateItem | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -81,6 +87,9 @@ export function RatesPage() {
     try {
       const data = await api.rateItems(token, Number(projectId));
       setItems(data as RateItem[]);
+      if (canSeeBills) {
+        setBills(await api.vendorBills(token, Number(projectId)).catch(() => [] as VendorBill[]));
+      }
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load rates");
@@ -139,6 +148,16 @@ export function RatesPage() {
       .map(([id, list]) => ({ id, name: vendorName(id), count: list.length, ...sums(list) }))
       .sort((a, b) => (a.id == null ? 1 : b.id == null ? -1 : a.name.localeCompare(b.name)));
   }, [items, vendors]);
+
+  const billsOf = (vendorId: number | null) => bills.filter((b) => b.vendor_id === vendorId);
+  const startBill = (vendorId: number | null | undefined, focusItemId: number | null = null) => {
+    const vendor = vendorId ? vendors.find((x) => x.id === vendorId) : null;
+    if (vendor) setBillFor({ vendor, focusItemId });
+  };
+  const shownBills = useMemo(() => {
+    if (!vendorFilter || vendorFilter === UNASSIGNED) return bills;
+    return bills.filter((b) => String(b.vendor_id) === vendorFilter);
+  }, [bills, vendorFilter]);
 
   const openCreate = () => {
     setEditing(null);
@@ -335,7 +354,17 @@ export function RatesPage() {
                           Edit
                         </button>
                       ) : null}{" "}
-                      {canEnterQty ? (
+                      {canManage && i.vendor_id ? (
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          disabled={Number(i.executed_quantity) >= Number(i.boq_quantity)}
+                          title="Add a bill for this vendor"
+                          onClick={() => startBill(i.vendor_id, i.id)}
+                        >
+                          + Add bill
+                        </button>
+                      ) : canEnterQty ? (
                         <button
                           className="btn ghost"
                           type="button"
@@ -398,6 +427,8 @@ export function RatesPage() {
                   <th>Completed / billed ₹</th>
                   <th>Remaining ₹</th>
                   <th>Progress</th>
+                  {canSeeBills ? <th>Bills</th> : null}
+                  {canManage ? <th></th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -418,12 +449,109 @@ export function RatesPage() {
                     <td>
                       <Progress pct={b.pct} />
                     </td>
+                    {canSeeBills ? <td>{b.id == null ? "—" : billsOf(b.id).length}</td> : null}
+                    {canManage ? (
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {b.id != null ? (
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={b.remaining <= 0}
+                            onClick={() => startBill(b.id)}
+                          >
+                            + Add bill
+                          </button>
+                        ) : (
+                          <small className="muted">Set a vendor on these items to bill them</small>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
+      ) : null}
+
+      {canSeeBills && projectId && items.length ? (
+        <section className="panel">
+          <div className="panel-head-row">
+            <h2>Bill history</h2>
+            {vendorFilter && vendorFilter !== UNASSIGNED ? (
+              <span className="muted">{vendorName(Number(vendorFilter))}</span>
+            ) : null}
+          </div>
+          {shownBills.length ? (
+            <div className="boq-bills">
+              {shownBills.map((b) => {
+                const key = `${b.vendor_id}-${b.bill_no}`;
+                const isOpen = openBill === key;
+                return (
+                  <article key={key} className={`boq-bill${isOpen ? " open" : ""}`}>
+                    <button type="button" className="boq-bill-head" onClick={() => setOpenBill(isOpen ? null : key)}>
+                      <strong>{b.bill_no}</strong>
+                      <span>{vendorName(b.vendor_id)}</span>
+                      <span className="muted">{b.bill_date || new Date(b.created_at).toLocaleDateString()}</span>
+                      <span className="muted">{b.lines.length} item(s)</span>
+                      <strong className="boq-done">₹ {money(b.total_amount)}</strong>
+                      <span aria-hidden="true">{isOpen ? "▴" : "▾"}</span>
+                    </button>
+                    {isOpen ? (
+                      <div className="table-scroll">
+                        <table className="data">
+                          <thead>
+                            <tr>
+                              <th>BOQ item</th>
+                              <th>Description</th>
+                              <th>Qty</th>
+                              <th>Rate ₹</th>
+                              <th>Amount ₹</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {b.lines.map((l) => (
+                              <tr key={l.entry_id}>
+                                <td>{l.item_no}</td>
+                                <td>{l.description}</td>
+                                <td>
+                                  {qty(l.quantity)} {l.unit}
+                                </td>
+                                <td>{money(l.rate)}</td>
+                                <td>{money(l.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {b.note ? <p className="muted">Note: {b.note}</p> : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="muted">
+              No numbered bills yet.{canManage ? " Use “+ Add bill” on a vendor to record its next bill." : ""}{" "}
+              Quantities entered with the BOQ item or via Record qty count as completed but are not numbered bills.
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {billFor && projectId ? (
+        <BoqBillModal
+          projectId={Number(projectId)}
+          vendor={billFor.vendor}
+          items={items.filter((i) => i.vendor_id === billFor.vendor.id)}
+          suggestedBillNo={`RA Bill ${billsOf(billFor.vendor.id).length + 1}`}
+          focusItemId={billFor.focusItemId}
+          onClose={() => setBillFor(null)}
+          onSaved={() => {
+            setBillFor(null);
+            void load();
+          }}
+        />
       ) : null}
 
       {showModal ? (

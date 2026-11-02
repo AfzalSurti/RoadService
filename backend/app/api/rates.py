@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated
 
@@ -21,6 +22,9 @@ from app.schemas import (
     RateItemOut,
     RateItemSurveyorOut,
     RateItemUpdate,
+    VendorBillIn,
+    VendorBillLineOut,
+    VendorBillOut,
 )
 
 router = APIRouter(prefix="/rates", tags=["rates"])
@@ -319,7 +323,147 @@ async def list_quantity_entries(
             amount=float(e.amount),
             entered_by_id=e.entered_by_id,
             note=e.note,
+            vendor_id=e.vendor_id,
+            bill_no=e.bill_no,
+            bill_date=e.bill_date,
             created_at=e.created_at,
         )
         for e in entries
     ]
+
+
+@router.get("/bills", response_model=list[VendorBillOut])
+async def list_vendor_bills(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    project_id: int = Query(),
+    vendor_id: int | None = Query(default=None),
+):
+    """Bills (RA bills) for a package, newest first; optionally one vendor's."""
+    project = await _get_project(db, project_id)
+    if not _can_view_project(user, project) or user.role == UserRole.SURVEYOR:
+        raise HTTPException(status_code=403, detail="Not allowed to view bills")
+    stmt = (
+        select(QuantityEntry, RateItem)
+        .join(RateItem, RateItem.id == QuantityEntry.rate_item_id)
+        .where(QuantityEntry.project_id == project_id, QuantityEntry.bill_no.is_not(None))
+        .order_by(QuantityEntry.id)
+    )
+    if vendor_id is not None:
+        stmt = stmt.where(QuantityEntry.vendor_id == vendor_id)
+    bills: dict[tuple[int | None, str], VendorBillOut] = {}
+    for entry, item in (await db.execute(stmt)).all():
+        key = (entry.vendor_id, entry.bill_no)
+        bill = bills.get(key)
+        if not bill:
+            bill = VendorBillOut(
+                vendor_id=entry.vendor_id,
+                bill_no=entry.bill_no,
+                bill_date=entry.bill_date,
+                note=entry.note,
+                total_amount=0,
+                created_at=entry.created_at,
+                lines=[],
+            )
+            bills[key] = bill
+        bill.lines.append(
+            VendorBillLineOut(
+                entry_id=entry.id,
+                rate_item_id=item.id,
+                item_no=item.item_no,
+                description=item.description,
+                unit=item.unit,
+                quantity=float(entry.quantity),
+                rate=float(item.rate),
+                amount=float(entry.amount),
+            )
+        )
+        bill.total_amount = round(bill.total_amount + float(entry.amount), 2)
+    return sorted(bills.values(), key=lambda b: (b.bill_date or b.created_at.date(), b.created_at), reverse=True)
+
+
+@router.post("/bills", response_model=VendorBillOut, status_code=201)
+async def create_vendor_bill(
+    body: VendorBillIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Record a vendor bill: completed quantity for some of its BOQ items, each capped
+    at the item's remaining quantity."""
+    await _get_project(db, body.project_id)
+    await _check_vendor(db, body.vendor_id, body.project_id)
+    bill_no = body.bill_no.strip()
+    duplicate = (
+        await db.execute(
+            select(QuantityEntry.id).where(
+                QuantityEntry.project_id == body.project_id,
+                QuantityEntry.vendor_id == body.vendor_id,
+                QuantityEntry.bill_no == bill_no,
+            )
+        )
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail=f"Bill {bill_no} already exists for this vendor")
+
+    item_ids = [line.rate_item_id for line in body.lines]
+    if len(set(item_ids)) != len(item_ids):
+        raise HTTPException(status_code=400, detail="Each BOQ item can appear only once in a bill")
+    items = {
+        i.id: i
+        for i in (await db.execute(select(RateItem).where(RateItem.id.in_(item_ids)))).scalars().all()
+    }
+    lines: list[VendorBillLineOut] = []
+    total = Decimal("0")
+    for line in body.lines:
+        item = items.get(line.rate_item_id)
+        if not item or item.project_id != body.project_id:
+            raise HTTPException(status_code=400, detail="BOQ item not found in this package")
+        if item.vendor_id != body.vendor_id:
+            raise HTTPException(status_code=400, detail=f"BOQ item {item.item_no} belongs to another vendor")
+        qty = _dec(line.quantity)
+        remaining = item.boq_quantity - (item.executed_quantity or Decimal("0"))
+        if qty > remaining:
+            raise HTTPException(
+                status_code=400,
+                detail=f"BOQ item {item.item_no}: only {remaining.normalize():f} {item.unit} remaining",
+            )
+        amount = (qty * item.rate).quantize(Decimal("0.01"))
+        entry = QuantityEntry(
+            rate_item_id=item.id,
+            project_id=item.project_id,
+            quantity=qty,
+            amount=amount,
+            entered_by_id=user.id,
+            note=body.note,
+            vendor_id=body.vendor_id,
+            bill_no=bill_no,
+            bill_date=body.bill_date,
+        )
+        db.add(entry)
+        item.executed_quantity = (item.executed_quantity or Decimal("0")) + qty
+        item.executed_amount = (item.executed_quantity * item.rate).quantize(Decimal("0.01"))
+        await db.flush()
+        total += amount
+        lines.append(
+            VendorBillLineOut(
+                entry_id=entry.id,
+                rate_item_id=item.id,
+                item_no=item.item_no,
+                description=item.description,
+                unit=item.unit,
+                quantity=float(qty),
+                rate=float(item.rate),
+                amount=float(amount),
+            )
+        )
+    await db.commit()
+    return VendorBillOut(
+        vendor_id=body.vendor_id,
+        bill_no=bill_no,
+        bill_date=body.bill_date,
+        note=body.note,
+        total_amount=float(total),
+        created_at=datetime.now(timezone.utc),
+        lines=lines,
+    )
+

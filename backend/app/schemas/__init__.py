@@ -288,7 +288,45 @@ class QuantityEntryOut(BaseModel):
     amount: float
     entered_by_id: int
     note: str | None
+    vendor_id: int | None = None
+    bill_no: str | None = None
+    bill_date: date | None = None
     created_at: datetime
+
+
+class VendorBillLineIn(BaseModel):
+    rate_item_id: int
+    quantity: float = Field(gt=0)
+
+
+class VendorBillIn(BaseModel):
+    project_id: int
+    vendor_id: int
+    bill_no: str = Field(min_length=1, max_length=64)
+    bill_date: date
+    note: str | None = None
+    lines: list[VendorBillLineIn] = Field(min_length=1)
+
+
+class VendorBillLineOut(BaseModel):
+    entry_id: int
+    rate_item_id: int
+    item_no: str
+    description: str
+    unit: str
+    quantity: float
+    rate: float
+    amount: float
+
+
+class VendorBillOut(BaseModel):
+    vendor_id: int | None
+    bill_no: str
+    bill_date: date | None
+    note: str | None = None
+    total_amount: float
+    created_at: datetime
+    lines: list[VendorBillLineOut]
 
 
 class ProjectRateSummary(BaseModel):

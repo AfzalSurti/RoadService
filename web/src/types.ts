@@ -139,6 +139,28 @@ export type RateItem = {
   updated_at: string;
 };
 
+export type VendorBillLine = {
+  entry_id: number;
+  rate_item_id: number;
+  item_no: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+};
+
+/** A vendor bill (RA bill): completed quantities for some of its BOQ items. */
+export type VendorBill = {
+  vendor_id: number | null;
+  bill_no: string;
+  bill_date: string | null;
+  note?: string | null;
+  total_amount: number;
+  created_at: string;
+  lines: VendorBillLine[];
+};
+
 export type RateItemSurveyor = {
   id: number;
   project_id: number;

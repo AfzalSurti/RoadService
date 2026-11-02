@@ -17,6 +17,7 @@ import type {
   User,
   InventoryItem,
   Vendor,
+  VendorBill,
   VendorDocument,
 } from "./types";
 
@@ -357,6 +358,25 @@ export const api = {
     }>
   ) =>
     request<RateItem>(`/api/v1/rates/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+
+  vendorBills: (token: string, projectId: number, vendorId?: number) =>
+    request<VendorBill[]>(
+      `/api/v1/rates/bills?project_id=${projectId}${vendorId ? `&vendor_id=${vendorId}` : ""}`,
+      { token }
+    ),
+
+  /** Record a vendor bill; each line's quantity is capped at the item's remaining quantity. */
+  createVendorBill: (
+    token: string,
+    body: {
+      project_id: number;
+      vendor_id: number;
+      bill_no: string;
+      bill_date: string;
+      note?: string;
+      lines: { rate_item_id: number; quantity: number }[];
+    }
+  ) => request<VendorBill>("/api/v1/rates/bills", { method: "POST", token, body: JSON.stringify(body) }),
 
   deleteRateItem: (token: string, id: number) =>
     request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),

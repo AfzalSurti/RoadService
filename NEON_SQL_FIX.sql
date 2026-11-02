@@ -264,3 +264,9 @@ CREATE INDEX IF NOT EXISTS ix_project_inventory_items_project_id ON project_inve
 -- 030: BOQ item vendor (also applied automatically on startup)
 ALTER TABLE rate_items ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id);
+
+-- 031: vendor bills on BOQ quantity entries (also applied automatically on startup)
+ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL;
+ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_no VARCHAR(64);
+ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_date DATE;
+CREATE INDEX IF NOT EXISTS ix_quantity_entries_vendor_id ON quantity_entries (vendor_id);

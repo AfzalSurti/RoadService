@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -53,6 +53,12 @@ class QuantityEntry(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     entered_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set when the entry is part of a vendor bill (RA bill); one bill = entries sharing bill_no.
+    vendor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    bill_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bill_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     rate_item = relationship("RateItem", back_populates="quantity_entries")
