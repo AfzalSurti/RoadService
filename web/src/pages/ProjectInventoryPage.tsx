@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, mediaUrl } from "../api";
+import { api } from "../api";
+import { CorridorMap } from "../components/CorridorMap";
 import { useAuth } from "../auth";
 import { getSelectedProjectId, projectShortName, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 import { InventorySheets } from "../components/InventorySheets";
@@ -10,8 +11,8 @@ type Row = { scope: string; description: string };
 
 /**
  * Project Inventory: per package, the "Project Location" scope table
- * (Sr. No / Scope / Description) with an optional photo beside it.
- * GMC Experts edit the table and add / change / remove the photo; others view.
+ * (Sr. No / Scope / Description) under an animated corridor location map.
+ * GMC Experts edit the table; others view.
  */
 export function ProjectInventoryPage() {
   const { token, role, isReadonly } = useAuth();
@@ -98,50 +99,6 @@ export function ProjectInventoryPage() {
     }
   };
 
-  const uploadPhoto = async (file: File | undefined) => {
-    if (!token || !project || !file) return;
-    setBusy(true);
-    try {
-      const updated = await api.uploadLocationMap(token, project.id, file);
-      setProjects((list) => list.map((p) => (p.id === updated.id ? updated : p)));
-      setMsg("Photo saved.");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Photo upload failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const removePhoto = async () => {
-    if (!token || !project || !window.confirm("Remove this photo?")) return;
-    setBusy(true);
-    try {
-      const updated = await api.removeLocationMap(token, project.id);
-      setProjects((list) => list.map((p) => (p.id === updated.id ? updated : p)));
-      setMsg("Photo removed.");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Remove failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const photoPicker = (label: string) => (
-    <label className="btn ghost inventory-photo-pick">
-      {busy ? "Saving…" : label}
-      <input
-        type="file"
-        accept="image/*"
-        hidden
-        disabled={busy}
-        onChange={(e) => {
-          void uploadPhoto(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-      />
-    </label>
-  );
-
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
@@ -167,7 +124,6 @@ export function ProjectInventoryPage() {
             <h2>Project Location ({projectShortName(project)})</h2>
             {canManage ? (
               <div className="btn-row">
-                {!project.location_map_url ? photoPicker("+ Add photo") : null}
                 {!draft ? (
                   <button type="button" className="btn" onClick={startEdit} disabled={!items}>
                     Edit table
@@ -177,23 +133,10 @@ export function ProjectInventoryPage() {
             ) : null}
           </div>
 
-          <div className={`inventory-layout${project.location_map_url ? " has-photo" : ""}`}>
-            {project.location_map_url ? (
-              <figure className="inventory-photo">
-                <a href={mediaUrl(project.location_map_url)} target="_blank" rel="noreferrer">
-                  <img src={mediaUrl(project.location_map_url)} alt={`Project Location · ${projectShortName(project)}`} />
-                </a>
-                {canManage ? (
-                  <div className="btn-row">
-                    {photoPicker("Change photo")}
-                    <button type="button" className="btn ghost danger" onClick={removePhoto} disabled={busy}>
-                      Remove photo
-                    </button>
-                  </div>
-                ) : null}
-              </figure>
-            ) : null}
+          {/* Animated corridor location map (replaces the uploaded photo). */}
+          <CorridorMap packageName={project.name} />
 
+          <div className="inventory-layout">
             <div className="table-scroll">
               {!items ? (
                 <p className="muted">Loading…</p>
