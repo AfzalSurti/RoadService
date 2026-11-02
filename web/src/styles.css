@@ -1220,23 +1220,64 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .dash-hero-inner {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  max-width: 900px;
-  padding: clamp(2rem, 6vw, 5rem);
+  align-items: center;
+  justify-content: center;
+  min-height: inherit;
+  padding: clamp(1.5rem, 5vw, 4rem);
 }
-.dash-hero-projects {
-  margin: 0;
-  padding-left: 1.6em;
+.dash-hero-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1rem, 3vw, 2rem);
+  width: min(100%, 980px);
+}
+.dash-hero-tile {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
-  font-size: clamp(1.05rem, 1.9vw, 1.55rem);
-  font-weight: 700;
-  line-height: 1.38;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+  align-items: center;
+  gap: 1rem;
+  padding: 1.75rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(8, 20, 34, 0.5);
+  backdrop-filter: blur(6px);
+  color: #f8fafc;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
-.dash-hero-projects li::marker { color: #7dd3fc; font-weight: 800; }
+.dash-hero-tile:hover,
+.dash-hero-tile:focus-visible {
+  transform: translateY(-4px);
+  background: rgba(13, 76, 129, 0.62);
+  border-color: #7dd3fc;
+  outline: none;
+}
+.dash-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(125, 211, 252, 0.16);
+  border: 2px solid #7dd3fc;
+  color: #7dd3fc;
+}
+.dash-hero-tile-name {
+  font-size: clamp(1rem, 1.6vw, 1.3rem);
+  font-weight: 700;
+  line-height: 1.35;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+}
+.dash-hero-tile-no {
+  color: #7dd3fc;
+  font-weight: 800;
+  margin-right: 0.4rem;
+}
+.dash-hero-tile-no::after { content: "."; }
+@media (max-width: 760px) {
+  .dash-hero-tiles { grid-template-columns: 1fr; }
+}
 
 /* Toll Plaza Performances stepper */
 .toll-perf-stepper { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }

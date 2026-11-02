@@ -35,6 +35,23 @@ const COLORS: Record<string, string> = {
 const PREVIEW_COUNT = 3;
 
 
+// Short corridor labels for the splash tiles, keyed by the package `name`.
+const HERO_SHORT_NAMES: Record<string, string> = {
+  "Jabalpur - Lakhnadon": "Jabalpur – Lakhnadon",
+  "Lakhnadon - Khawasa": "Mahagaon – Khawasa",
+  "Bokhedi - Kelapur": "Borkhedi – Wadner – Kelapur",
+};
+
+function HighwayIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 6 9 42" />
+      <path d="M31 6l8 36" />
+      <path d="M24 8v5M24 19v5M24 30v5M24 40v2" />
+    </svg>
+  );
+}
+
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -171,23 +188,48 @@ export function DashboardPage() {
 
   if (showHero) {
     return (
-      <button
-        type="button"
+      <div
         className="dash-hero"
+        role="button"
+        tabIndex={0}
         onClick={() => setShowHero(false)}
+        onKeyDown={(e) => {
+          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setShowHero(false);
+          }
+        }}
         title="Open the dashboard"
         aria-label="Open the dashboard"
       >
         <span className="dash-hero-bg" />
         <span className="dash-hero-wash" />
-        <span className="dash-hero-inner">
-          <ol className="dash-hero-projects">
-            {projects.map((p) => (
-              <li key={p.id}>{projectTitle(p)}</li>
+        <div className="dash-hero-inner">
+          <div className="dash-hero-tiles">
+            {projects.map((p, idx) => (
+              <button
+                key={p.id}
+                type="button"
+                className="dash-hero-tile"
+                title={projectTitle(p)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openProject(p);
+                  setShowHero(false);
+                }}
+              >
+                <span className="dash-hero-icon" aria-hidden="true">
+                  <HighwayIcon />
+                </span>
+                <span className="dash-hero-tile-name">
+                  <span className="dash-hero-tile-no">{idx + 1}</span>
+                  {HERO_SHORT_NAMES[p.name] || p.name}
+                </span>
+              </button>
             ))}
-          </ol>
-        </span>
-      </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
