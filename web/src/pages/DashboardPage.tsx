@@ -87,8 +87,10 @@ export function DashboardPage() {
   // Package whose overview is shown on the splash (hover / keyboard focus).
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const projectsPath = role === "admin" ? "/projects" : "/executive";
-  const ratesPath = role === "admin" ? "/rates" : "/executive";
+  // GMC Experts edit, NHIPMPL views the same package details / BOQ read-only.
+  const canSeePackagePages = role === "admin" || role === "government";
+  const projectsPath = canSeePackagePages ? "/projects" : "/executive";
+  const ratesPath = canSeePackagePages ? "/rates" : "/executive";
   const vendorsPath = role === "admin" || role === "government" ? "/vendors" : "/dashboard";
 
   useEffect(() => {
@@ -350,10 +352,7 @@ export function DashboardPage() {
                   <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
                   <td>
                     <Link
-                      to={withProjectQuery(
-                        role === "admin" ? `/rates` : ratesPath,
-                        p.id
-                      )}
+                      to={withProjectQuery(ratesPath, p.id)}
                       onClick={(e) => e.stopPropagation()}
                     >
                       Rates

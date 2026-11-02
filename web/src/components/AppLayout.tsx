@@ -127,13 +127,13 @@ export function AppLayout() {
             Notifications{unread ? ` (${unread})` : ""}
           </NavLink>
           <NavLink to="/reports">Reports</NavLink>
-          {role === "admin" ? (
+          {adminGov ? (
             <>
               <NavLink to={scoped("/projects")}>Projects</NavLink>
               <NavLink to={scoped("/rates")}>BOQ</NavLink>
-              <NavLink to="/users">Users</NavLink>
             </>
           ) : null}
+          {role === "admin" ? <NavLink to="/users">Users</NavLink> : null}
         </nav>
         <div className="sidebar-foot">
           <button

@@ -223,17 +223,18 @@ export default function App() {
         <Route
           path="/projects"
           element={
-            <AdminOnly>
+            // NHIPMPL sees package details read-only; editing stays GMC Experts only.
+            <AdminOrGov>
               <ProjectsPage />
-            </AdminOnly>
+            </AdminOrGov>
           }
         />
         <Route
           path="/rates"
           element={
-            <AdminOnly>
+            <AdminOrGov>
               <RatesPage />
-            </AdminOnly>
+            </AdminOrGov>
           }
         />
       </Route>
