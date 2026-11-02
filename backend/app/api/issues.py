@@ -23,6 +23,7 @@ from app.services.issue_service import (
     get_project_or_404,
     notify,
     notify_issue_event,
+    project_team_ids,
     notify_many,
     record_status,
     user_ids_with_roles,
@@ -219,9 +220,10 @@ async def create_issue(
         issue.id,
     )
     oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    team = await project_team_ids(db, project_id)
     await notify_many(
         db,
-        oversight,
+        [*oversight, *(t for t in team if t != contractor_id)],
         "New issue raised",
         f"{_issue_label(issue)} raised by {user.full_name} on {project.name}. "
         f"Priority: {priority.value}. Deadline: {deadline_days} days.",

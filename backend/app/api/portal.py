@@ -22,6 +22,7 @@ from app.schemas import (
     VendorOut,
 )
 from app.services.audit import write_audit
+from app.services.issue_service import notify_involved
 from app.services.storage import save_upload
 
 docs_router = APIRouter(prefix="/documents", tags=["documents"])
@@ -558,6 +559,15 @@ async def upload_document(
         entity_id=str(doc.id),
         detail=title,
     )
+    await notify_involved(
+        db,
+        "New document uploaded",
+        f"{title.strip()} — {doc.category} · by {user.full_name}",
+        project_id=project_id,
+        link=f"/documents?folder={folder_id}&doc={doc.id}" if folder_id else "/documents",
+        actor=user,
+        include_team=False,
+    )
     await db.commit()
     await db.refresh(doc)
     return doc
@@ -840,6 +850,15 @@ async def create_mpr(
         entity_id=str(row.id),
         detail=package_name,
     )
+    await notify_involved(
+        db,
+        "New MSR submitted",
+        f"Monthly Status Report {package_name} ({month.strftime('%b %Y')}) by {user.full_name} — review it.",
+        project_id=project_id,
+        link=f"/mpr?project={project_id}",
+        actor=user,
+        include_team=False,
+    )
     await db.commit()
     await db.refresh(row)
     return row
@@ -933,6 +952,18 @@ async def review_mpr(
         entity_type="mpr",
         entity_id=str(row.id),
         detail=f"{status}: {row.review_remark or ''}".strip(),
+    )
+    verdict = {"approved": "approved", "not_approved": "not approved"}.get(status, "marked pending")
+    await notify_involved(
+        db,
+        f"MSR {verdict}",
+        f"{row.package_name} {row.report_month.strftime('%b %Y')} {verdict} by {user.full_name}"
+        + (f": {row.review_remark}" if row.review_remark else "."),
+        project_id=row.project_id,
+        extra_ids=[row.submitted_by_id],
+        link=f"/mpr?project={row.project_id}",
+        actor=user,
+        include_team=False,
     )
     await db.commit()
     await db.refresh(row)

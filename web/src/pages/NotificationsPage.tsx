@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Notification } from "../api";
+import { api, type Notification, type TaskItem } from "../api";
 import { useAuth } from "../auth";
 
 export function NotificationsPage() {
@@ -9,6 +9,7 @@ export function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tasks, setTasks] = useState<TaskItem[] | null>(null);
 
   const load = () => {
     if (!token) return;
@@ -25,6 +26,12 @@ export function NotificationsPage() {
 
   useEffect(() => {
     load();
+    if (token) {
+      api
+        .notificationTasks(token)
+        .then(setTasks)
+        .catch(() => setTasks([]));
+    }
   }, [token]);
 
   const openIssue = async (n: Notification) => {
@@ -46,6 +53,34 @@ export function NotificationsPage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      <section className="panel today-tasks">
+        <div className="panel-head-row">
+          <h2>Today — your tasks</h2>
+          <span className="muted">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+          </span>
+        </div>
+        {!tasks ? (
+          <p className="muted">Loading your tasks…</p>
+        ) : tasks.length ? (
+          <ul className="task-list">
+            {tasks.map((t) => (
+              <li key={t.key} className={t.urgent ? "urgent" : undefined}>
+                <span className="task-count">{t.count}</span>
+                <div className="task-text">
+                  <strong>{t.title}</strong>
+                  <span>{t.detail}</span>
+                </div>
+                <Link className="btn ghost" to={t.link}>
+                  Do it →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="task-clear">You are all caught up — nothing is waiting for you today.</p>
+        )}
+      </section>
       <section className="panel">
         <div className="panel-head-row">
           <h2>Alerts</h2>

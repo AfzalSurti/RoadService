@@ -36,6 +36,16 @@ export type Notification = {
   created_at: string;
 };
 
+/** One item of the signed-in user's "today" to-do list. */
+export type TaskItem = {
+  key: string;
+  title: string;
+  detail: string;
+  count: number;
+  link: string;
+  urgent: boolean;
+};
+
 export function mediaUrl(path?: string | null) {
   if (!path) return "";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
@@ -346,6 +356,8 @@ export const api = {
       categories: { id: string; name: string }[];
       types: { id: string; label: string; category_id: string }[];
     }>("/api/v1/catalog/defects", { token }),
+
+  notificationTasks: (token: string) => request<TaskItem[]>("/api/v1/notifications/tasks", { token }),
 
   notifications: (token: string, unreadOnly = false) =>
     request<Notification[]>(

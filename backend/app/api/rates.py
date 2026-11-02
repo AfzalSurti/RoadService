@@ -14,6 +14,7 @@ from app.models.billing import Vendor
 from app.models.project import Project
 from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
+from app.services.issue_service import notify_involved
 from app.schemas import (
     ProjectRateSummary,
     QuantityEntryCreate,
@@ -456,6 +457,17 @@ async def create_vendor_bill(
                 amount=float(amount),
             )
         )
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == body.vendor_id))).scalar_one()
+    await notify_involved(
+        db,
+        f"Bill {bill_no} recorded",
+        f"{vendor.name}: {bill_no} for \u20b9 {total:,.2f} ({len(lines)} BOQ item(s)) by {user.full_name}",
+        project_id=body.project_id,
+        extra_ids=[vendor.contractor_user_id],
+        link=f"/rates?project={body.project_id}",
+        actor=user,
+        include_team=False,
+    )
     await db.commit()
     return VendorBillOut(
         vendor_id=body.vendor_id,

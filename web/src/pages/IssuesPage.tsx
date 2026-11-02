@@ -9,7 +9,7 @@ import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
 import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
-  { key: "all", label: "All Issues" },
+  { key: "all", label: "All Defects" },
   { key: "open", label: "To Do" },
   { key: "in_progress", label: "In Progress" },
   { key: "completed", label: "Completed" },

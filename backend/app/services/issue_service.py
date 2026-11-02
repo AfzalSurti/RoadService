@@ -21,6 +21,8 @@ __all__ = [
     "notify_many",
     "user_ids_with_roles",
     "notify_issue_event",
+    "project_team_ids",
+    "notify_involved",
     "get_issue_or_404",
     "get_project_or_404",
     "assert_surveyor",
@@ -107,6 +109,48 @@ async def notify_many(
         await notify(db, uid, title, message, issue_id, link)
 
 
+async def project_team_ids(db: AsyncSession, project_id: int | None) -> list[int]:
+    """Contractors and GMC representatives assigned to a package."""
+    if not project_id:
+        return []
+    project = (
+        await db.execute(
+            select(Project)
+            .where(Project.id == project_id)
+            .options(selectinload(Project.contractors), selectinload(Project.surveyors))
+        )
+    ).scalar_one_or_none()
+    if not project:
+        return []
+    return [u.id for u in [*project.contractors, *project.surveyors] if u.is_active]
+
+
+async def notify_involved(
+    db: AsyncSession,
+    title: str,
+    message: str,
+    *,
+    project_id: int | None = None,
+    extra_ids=(),
+    issue_id: int | None = None,
+    link: str | None = None,
+    actor: User | None = None,
+    include_team: bool = True,
+) -> None:
+    """Notify GMC Experts, NHIPMPL, the package team and any extra people (not the actor)."""
+    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
+    team = await project_team_ids(db, project_id) if include_team else []
+    await notify_many(
+        db,
+        [*oversight, *team, *extra_ids],
+        title,
+        message,
+        issue_id,
+        link,
+        exclude=actor.id if actor else None,
+    )
+
+
 async def notify_issue_event(
     db: AsyncSession,
     issue: Issue,
@@ -114,15 +158,16 @@ async def notify_issue_event(
     title: str,
     message: str,
 ) -> None:
-    """Every issue event reaches GMC Experts, NHIPMPL, the reporter and the contractor."""
-    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
-    await notify_many(
+    """Every defect event reaches GMC Experts, NHIPMPL, the package team, the reporter
+    and the assigned contractor (never the person who acted)."""
+    await notify_involved(
         db,
-        [*oversight, issue.reported_by_id, issue.assigned_contractor_id],
         title,
         message,
-        issue.id,
-        exclude=actor.id if actor else None,
+        project_id=issue.project_id,
+        extra_ids=[issue.reported_by_id, issue.assigned_contractor_id],
+        issue_id=issue.id,
+        actor=actor,
     )
 
 

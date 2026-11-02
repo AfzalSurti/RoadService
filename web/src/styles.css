@@ -2054,3 +2054,31 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 }
 .nav-group.open .nav-group-arrow { transform: none; }
 .nav-group-items { display: grid; gap: 0.25rem; }
+/* Notifications: today's task list */
+.task-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.task-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+}
+.task-list li.urgent { border-left-color: #ea580c; }
+.task-count {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 2.4rem;
+  height: 2.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-weight: 800;
+}
+.task-list li.urgent .task-count { background: color-mix(in srgb, #ea580c 16%, transparent); color: #ea580c; }
+.task-text { flex: 1; display: grid; gap: 0.15rem; }
+.task-text span { color: var(--muted); font-size: 0.88rem; }
+.task-clear { margin: 0; color: #16a34a; font-weight: 600; }

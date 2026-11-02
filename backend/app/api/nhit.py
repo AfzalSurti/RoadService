@@ -39,6 +39,7 @@ from app.models.portal_ops import (
 from app.models.project import Project
 from app.models.user import User
 from app.services.audit import write_audit
+from app.services.issue_service import notify_involved
 from app.services.storage import save_upload
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -355,6 +356,15 @@ async def request_approval(
         )
     )
     await write_audit(db, actor_id=user.id, action="document_request_approval", entity_type="document", entity_id=str(doc.id))
+    await notify_involved(
+        db,
+        "Document approval requested",
+        f"{doc.title} — approval requested by {user.full_name}",
+        project_id=doc.project_id,
+        link=f"/documents?folder={doc.folder_id}&doc={doc.id}" if doc.folder_id else "/documents",
+        actor=user,
+        include_team=False,
+    )
     await db.commit()
     return _orm_dict(doc)
 
@@ -394,6 +404,16 @@ async def decide_approval(
         entity_type="document",
         entity_id=str(doc.id),
         detail=body.note,
+    )
+    await notify_involved(
+        db,
+        f"Document {pending.status}",
+        f"{doc.title} {pending.status} by {user.full_name}" + (f": {body.note}" if body.note else "."),
+        project_id=doc.project_id,
+        extra_ids=[pending.requested_by_id, doc.uploaded_by_id],
+        link=f"/documents?folder={doc.folder_id}&doc={doc.id}" if doc.folder_id else "/documents",
+        actor=user,
+        include_team=False,
     )
     await db.commit()
     return _orm_dict(doc)
