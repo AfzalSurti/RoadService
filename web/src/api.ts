@@ -504,6 +504,14 @@ export const api = {
 
   vendors: (token: string) => request<Vendor[]>("/api/v1/vendors", { token }),
 
+  /** Update vendor details (JSON; documents are uploaded only on create). */
+  updateVendor: (token: string, id: number, body: Record<string, string | number | null>) =>
+    request<Vendor>(`/api/v1/vendors/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+
   createVendor: (token: string, form: FormData) =>
     request<Vendor>("/api/v1/vendors", {
       method: "POST",

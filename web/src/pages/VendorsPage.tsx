@@ -1,6 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { projectShortName } from "../lib/projectScope";
+import { WORK_CATEGORIES, vendorCategory } from "../lib/workCategories";
 import type { Project, Vendor } from "../types";
 
 const empty = {
@@ -18,6 +20,25 @@ const empty = {
   remarks: "",
 };
 
+type Filter = "all" | (typeof WORK_CATEGORIES)[number]["key"] | "other";
+
+function vendorToForm(v: Vendor) {
+  return {
+    name: v.name,
+    project_id: v.project_id ? String(v.project_id) : "",
+    brief: v.brief || "",
+    progress_notes: v.progress_notes || "",
+    delay_notes: v.delay_notes || "",
+    escalation_matrix: v.escalation_matrix || "",
+    type_of_work: v.type_of_work || "",
+    work_order_date: v.work_order_date || "",
+    commencement_date: v.commencement_date || "",
+    time_limit_completion: v.time_limit_completion || "",
+    defects_liability_period: v.defects_liability_period || "",
+    remarks: v.remarks || "",
+  };
+}
+
 export function VendorsPage() {
   const { token, role, isReadonly } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -28,6 +49,31 @@ export function VendorsPage() {
   const [workOrderFile, setWorkOrderFile] = useState<File | null>(null);
   const [loaFile, setLoaFile] = useState<File | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const canManage = role === "admin" && !isReadonly;
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: vendors.length, other: 0 };
+    for (const cat of WORK_CATEGORIES) c[cat.key] = 0;
+    for (const v of vendors) c[vendorCategory(v) || "other"] += 1;
+    return c;
+  }, [vendors]);
+  const shown = useMemo(
+    () => (filter === "all" ? vendors : vendors.filter((v) => (vendorCategory(v) || "other") === filter)),
+    [vendors, filter]
+  );
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(empty);
+    setShowForm(true);
+  };
+  const openEdit = (v: Vendor) => {
+    setEditingId(v.id);
+    setForm(vendorToForm(v));
+    setShowForm(true);
+  };
 
   const load = async () => {
     if (!token) return;
@@ -52,10 +98,32 @@ export function VendorsPage() {
 
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || isReadonly || role !== "admin") return;
+    if (!token || !canManage) return;
     setBusy(true);
     setError(null);
     try {
+      if (editingId) {
+        const opt = (x: string) => x.trim() || null;
+        await api.updateVendor(token, editingId, {
+          name: form.name.trim(),
+          project_id: form.project_id ? Number(form.project_id) : null,
+          type_of_work: opt(form.type_of_work),
+          work_order_date: form.work_order_date || null,
+          commencement_date: form.commencement_date || null,
+          time_limit_completion: opt(form.time_limit_completion),
+          defects_liability_period: opt(form.defects_liability_period),
+          brief: opt(form.brief),
+          remarks: opt(form.remarks),
+          progress_notes: opt(form.progress_notes),
+          delay_notes: opt(form.delay_notes),
+          escalation_matrix: opt(form.escalation_matrix),
+        });
+        setEditingId(null);
+        setForm(empty);
+        setShowForm(false);
+        await load();
+        return;
+      }
       const fd = new FormData();
       fd.append("name", form.name.trim());
       if (form.project_id) fd.append("project_id", form.project_id);
@@ -93,28 +161,50 @@ export function VendorsPage() {
       <section className="panel">
         <div className="panel-head-row">
           <h2>Vendor profiles</h2>
-          {role === "admin" && !isReadonly ? (
-            <button className="btn" type="button" onClick={() => setShowForm(true)}>
+          {canManage ? (
+            <button className="btn" type="button" onClick={openCreate}>
               Add vendor
             </button>
           ) : null}
         </div>
 
+        <div className="works-tabs vendor-filter">
+          {([{ key: "all", label: "All vendors" }, ...WORK_CATEGORIES, { key: "other", label: "Other / not set" }] as const).map(
+            (c) => (
+              <button
+                key={c.key}
+                type="button"
+                className={`works-tab${filter === c.key ? " active" : ""}`}
+                onClick={() => setFilter(c.key as Filter)}
+              >
+                <span className="works-tab-label">{c.label}</span>
+                <span className="works-tab-count">{counts[c.key] ?? 0}</span>
+              </button>
+            )
+          )}
+        </div>
+
         <div className="card-list">
-          {vendors.map((v) => (
+          {shown.map((v) => {
+            const project = v.project_id ? projects.find((p) => p.id === v.project_id) : null;
+            return (
             <article className="panel nested" key={v.id}>
-              <h3>{v.name}</h3>
+              <div className="panel-head-row">
+                <h3>{v.name}</h3>
+                {canManage ? (
+                  <button type="button" className="btn ghost" onClick={() => openEdit(v)}>
+                    Edit
+                  </button>
+                ) : null}
+              </div>
               <p className="muted">
                 Project:{" "}
-                {v.project_id
-                  ? projects.find((p) => p.id === v.project_id)?.name || `#${v.project_id}`
-                  : "All / unassigned"}
+                {v.project_id ? (project ? projectShortName(project) : `#${v.project_id}`) : "All / unassigned"}
               </p>
-              {v.type_of_work ? (
-                <p>
-                  <strong>Type of work:</strong> {v.type_of_work}
-                </p>
-              ) : null}
+              <p>
+                <strong>Type of work:</strong>{" "}
+                {v.type_of_work || <span className="muted">Not set — edit to place it under a work tab</span>}
+              </p>
               {(v.work_order_date || v.commencement_date) && (
                 <p className="muted">
                   WO date: {v.work_order_date || "—"} · Commencement: {v.commencement_date || "—"}
@@ -163,15 +253,24 @@ export function VendorsPage() {
                 ) : null}
               </div>
             </article>
-          ))}
-          {!vendors.length ? <p className="muted">No vendors yet.</p> : null}
+            );
+          })}
+          {!shown.length ? (
+            <p className="muted">{vendors.length ? "No vendors in this category." : "No vendors yet."}</p>
+          ) : null}
         </div>
       </section>
 
       {showForm ? (
-        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setShowForm(false);
+            setEditingId(null);
+          }}
+        >
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onCreate}>
-            <h2>Add vendor</h2>
+            <h2>{editingId ? "Edit vendor" : "Add vendor"}</h2>
             <div className="form-grid">
               <label className="span-2">
                 Name
@@ -190,18 +289,27 @@ export function VendorsPage() {
                   <option value="">Optional</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}
+                      {projectShortName(p)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
                 Type of Work
-                <input
+                <select
                   value={form.type_of_work}
                   onChange={(e) => setForm({ ...form, type_of_work: e.target.value })}
-                  placeholder="e.g. Civil / Toll / ATMS"
-                />
+                >
+                  <option value="">Select work tab…</option>
+                  {WORK_CATEGORIES.map((c) => (
+                    <option key={c.key} value={c.label}>
+                      {c.label}
+                    </option>
+                  ))}
+                  {form.type_of_work && !WORK_CATEGORIES.some((c) => c.label === form.type_of_work) ? (
+                    <option value={form.type_of_work}>{form.type_of_work} (current)</option>
+                  ) : null}
+                </select>
               </label>
               <label>
                 Work order Date
@@ -235,6 +343,8 @@ export function VendorsPage() {
                   placeholder="e.g. 12 months"
                 />
               </label>
+              {!editingId ? (
+              <>
               <label>
                 Vendor Work Order (upload)
                 <input type="file" onChange={(e) => setWorkOrderFile(e.target.files?.[0] || null)} />
@@ -243,6 +353,8 @@ export function VendorsPage() {
                 Letter of Acceptance — LOA (upload)
                 <input type="file" onChange={(e) => setLoaFile(e.target.files?.[0] || null)} />
               </label>
+              </>
+              ) : null}
               <label className="span-2">
                 Brief
                 <textarea
@@ -283,7 +395,14 @@ export function VendorsPage() {
               <button className="btn" type="submit" disabled={busy}>
                 Save
               </button>
-              <button type="button" className="btn ghost" onClick={() => setShowForm(false)}>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+              >
                 Cancel
               </button>
             </div>

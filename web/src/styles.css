@@ -1381,6 +1381,59 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .team-picker-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; font-weight: 400; cursor: pointer; }
 .form-grid .team-picker-option input { width: auto; padding: 0; }
 .form-hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
+/* Package "Works" tabs (dashboard) and vendor category filter */
+.works-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.6rem;
+  margin: 0.5rem 0 1rem;
+}
+.works-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.works-tab:hover { border-color: var(--accent); }
+.works-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.works-tab-no {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.works-tab.active .works-tab-no { background: rgba(255, 255, 255, 0.25); color: #fff; }
+.works-tab-label { flex: 1; line-height: 1.3; }
+.works-tab-count {
+  flex: none;
+  min-width: 1.6rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+  font-size: 0.8rem;
+  text-align: center;
+}
+.works-tab.active .works-tab-count { background: rgba(255, 255, 255, 0.25); }
+.works-brief { font-size: 0.82rem; margin-top: 0.2rem; max-width: 320px; }
+.vendor-filter { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .photo-field { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 .photo-field > label { flex: 1; min-width: 220px; }
 .photo-field-preview {

@@ -15,6 +15,7 @@ import {
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
+import { PackageWorks } from "../components/PackageWorks";
 import {
   projectImageUrl,
   projectShortName,
@@ -422,6 +423,9 @@ export function DashboardPage() {
               </div>
             </div>
           </section>
+
+          {/* Works by category (from Vendors); GMC representatives have no vendor access. */}
+          {role !== "surveyor" ? <PackageWorks key={selected.id} projectId={selected.id} /> : null}
 
           {stats ? (
             <>
