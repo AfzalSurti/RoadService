@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ProjectForm, projectToForm, type ProjectFormValues } from "../components/ProjectForm";
-import { projectShortName, projectTitle } from "../lib/projectScope";
+import { projectShortName, projectTitle, usePackageScope } from "../lib/projectScope";
 import type { Project, ProjectRateSummary, User } from "../types";
 
 function money(n: number) {
@@ -40,7 +40,12 @@ export function ProjectsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const sortedProjects = useMemo(() => [...projects].sort((a, b) => a.id - b.id), [projects]);
+  // Sidebar package scope: only the chosen packages are listed.
+  const { inScope } = usePackageScope();
+  const sortedProjects = useMemo(
+    () => projects.filter((p) => inScope(p.id)).sort((a, b) => a.id - b.id),
+    [projects, inScope]
+  );
   const selected = useMemo(
     () => (highlightId ? sortedProjects.find((p) => p.id === highlightId) || null : null),
     [highlightId, sortedProjects]

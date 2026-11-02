@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
 import type { Project, RateItem } from "../types";
 import * as v from "../lib/validation";
-import { projectIdFromUrl, setSelectedProjectId } from "../lib/projectScope";
+import { projectIdFromUrl, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 
 const emptyForm = {
   item_no: "",
@@ -21,7 +21,10 @@ function money(n: number) {
 
 export function RatesPage() {
   const { token, role, isReadonly } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [projectId, setProjectId] = useState<number | "">("");
   const [items, setItems] = useState<RateItem[]>([]);
   const [error, setError] = useState<string | null>(null);

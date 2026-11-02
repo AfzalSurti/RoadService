@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import type { Project } from "../types";
-import { projectShortName } from "../lib/projectScope";
+import { projectShortName, usePackageScope } from "../lib/projectScope";
 
 type Props = {
   value: string | number | "";
@@ -29,6 +29,9 @@ export function ProjectSelect({
   const { token } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Sidebar package scope narrows the choices; an already-selected value stays listed.
+  const { inScope } = usePackageScope();
+  const options = projects.filter((p) => inScope(p.id) || String(p.id) === String(value));
 
   useEffect(() => {
     if (!token) return;
@@ -54,7 +57,7 @@ export function ProjectSelect({
         onChange={(e) => onChange(e.target.value)}
       >
         {allowAll ? <option value="">{allLabel}</option> : <option value="">Select project…</option>}
-        {projects.map((p) => (
+        {options.map((p) => (
           <option key={p.id} value={p.id}>
             {projectShortName(p)}
             {p.location && p.location !== p.name ? ` · ${p.location}` : ""}

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { projectShortName } from "../lib/projectScope";
+import { projectShortName, usePackageScope } from "../lib/projectScope";
 import { VendorDocumentsModal } from "../components/VendorDocumentsModal";
 import {
   VENDOR_DOC_TYPES,
@@ -52,8 +52,12 @@ function vendorToForm(v: Vendor) {
 
 export function VendorsPage() {
   const { token, role, isReadonly } = useAuth();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [allVendors, setVendors] = useState<Vendor[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const vendors = useMemo(() => allVendors.filter((x) => x.project_id == null || inScope(x.project_id)), [allVendors, inScope]);
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(empty);

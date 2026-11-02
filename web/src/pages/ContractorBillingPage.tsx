@@ -3,6 +3,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
 import type { Invoice, Project } from "../types";
+import { usePackageScope } from "../lib/projectScope";
 
 const PAYMENT_TYPES = [
   "Stage Payment Statement for Works",
@@ -56,8 +57,12 @@ export function ContractorBillingPage() {
   const canEdit = role === "contractor" && !isReadonly;
   const canReview = role === "admin" && !isReadonly;
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  const [allInvoices, setInvoices] = useState<Invoice[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
+  const invoices = useMemo(() => allInvoices.filter((x) => inScope(x.project_id)), [allInvoices, inScope]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);

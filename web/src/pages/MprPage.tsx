@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
-import { projectShortName } from "../lib/projectScope";
+import { projectShortName, usePackageScope } from "../lib/projectScope";
 import type { MprReport, Project, Vendor } from "../types";
 
 const empty = {
@@ -35,9 +35,14 @@ function isoToday() {
 export function MprPage() {
   const { token, fullName, role, isReadonly } = useAuth();
   const canEdit = role === "contractor" && !isReadonly;
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [rows, setRows] = useState<MprReport[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  const [allVendors, setVendors] = useState<Vendor[]>([]);
+  const [allRows, setRows] = useState<MprReport[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
+  const vendors = useMemo(() => allVendors.filter((x) => x.project_id == null || inScope(x.project_id)), [allVendors, inScope]);
+  const rows = useMemo(() => allRows.filter((x) => inScope(x.project_id)), [allRows, inScope]);
   const [form, setForm] = useState(empty);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);

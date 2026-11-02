@@ -4,12 +4,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { BackButton } from "./BackButton";
 import { DeveloperCredit } from "./DeveloperCredit";
-import {
-  getSelectedProjectId,
-  projectShortName,
-  setSelectedProjectId,
-  withProjectQuery,
-} from "../lib/projectScope";
+import { PackageScopePicker } from "./PackageScopePicker";
+import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
 import type { Project } from "../types";
 import { useTheme } from "../theme";
@@ -25,12 +21,23 @@ export function AppLayout() {
   const location = useLocation();
   const [projects, setProjects] = useState<Project[]>([]);
 
-  // Current package: the page's ?project= first, else the one picked on the dashboard.
-  // Project-aware sections keep it in their sidebar links so the flow stays in that package.
-  const urlProject = Number(new URLSearchParams(location.search).get("project") || 0) || null;
-  const pid = urlProject || getSelectedProjectId();
-  const currentProject = pid ? projects.find((p) => p.id === pid) || null : null;
-  const scoped = (path: string) => (currentProject ? withProjectQuery(path, currentProject.id) : path);
+  // Package scope (all / one / several) applies to every module. With exactly one
+  // package, project-aware links also carry ?project= so pages open on it.
+  const { scopeIds, setScope } = usePackageScope();
+  const activeIds = (scopeIds || []).filter((id) => projects.some((p) => p.id === id));
+  const single = activeIds.length === 1 ? activeIds[0] : null;
+  const scoped = (path: string) => (single ? withProjectQuery(path, single) : path);
+
+  const changeScope = (ids: number[] | null) => {
+    setScope(ids);
+    // Keep the open page in step: one package → ?project=id, otherwise drop it.
+    const next = new URLSearchParams(location.search);
+    next.delete("all");
+    if (ids && ids.length === 1) next.set("project", String(ids[0]));
+    else next.delete("project");
+    const qs = next.toString();
+    navigate(`${location.pathname}${qs ? `?${qs}` : ""}`, { replace: true });
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -72,31 +79,15 @@ export function AppLayout() {
           <NavLink to="/dashboard" end state={{ hero: true }}>
             Dashboard
           </NavLink>
-          {currentProject && location.pathname !== "/dashboard" ? (
-            <div className="nav-project" title={currentProject.title || currentProject.name}>
-              <small>Current package</small>
-              <strong>{projectShortName(currentProject)}</strong>
-              <button
-                type="button"
-                className="linkish"
-                onClick={() => {
-                  setSelectedProjectId(null);
-                  const next = new URLSearchParams(location.search);
-                  next.delete("project");
-                  const qs = next.toString();
-                  navigate(`${location.pathname}${qs ? `?${qs}` : ""}`, { replace: true });
-                }}
-              >
-                Show all packages
-              </button>
-            </div>
+          {projects.length > 1 ? (
+            <PackageScopePicker projects={projects} scopeIds={scopeIds} onChange={changeScope} />
           ) : null}
 
           <div className="nav-group-label">Civil Dashboard</div>
           {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
           <NavLink to={scoped("/issues")}>Issues</NavLink>
           {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
-          {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
+          {staff ? <NavLink to={scoped("/mpr")}>MPR</NavLink> : null}
           {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
           {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
           <NavLink to={scoped("/map")}>Map</NavLink>

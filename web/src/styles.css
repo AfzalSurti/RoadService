@@ -207,6 +207,41 @@ button, input, select, textarea { font: inherit; }
 .nav-project small { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
 .nav-project strong { font-size: 0.9rem; line-height: 1.3; }
 .sidebar .nav-project button.linkish { padding: 0.15rem 0; font-size: 0.8rem; color: var(--accent); }
+.nav-project { position: relative; }
+.sidebar .nav-project-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.15rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-project-toggle span { color: var(--accent); font-size: 0.8rem; }
+.nav-project-menu {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.4rem;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.nav-project-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.nav-project-option:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .sidebar-foot { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: auto; }
 .user-chip small { display: block; color: var(--muted); text-transform: capitalize; font-weight: 500; margin-top: 0.15rem; }
 .topbar-user {

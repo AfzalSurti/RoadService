@@ -3,6 +3,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
 import type { DocumentFolder, PortalDocument } from "../types";
+import { usePackageScope } from "../lib/projectScope";
 
 function findFolder(nodes: DocumentFolder[], id: number | null): DocumentFolder | null {
   if (id == null) return null;
@@ -76,7 +77,10 @@ function FolderTree({
 
 export function DocumentsPage() {
   const { token, role, isReadonly } = useAuth();
-  const [folders, setFolders] = useState<DocumentFolder[]>([]);
+  const [allFolders, setFolders] = useState<DocumentFolder[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const folders = useMemo(() => allFolders.filter((x) => inScope(x.project_id)), [allFolders, inScope]);
   const [docs, setDocs] = useState<PortalDocument[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
   const [selected, setSelected] = useState<PortalDocument | null>(null);

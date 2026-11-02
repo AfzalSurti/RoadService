@@ -4,7 +4,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
-import { projectIdFromUrl } from "../lib/projectScope";
+import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
 import type { Issue, Project, SiteRfi } from "../types";
 import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
@@ -27,8 +27,12 @@ export function RfiPage() {
   const { token, role } = useAuth();
   const [searchParams] = useSearchParams();
   const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
-  const [rows, setRows] = useState<SiteRfi[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [allRows, setRows] = useState<SiteRfi[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const rows = useMemo(() => allRows.filter((x) => inScope(x.project_id)), [allRows, inScope]);
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [selected, setSelected] = useState<SiteRfi | null>(null);
   const [error, setError] = useState<string | null>(null);

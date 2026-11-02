@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
-import { getSelectedProjectId, projectShortName, setSelectedProjectId } from "../lib/projectScope";
+import { getSelectedProjectId, projectShortName, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 import type { InventoryItem, Project } from "../types";
 
 type Row = { scope: string; description: string };
@@ -23,9 +23,15 @@ export function ProjectInventoryPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const sorted = useMemo(() => [...projects].sort((a, b) => a.id - b.id), [projects]);
+  // Sidebar package scope: tabs only for the chosen packages.
+  const { inScope } = usePackageScope();
+  const sorted = useMemo(
+    () => projects.filter((p) => inScope(p.id)).sort((a, b) => a.id - b.id),
+    [projects, inScope]
+  );
   const urlId = Number(params.get("project") || 0) || null;
-  const pid = urlId || getSelectedProjectId() || sorted[0]?.id || null;
+  const preferred = urlId || getSelectedProjectId();
+  const pid = (preferred && sorted.some((p) => p.id === preferred) ? preferred : null) || sorted[0]?.id || null;
   const project = sorted.find((p) => p.id === pid) || sorted[0] || null;
 
   useEffect(() => {

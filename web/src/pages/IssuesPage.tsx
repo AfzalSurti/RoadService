@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Issue, IssueStatus } from "../types";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
-import { projectIdFromUrl } from "../lib/projectScope";
+import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
 import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const TABS: { key: "all" | IssueStatus; label: string }[] = [
@@ -25,6 +25,7 @@ export function IssuesPage() {
   const selectedId = params.get("id") ? Number(params.get("id")) : null;
   const action = params.get("action");
   const projectId = projectIdFromUrl(params.get("project"));
+  const { inScope } = usePackageScope();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -84,6 +85,8 @@ export function IssuesPage() {
   };
 
   const selected = issues.find((i) => i.id === selectedId) || null;
+  // Sidebar package scope (several packages) — a single one comes in as ?project=.
+  const shown = projectId ? issues : issues.filter((i) => inScope(i.project_id));
   const showContractorActions = !isReadonly && role === "contractor";
 
   return (
@@ -133,7 +136,7 @@ export function IssuesPage() {
             </tr>
           </thead>
           <tbody>
-            {issues.map((i) => (
+            {shown.map((i) => (
               <tr
                 key={i.id}
                 className="clickable"
@@ -195,7 +198,7 @@ export function IssuesPage() {
                 ) : null}
               </tr>
             ))}
-            {!issues.length ? (
+            {!shown.length ? (
               <tr>
                 <td colSpan={showContractorActions ? 11 : 10}>No issues found.</td>
               </tr>

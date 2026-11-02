@@ -4,7 +4,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
-import { projectIdFromUrl } from "../lib/projectScope";
+import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
 import type { PortalQueryTicket, Project } from "../types";
 import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
@@ -20,8 +20,12 @@ export function QueriesPage() {
   const { token, role, isReadonly, userId } = useAuth();
   const [searchParams] = useSearchParams();
   const projectId = projectIdFromUrl(searchParams.get("project"));
-  const [tickets, setTickets] = useState<PortalQueryTicket[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [allTickets, setTickets] = useState<PortalQueryTicket[]>([]);
+  const [allProjects, setProjects] = useState<Project[]>([]);
+  // Sidebar package scope: only the chosen packages' rows are shown.
+  const { inScope } = usePackageScope();
+  const tickets = useMemo(() => allTickets.filter((x) => inScope(x.project_id)), [allTickets, inScope]);
+  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [selected, setSelected] = useState<PortalQueryTicket | null>(null);
   const [metaAreas, setMetaAreas] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);

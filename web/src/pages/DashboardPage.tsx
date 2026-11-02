@@ -22,6 +22,7 @@ import {
   projectTitle,
   resolveProjectId,
   setSelectedProjectId,
+  usePackageScope,
   withProjectQuery,
 } from "../lib/projectScope";
 import type { DashboardStats, Project, ProjectRateSummary, Vendor } from "../types";
@@ -164,11 +165,24 @@ export function DashboardPage() {
     [projects, selectedId]
   );
 
+  // Sidebar package picker: one package opens it; several / all show the list.
+  const { scopeIds, inScope } = usePackageScope();
+  useEffect(() => {
+    if (scopeIds && scopeIds.length === 1) {
+      if (selectedId !== scopeIds[0]) setSelectedId(scopeIds[0]);
+      return;
+    }
+    if (selectedId && (!scopeIds || !scopeIds.includes(selectedId))) setSelectedId(null);
+  }, [scopeIds]);
+
+  const scopedCount = projects.filter((p) => inScope(p.id)).length;
+
   // A package picked from the splash shows on its own; switch via "Change package".
   const visibleProjects = useMemo(() => {
     if (selected) return [selected];
-    return showAllProjects ? projects : projects.slice(0, PREVIEW_COUNT);
-  }, [projects, showAllProjects, selected]);
+    const list = projects.filter((p) => inScope(p.id));
+    return showAllProjects ? list : list.slice(0, PREVIEW_COUNT);
+  }, [projects, showAllProjects, selected, inScope]);
 
   // Sidebar "Dashboard" link sends { hero } state: go back to the package icons
   // even when the dashboard is already open.
@@ -376,7 +390,7 @@ export function DashboardPage() {
             ) : null}
           </tbody>
         </table>
-        {!selected && projects.length > PREVIEW_COUNT ? (
+        {!selected && scopedCount > PREVIEW_COUNT ? (
           <div className="show-more-row">
             <button
               type="button"
@@ -385,7 +399,7 @@ export function DashboardPage() {
             >
               {showAllProjects
                 ? "Show less"
-                : `Show more (${projects.length - PREVIEW_COUNT} more)`}
+                : `Show more (${scopedCount - PREVIEW_COUNT} more)`}
             </button>
           </div>
         ) : null}

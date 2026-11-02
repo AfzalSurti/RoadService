@@ -5,7 +5,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { IssueDetailPanel } from "../components/IssueDetailPanel";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
-import { getSelectedProjectId, projectShortName, setSelectedProjectId } from "../lib/projectScope";
+import { projectShortName, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 import type { Issue, Project, Vendor } from "../types";
 
 const COLORS: Record<string, string> = {
@@ -76,8 +76,11 @@ export function MapPage() {
   const [showFilters, setShowFilters] = useState(true);
   const canFilterVendor = role === "admin" || role === "government";
 
+  // Package filter follows the sidebar scope: one package → that package; several →
+  // pins from those packages; all → everything.
+  const { scopeIds, inScope } = usePackageScope();
   const urlProject = Number(params.get("project") || 0) || null;
-  const projectId = urlProject ?? (params.has("all") ? null : getSelectedProjectId());
+  const projectId = urlProject ?? (scopeIds && scopeIds.length === 1 ? scopeIds[0] : null);
   const sortedProjects = useMemo(() => [...projects].sort((a, b) => a.id - b.id), [projects]);
   const project = projectId ? sortedProjects.find((p) => p.id === projectId) || null : null;
 
@@ -125,14 +128,17 @@ export function MapPage() {
       setParams({ project: id });
     } else {
       setSelectedProjectId(null);
-      setParams({ all: "1" });
+      setParams({});
     }
   };
 
   // Vendor filter: vendors of the chosen package that are linked to a contractor login.
   const packageVendors = useMemo(
-    () => vendors.filter((v) => v.contractor_user_id && (!projectId || v.project_id === projectId)),
-    [vendors, projectId]
+    () =>
+      vendors.filter(
+        (v) => v.contractor_user_id && (projectId ? v.project_id === projectId : inScope(v.project_id))
+      ),
+    [vendors, projectId, inScope]
   );
   const vendor = vendorId ? packageVendors.find((v) => String(v.id) === vendorId) || null : null;
   const vendorByContractor = useMemo(() => {
@@ -146,7 +152,7 @@ export function MapPage() {
       issues.filter(
         (i) =>
           hasCoords(i) &&
-          (!projectId || i.project_id === projectId) &&
+          (projectId ? i.project_id === projectId : inScope(i.project_id)) &&
           (!vendor || i.assigned_contractor_id === vendor.contractor_user_id)
       ),
     [issues, projectId, vendor]
@@ -277,7 +283,7 @@ export function MapPage() {
             <label>
               <span className="map-filter-step">1</span> Package
               <select value={projectId ? String(projectId) : ""} onChange={(e) => pickProject(e.target.value)}>
-                <option value="">All packages</option>
+                <option value="">{scopeIds && scopeIds.length > 1 ? "Chosen packages" : "All packages"}</option>
                 {sortedProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {projectShortName(p)}
