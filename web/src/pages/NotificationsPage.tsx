@@ -85,8 +85,8 @@ export function NotificationsPage() {
           {!items.length ? <li className="muted">No notifications yet.</li> : null}
         </ul>
         <p className="muted" style={{ marginTop: "1rem" }}>
-          Tip: contractors can also act from the Issues list (Start / Submit / View comments).{" "}
-          <Link to="/issues">Open issues</Link>
+          Tip: contractors can also act from Defect Management (Start / Submit / View comments).{" "}
+          <Link to="/issues">Open Defect Management</Link>
         </p>
       </section>
     </>

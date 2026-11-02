@@ -326,7 +326,7 @@ export function DashboardPage() {
         <p className="muted">
           {selected
             ? "Showing this package only. Use “Change package” to pick another one."
-            : "Select a project to open its Issues, RFI, Query Raise, rates and other modules."}
+            : "Select a project to open its Defects, RFI, Query Raise, rates and other modules."}
         </p>
         <table className="data">
           <thead>
@@ -489,10 +489,10 @@ export function DashboardPage() {
                   hint="Project page →"
                 />
                 <StatCard
-                  label="Total issues"
+                  label="Total defects"
                   value={stats.total_issues}
                   to={withProjectQuery("/issues", pid)}
-                  hint="This project’s issues →"
+                  hint="Open Defect Management →"
                 />
                 {role === "admin" || role === "government" ? (
                   <StatCard
@@ -563,10 +563,10 @@ export function DashboardPage() {
                   hint="Open BOQ →"
                 />
                 <StatCard
-                  label="Delayed issues"
+                  label="Delayed defects"
                   value={stats.delayed_issues}
                   to={withProjectQuery("/issues", pid)}
-                  hint="This project’s issues →"
+                  hint="Open Defect Management →"
                 />
                 <StatCard
                   label="Compliance"

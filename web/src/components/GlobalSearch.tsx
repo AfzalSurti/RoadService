@@ -19,7 +19,7 @@ type Hit = {
 const KIND_ORDER = [
   "Pages",
   "Packages",
-  "Issues",
+  "Defects",
   "RFIs",
   "Queries",
   "Vendors",
@@ -47,7 +47,7 @@ function pageHits(role: string | null): Hit[] {
   const pages: [boolean, string, string, string][] = [
     [true, "Dashboard", "/dashboard", "home packages overview"],
     [staff, "Project Inventory", "/civil-assets", "inventory location scope junction bridge culvert sign board"],
-    [true, "Issues", "/issues", "defects potholes complaints"],
+    [true, "Defect Management", "/issues", "defects issues potholes complaints repairs"],
     [staff, "RFI — Request for Inspection", "/rfi", "inspection request rfi"],
     [staff, "MSR", "/mpr", "mpr monthly progress report nsr"],
     [staff, "Project Overview", "/executive", "executive summary stretch"],
@@ -122,7 +122,7 @@ async function buildIndex(token: string, role: string | null): Promise<Hit[]> {
   for (const i of issues || []) {
     out.push(
       hit(
-        "Issues",
+        "Defects",
         `#${i.id} · ${i.issue_type_label || i.issue_type}`,
         `/issues?project=${i.project_id}&id=${i.id}`,
         [String(i.id), i.description, i.work_category_label, i.issue_type],

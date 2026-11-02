@@ -40,7 +40,7 @@ export function ReportsPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [periodType, setPeriodType] = useState<"custom" | "daily" | "weekly">("custom");
   const [form, setForm] = useState({
-    report_title: "RoadService Issues Report",
+    report_title: "RoadService Defects Report",
     project_id: "",
     package_name: "",
     date_from: "",
@@ -66,7 +66,7 @@ export function ReportsPage() {
         ...f,
         date_from: t,
         date_to: t,
-        report_title: `Daily Issues Report — ${t}`,
+        report_title: `Daily Defects Report — ${t}`,
       }));
     } else if (periodType === "weekly") {
       const { from, to } = isoWeekRange();
@@ -74,7 +74,7 @@ export function ReportsPage() {
         ...f,
         date_from: from,
         date_to: to,
-        report_title: `Weekly Issues Report — ${from} to ${to}`,
+        report_title: `Weekly Defects Report — ${from} to ${to}`,
       }));
     }
   }, [periodType]);

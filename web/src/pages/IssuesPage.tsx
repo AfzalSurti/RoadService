@@ -57,7 +57,7 @@ export function IssuesPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = projectId ? `Issues · Project #${projectId}` : "Issues";
+    if (el) el.textContent = projectId ? `Defect Management · Project #${projectId}` : "Defect Management";
   }, [projectId]);
 
   const openIssue = (id: number, nextAction?: string) => {
@@ -94,7 +94,7 @@ export function IssuesPage() {
       {error ? <div className="error">{error}</div> : null}
       {projectId ? (
         <p className="muted">
-          Showing issues for <strong>project #{projectId}</strong> only.{" "}
+          Showing defects for <strong>project #{projectId}</strong> only.{" "}
           <button type="button" className="linkish" onClick={() => navigate("/dashboard")}>
             Change project
           </button>
@@ -200,7 +200,7 @@ export function IssuesPage() {
             ))}
             {!shown.length ? (
               <tr>
-                <td colSpan={showContractorActions ? 11 : 10}>No issues found.</td>
+                <td colSpan={showContractorActions ? 11 : 10}>No defects found.</td>
               </tr>
             ) : null}
           </tbody>

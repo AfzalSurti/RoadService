@@ -288,7 +288,7 @@ export function ProjectsPage() {
                 Open rates
               </Link>
               <Link className="btn ghost" to={`/issues?project=${selected.id}`}>
-                Issues
+                Defects
               </Link>
               {canManage ? (
                 <button type="button" className="btn ghost danger" onClick={onRemove}>

@@ -219,7 +219,7 @@ export function ProjectForm({
       </div>
       {!form.contractor_ids.length || !form.surveyor_ids.length ? (
         <p className="span-2 form-hint">
-          Issues can only be raised on this package once it has at least one GMC representative, and they are
+          Defects can only be raised on this package once it has at least one GMC representative, and they are
           auto-assigned to the first contractor.
         </p>
       ) : null}
