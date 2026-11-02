@@ -27,8 +27,6 @@ export type Project = {
   short_name?: string | null;
   /** Tile photo: web asset path ("/packages/x.jpg"), Cloudinary URL or uploads filename. */
   image_url?: string | null;
-  /** Project Inventory route map image. */
-  location_map_url?: string | null;
   location: string;
   description?: string | null;
   chainage_from?: string | null;

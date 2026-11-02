@@ -1435,32 +1435,9 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .works-brief { font-size: 0.82rem; margin-top: 0.2rem; max-width: 320px; }
 .vendor-filter { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .works-hint { margin: 0 0 0.5rem; font-size: 0.85rem; }
-/* Project Inventory: route map + scope table */
+/* Project Inventory: scope table */
 .inventory-tabs { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.inventory-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 1.25rem;
-  align-items: start;
-}
-.inventory-map { margin: 0; display: grid; gap: 0.6rem; }
-.inventory-map img {
-  display: block;
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-}
-.inventory-map-empty {
-  display: grid;
-  place-items: center;
-  gap: 0.35rem;
-  min-height: 320px;
-  padding: 1rem;
-  border: 2px dashed var(--line);
-  border-radius: 12px;
-  color: var(--muted);
-  text-align: center;
-}
+.inventory-layout { display: block; }
 .inventory-table th:first-child,
 .inventory-table td:first-child { width: 4.5rem; text-align: center; }
 .inventory-table td { vertical-align: top; }
@@ -1478,9 +1455,6 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .inventory-row-actions { white-space: nowrap; }
 .inventory-row-actions .linkish { background: none; border: 0; cursor: pointer; color: var(--accent); padding: 0 0.25rem; }
 .inventory-row-actions .linkish:disabled { opacity: 0.35; cursor: default; }
-@media (max-width: 900px) {
-  .inventory-layout { grid-template-columns: 1fr; }
-}
 /* Vendor "View details" documents window */
 .modal-card.vendor-docs { width: min(760px, 100%); max-height: 88vh; overflow-y: auto; }
 .vendor-docs-groups { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }

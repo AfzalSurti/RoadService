@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, mediaUrl } from "../api";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { getSelectedProjectId, projectShortName, setSelectedProjectId } from "../lib/projectScope";
 import type { InventoryItem, Project } from "../types";
@@ -8,8 +8,8 @@ import type { InventoryItem, Project } from "../types";
 type Row = { scope: string; description: string };
 
 /**
- * Project Inventory: per package, the "Project Location" sheet — route map on the
- * left, Sr. No / Scope / Description on the right. GMC Experts edit; others view.
+ * Project Inventory: per package, the "Project Location" scope table
+ * (Sr. No / Scope / Description). GMC Experts edit; others view.
  */
 export function ProjectInventoryPage() {
   const { token, role, isReadonly } = useAuth();
@@ -90,20 +90,6 @@ export function ProjectInventoryPage() {
     }
   };
 
-  const uploadMap = async (file: File | undefined) => {
-    if (!token || !project || !file) return;
-    setBusy(true);
-    try {
-      const updated = await api.uploadLocationMap(token, project.id, file);
-      setProjects((list) => list.map((p) => (p.id === updated.id ? updated : p)));
-      setMsg("Location map updated.");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Map upload failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
@@ -135,32 +121,6 @@ export function ProjectInventoryPage() {
           </div>
 
           <div className="inventory-layout">
-            <figure className="inventory-map">
-              {project.location_map_url ? (
-                <a href={mediaUrl(project.location_map_url)} target="_blank" rel="noreferrer">
-                  <img src={mediaUrl(project.location_map_url)} alt={`Route map · ${projectShortName(project)}`} />
-                </a>
-              ) : (
-                <div className="inventory-map-empty">
-                  <strong>No location map yet</strong>
-                  <span>{canManage ? "Upload the route map image below." : "The GMC Expert has not added it yet."}</span>
-                </div>
-              )}
-              {canManage ? (
-                <label className="vendor-docs-add">
-                  {busy ? "Uploading…" : project.location_map_url ? "Change map" : "Upload map"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={busy}
-                    onChange={(e) => {
-                      void uploadMap(e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              ) : null}
-            </figure>
 
             <div className="table-scroll">
               {!items ? (
