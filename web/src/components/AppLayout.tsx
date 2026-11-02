@@ -5,6 +5,8 @@ import { useAuth } from "../auth";
 import { BackButton } from "./BackButton";
 import { DeveloperCredit } from "./DeveloperCredit";
 import { GlobalSearch } from "./GlobalSearch";
+import { IntroSplash } from "./IntroSplash";
+import { NavGroup } from "./NavGroup";
 import { PackageScopePicker } from "./PackageScopePicker";
 import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
@@ -63,6 +65,7 @@ export function AppLayout() {
 
   return (
     <div className="shell">
+      <IntroSplash />
       <aside className="sidebar">
         <div className="sidebar-head">
           <div className="brand">
@@ -84,48 +87,73 @@ export function AppLayout() {
             <PackageScopePicker projects={projects} scopeIds={scopeIds} onChange={changeScope} />
           ) : null}
 
-          <div className="nav-group-label">Civil Dashboard</div>
-          {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
-          <NavLink to={scoped("/issues")}>Issues</NavLink>
-          {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
-          {staff ? <NavLink to={scoped("/mpr")}>MSR</NavLink> : null}
-          {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
-          {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
-          <NavLink to={scoped("/map")}>Map</NavLink>
+          <NavGroup
+            id="civil"
+            title="Civil Dashboard"
+            paths={["/civil-assets", "/issues", "/rfi", "/mpr", "/executive", "/vendors", "/map"]}
+          >
+            {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
+            <NavLink to={scoped("/issues")}>Issues</NavLink>
+            {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
+            {staff ? <NavLink to={scoped("/mpr")}>MSR</NavLink> : null}
+            {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
+            {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
+            <NavLink to={scoped("/map")}>Map</NavLink>
+          </NavGroup>
 
-          <div className="nav-group-label">TMS Dashboard</div>
-          {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
-          {staff ? <NavLink to="/highway-incidents">Incidents</NavLink> : null}
-          {staff ? <NavLink to="/its">ATMS/TMS/ITS</NavLink> : null}
+          {staff ? (
+            <NavGroup id="tms" title="TMS Dashboard" paths={["/toll", "/highway-incidents", "/its"]}>
+              <NavLink to="/toll">Toll Ops</NavLink>
+              <NavLink to="/highway-incidents">Incidents</NavLink>
+              <NavLink to="/its">ATMS/TMS/ITS</NavLink>
+            </NavGroup>
+          ) : null}
 
           {adminGov ? (
-            <>
-              <div className="nav-group-label">ATMS Dashboard</div>
+            <NavGroup id="atms" title="ATMS Dashboard" paths={["/integrations", "/backup-dr"]}>
               <NavLink to="/integrations">Integrations</NavLink>
               <NavLink to="/backup-dr">Backup/DR</NavLink>
               <NavLink to="/vendors">Vendors</NavLink>
-            </>
+            </NavGroup>
           ) : null}
 
-          <div className="nav-group-label">General / MIS</div>
-          <NavLink to="/staff-details">Staff Details</NavLink>
-          {staff ? <NavLink to={scoped("/queries")}>Query Raise</NavLink> : null}
-          {adminGov ? <NavLink to="/billing">GMC Billing</NavLink> : null}
-          {billingRoles ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
-          {staff ? <NavLink to="/documents">Documents</NavLink> : null}
-          {adminGov ? <NavLink to="/attendance">Attendance</NavLink> : null}
-          {staff ? <NavLink to="/security">Security</NavLink> : null}
-          <NavLink to="/notifications">
-            Notifications{unread ? ` (${unread})` : ""}
-          </NavLink>
-          <NavLink to="/reports">Reports</NavLink>
-          {adminGov ? (
-            <>
-              <NavLink to={scoped("/projects")}>Projects</NavLink>
-              <NavLink to={scoped("/rates")}>BOQ</NavLink>
-            </>
-          ) : null}
-          {role === "admin" ? <NavLink to="/users">Users</NavLink> : null}
+          <NavGroup
+            id="general"
+            title="General / MIS"
+            paths={[
+              "/staff-details",
+              "/queries",
+              "/billing",
+              "/contractor-billing",
+              "/documents",
+              "/attendance",
+              "/security",
+              "/notifications",
+              "/reports",
+              "/projects",
+              "/rates",
+              "/users",
+            ]}
+          >
+            <NavLink to="/staff-details">Staff Details</NavLink>
+            {staff ? <NavLink to={scoped("/queries")}>Query Raise</NavLink> : null}
+            {adminGov ? <NavLink to="/billing">GMC Billing</NavLink> : null}
+            {billingRoles ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
+            {staff ? <NavLink to="/documents">Documents</NavLink> : null}
+            {adminGov ? <NavLink to="/attendance">Attendance</NavLink> : null}
+            {staff ? <NavLink to="/security">Security</NavLink> : null}
+            <NavLink to="/notifications">
+              Notifications{unread ? ` (${unread})` : ""}
+            </NavLink>
+            <NavLink to="/reports">Reports</NavLink>
+            {adminGov ? (
+              <>
+                <NavLink to={scoped("/projects")}>Projects</NavLink>
+                <NavLink to={scoped("/rates")}>BOQ</NavLink>
+              </>
+            ) : null}
+            {role === "admin" ? <NavLink to="/users">Users</NavLink> : null}
+          </NavGroup>
         </nav>
         <div className="sidebar-foot">
           <button

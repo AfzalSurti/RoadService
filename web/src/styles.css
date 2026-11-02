@@ -1866,3 +1866,191 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .global-search-title { font-weight: 600; font-size: 0.9rem; }
 .global-search-sub { font-size: 0.78rem; color: var(--muted); }
 .search-hit { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Geo Designs & Research brand scene — intro after sign-in + sign-in backdrop */
+.brand-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--display);
+  --brand-sage: #cfd8b6;
+  --brand-blue: #3f59a2;
+  --brand-split: 41%;
+}
+.brand-top { position: absolute; inset: 0 0 calc(100% - var(--brand-split)) 0; background: var(--brand-sage); }
+.brand-bottom { position: absolute; inset: var(--brand-split) 0 0 0; background: var(--brand-blue); }
+.brand-since {
+  position: absolute;
+  top: clamp(1.5rem, 6vh, 3.5rem);
+  left: clamp(1.5rem, 5vw, 4rem);
+  color: #3d4a33;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  line-height: 1.15;
+  text-align: center;
+}
+.brand-center {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--brand-split) - clamp(90px, 15vh, 125px));
+  transform: translateX(-50%);
+  width: min(92vw, 820px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.brand-globe-wrap { width: clamp(180px, 30vh, 250px); aspect-ratio: 1; }
+.brand-globe {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  filter: drop-shadow(0 10px 30px rgba(10, 25, 60, 0.35));
+  user-select: none;
+}
+.brand-name {
+  margin-top: clamp(1.5rem, 5vh, 2.6rem);
+  font-size: clamp(1.25rem, 3vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brand-rule {
+  width: 100%;
+  max-width: 740px;
+  height: 1px;
+  margin: clamp(1rem, 3.5vh, 1.8rem) 0;
+  background: rgba(15, 23, 42, 0.75);
+}
+.brand-tagline {
+  display: flex;
+  gap: 0.9rem;
+  justify-content: center;
+  font-size: clamp(0.9rem, 1.9vw, 1.45rem);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+.brand-dot { opacity: 0.85; }
+
+/* Intro: full-screen overlay with the sequence below (≈3.6 s) */
+.intro-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  cursor: pointer;
+  transition: opacity 0.5s ease;
+}
+.intro-splash.leaving { opacity: 0; }
+.intro-skip {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  animation: brand-fade 0.6s ease 1.2s both;
+}
+.brand-scene.animated .brand-top { animation: brand-drop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.brand-scene.animated .brand-bottom { animation: brand-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.brand-scene.animated .brand-since { animation: brand-fade 0.6s ease 0.9s both; }
+.brand-scene.animated .brand-globe { animation: brand-globe-in 1.1s cubic-bezier(0.18, 0.9, 0.25, 1.15) 0.35s both; }
+.brand-scene.animated .brand-name { animation: brand-name-in 0.75s ease-out 1.25s both; }
+.brand-scene.animated .brand-rule { transform-origin: center; animation: brand-rule-in 0.6s ease-out 1.75s both; }
+.brand-scene.animated .brand-tagline > * { animation: brand-up 0.45s ease-out both; }
+.brand-scene.animated .brand-tagline > :nth-child(1) { animation-delay: 2.05s; }
+.brand-scene.animated .brand-tagline > :nth-child(2) { animation-delay: 2.2s; }
+.brand-scene.animated .brand-tagline > :nth-child(3) { animation-delay: 2.3s; }
+.brand-scene.animated .brand-tagline > :nth-child(4) { animation-delay: 2.45s; }
+.brand-scene.animated .brand-tagline > :nth-child(5) { animation-delay: 2.55s; }
+@keyframes brand-drop { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes brand-rise { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes brand-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes brand-globe-in {
+  0% { opacity: 0; transform: scale(0.2) rotate(-200deg); }
+  70% { opacity: 1; transform: scale(1.06) rotate(8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes brand-name-in {
+  from { opacity: 0; transform: translateY(16px); letter-spacing: 0.32em; }
+  to { opacity: 1; transform: none; letter-spacing: 0.02em; }
+}
+@keyframes brand-rule-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes brand-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .brand-scene.animated * { animation-duration: 0.01s !important; animation-delay: 0s !important; }
+}
+
+/* Sign-in page on the brand backdrop: brand on the left, card on the right */
+.login-page.branded { position: relative; isolation: isolate; }
+.login-brand { position: fixed; z-index: -1; }
+.login-brand .brand-globe-wrap { animation: brand-float 6s ease-in-out infinite; }
+@keyframes brand-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.login-page.branded .portal-topnav { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
+.login-page.branded .login-card { box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35); }
+@media (min-width: 1080px) {
+  .login-brand .brand-center { left: 32%; width: min(56vw, 720px); }
+  .login-page.branded { align-items: stretch; }
+  .login-page.branded .login-card { align-self: flex-end; margin: 2rem max(4vw, 1.5rem) 0 0; }
+}
+@media (max-width: 1079px) {
+  .login-brand .brand-name, .login-brand .brand-rule, .login-brand .brand-tagline { display: none; }
+  .login-brand .brand-center { top: auto; bottom: 2rem; }
+  .login-brand .brand-globe-wrap { width: 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-brand .brand-globe-wrap { animation: none; }
+}
+@media (max-width: 760px) {
+  .login-page.branded { overflow-x: hidden; padding-inline: 1rem; }
+  .login-page.branded .portal-topnav { flex-wrap: wrap; }
+  .login-page.branded .portal-topnav .developer-credit { flex-basis: 100%; order: 3; white-space: normal; }
+}
+/* Sign-in: client logos in the top corners */
+.login-logos {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.login-logo {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+}
+.login-logo img { display: block; height: clamp(38px, 6vw, 58px); width: auto; max-width: 42vw; object-fit: contain; }
+.login-logo-slot { display: block; }
+.login-page.branded .login-brand .brand-since { display: none; }
+/* Sidebar: collapsible groups with expand / collapse arrows */
+.nav-group { display: grid; gap: 0.25rem; }
+.sidebar .nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.7rem;
+  padding: 0.45rem 0.85rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sidebar .nav-group-toggle:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--ink); }
+.nav-group-arrow {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--accent);
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.nav-group.open .nav-group-arrow { transform: none; }
+.nav-group-items { display: grid; gap: 0.25rem; }

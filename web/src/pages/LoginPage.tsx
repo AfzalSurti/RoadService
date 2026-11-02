@@ -2,8 +2,19 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { DeveloperCredit } from "../components/DeveloperCredit";
+import { BrandScene, queueIntro } from "../components/IntroSplash";
 import { PasswordInput } from "../components/PasswordInput";
 import * as v from "../lib/validation";
+
+function PartnerLogo({ src, alt }: { src: string; alt: string }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return <span className="login-logo-slot" aria-hidden="true" />;
+  return (
+    <span className="login-logo">
+      <img src={src} alt={alt} onError={() => setOk(false)} />
+    </span>
+  );
+}
 
 export function LoginPage() {
   const { token, login } = useAuth();
@@ -37,10 +48,13 @@ export function LoginPage() {
     }
     setBusy(true);
     setError(null);
+    // Company intro plays once the portal opens (queued before the token lands).
+    queueIntro();
     try {
       await login(email.trim(), password, mfaPin.trim() || undefined);
       navigate("/dashboard");
     } catch (err: unknown) {
+      queueIntro(false);
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setBusy(false);
@@ -48,7 +62,14 @@ export function LoginPage() {
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page branded">
+      {/* Geo Designs & Research backdrop behind the sign-in card */}
+      <BrandScene className="login-brand" />
+      {/* Client logos: NHIT top-left, NHIPMPL top-right (files in /public/logos; hidden if missing) */}
+      <div className="login-logos">
+        <PartnerLogo src="/logos/nhit.png" alt="NHIT — National Highways Infra Trust" />
+        <PartnerLogo src="/logos/nhipmpl.png" alt="NHIPMPL — National Highways InvIT Project Managers Private Limited" />
+      </div>
       <header className="portal-topnav">
         <Link to="/" className="brand">
           Road<span>Service</span>
