@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.packages import PACKAGE_OVERVIEWS
+from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_OVERVIEWS
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.billing import DocumentFolder, PortalDocument, Vendor
@@ -299,6 +299,7 @@ async def _ensure_folder_tree(db: AsyncSession) -> None:
                 name=stretch,
                 title=details.get("title"),
                 short_name=details.get("short_name"),
+                image_url=PACKAGE_IMAGES.get(stretch),
                 location=details.get("location", stretch),
                 description=PACKAGE_OVERVIEWS.get(stretch, f"Corridor stretch folder project: {stretch}"),
                 chainage_from=details.get("chainage_from", "0+000"),

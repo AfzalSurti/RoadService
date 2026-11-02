@@ -98,6 +98,7 @@ export function ProjectsPage() {
       chainage_from: body.chainage_from ?? undefined,
       chainage_to: body.chainage_to ?? undefined,
     });
+    if (values.photo) await api.uploadProjectImage(token, created.id, values.photo);
     setShowCreate(false);
     setMsg(`Project “${projectShortName(created)}” created.`);
     load();
@@ -107,6 +108,7 @@ export function ProjectsPage() {
   const onUpdate = async (values: ProjectFormValues) => {
     if (!token || !selected) return;
     const updated = await api.updateProject(token, selected.id, toBody(values));
+    if (values.photo) await api.uploadProjectImage(token, selected.id, values.photo);
     setMsg(`Project “${projectShortName(updated)}” saved. The dashboard shows the new details.`);
     load();
     selectProject(updated.id);
@@ -238,6 +240,7 @@ export function ProjectsPage() {
           <h2>Edit · {projectShortName(selected)}</h2>
           <ProjectForm
             key={selected.id}
+            currentImage={selected.image_url}
             initial={projectToForm(selected)}
             contractors={contractors}
             surveyors={surveyors}

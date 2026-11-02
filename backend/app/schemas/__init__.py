@@ -77,6 +77,7 @@ class ProjectOut(BaseModel):
     name: str
     title: str | None = None
     short_name: str | None = None
+    image_url: str | None = None
     location: str
     description: str | None
     chainage_from: str | None

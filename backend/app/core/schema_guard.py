@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-025 and are
+browsers report as a CORS error. These statements mirror alembic 023-026 and are
 safe to run on every boot.
 """
 
@@ -10,7 +10,7 @@ import logging
 
 from sqlalchemy import text
 
-from app.catalog.packages import PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
+from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
 from app.core.database import engine
 
 log = logging.getLogger(__name__)
@@ -93,6 +93,12 @@ async def ensure_schema() -> None:
                     )
                 log.warning("schema_guard: added projects.short_name")
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
+            await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024)"))
+            for name, image in PACKAGE_IMAGES.items():
+                await conn.execute(
+                    text("UPDATE projects SET image_url = :i WHERE name = :n AND image_url IS NULL"),
+                    {"n": name, "i": image},
+                )
             # Package overview text replaces only the auto placeholder, never a portal edit.
             for name, overview in PACKAGE_OVERVIEWS.items():
                 await conn.execute(

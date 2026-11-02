@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,6 +11,7 @@ from app.models.enums import UserRole
 from app.models.project import Project
 from app.models.user import User
 from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -115,5 +116,21 @@ async def update_project(
             await db.execute(select(User).where(User.id.in_(surveyor_ids), User.role == UserRole.SURVEYOR))
         ).scalars().all()
         project.surveyors = list(surveyors)
+    await db.commit()
+    return await _load_project(db, project_id)
+
+
+@router.post("/{project_id}/image", response_model=ProjectOut)
+async def upload_project_image(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    photo: Annotated[UploadFile, File()],
+):
+    """Replace the package photo shown on the dashboard tile."""
+    if not (photo.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Upload an image file (JPG / PNG / WebP)")
+    project = await _load_project(db, project_id)
+    project.image_url = await save_upload(photo, f"project_{project_id}")
     await db.commit()
     return await _load_project(db, project_id)

@@ -1,3 +1,4 @@
+import { mediaUrl } from "../api";
 import type { Project } from "../types";
 
 /** Official title when set, else the short package name. */
@@ -8,6 +9,13 @@ export function projectTitle(p: Pick<Project, "name" | "title">): string {
 /** Short tile label when set, else the package name. */
 export function projectShortName(p: Pick<Project, "name" | "short_name">): string {
   return p.short_name?.trim() || p.name;
+}
+
+/** Tile photo URL: bundled web assets ("/packages/…") as-is, uploads via the API. */
+export function projectImageUrl(p: Pick<Project, "image_url">): string | null {
+  const src = p.image_url?.trim();
+  if (!src) return null;
+  return src.startsWith("/") && !src.startsWith("/uploads/") ? src : mediaUrl(src);
 }
 
 /** Persist the active project across portal pages (dashboard → issues/RFI/…). */

@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { projectImageUrl } from "../lib/projectScope";
 import type { Project, User } from "../types";
 
 export type ProjectFormValues = {
@@ -11,6 +12,8 @@ export type ProjectFormValues = {
   description: string;
   contractor_ids: number[];
   surveyor_ids: number[];
+  /** New tile photo to upload after saving (null = keep current). */
+  photo: File | null;
 };
 
 export function projectToForm(p?: Project | null): ProjectFormValues {
@@ -24,6 +27,7 @@ export function projectToForm(p?: Project | null): ProjectFormValues {
     description: p?.description || "",
     contractor_ids: p?.contractors.map((u) => u.id) || [],
     surveyor_ids: p?.surveyors.map((u) => u.id) || [],
+    photo: null,
   };
 }
 
@@ -64,6 +68,7 @@ function TeamPicker({
 
 /** Create / edit form for a project package — every field the portal shows is editable here. */
 export function ProjectForm({
+  currentImage,
   initial,
   contractors,
   surveyors,
@@ -71,6 +76,8 @@ export function ProjectForm({
   onSubmit,
   onCancel,
 }: {
+  /** Existing project's photo, shown until a new one is picked. */
+  currentImage?: string | null;
   initial: ProjectFormValues;
   contractors: User[];
   surveyors: User[];
@@ -84,6 +91,19 @@ export function ProjectForm({
   const [error, setError] = useState<string | null>(null);
 
   const set = (key: keyof ProjectFormValues, value: string) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Preview the newly picked photo; fall back to the saved one.
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!form.photo) {
+      setPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(form.photo);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [form.photo]);
+  const shownPhoto = photoPreview || (currentImage ? projectImageUrl({ image_url: currentImage }) : null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -135,6 +155,24 @@ export function ProjectForm({
           placeholder="e.g. Tolling, Operation, Maintenance & Transfer of …"
         />
       </label>
+
+      <h3 className="span-2 form-section">Dashboard photo</h3>
+      <div className="span-2 photo-field">
+        {shownPhoto ? (
+          <img src={shownPhoto} alt="Package photo" className="photo-field-preview" />
+        ) : (
+          <div className="photo-field-preview photo-field-empty">No photo</div>
+        )}
+        <label>
+          {currentImage ? "Change photo" : "Upload photo"}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setForm((f) => ({ ...f, photo: e.target.files?.[0] || null }))}
+          />
+          <small className="muted">Shown on the package tile. Landscape images (about 16:9) look best.</small>
+        </label>
+      </div>
 
       <h3 className="span-2 form-section">Location</h3>
       <label className="span-2">

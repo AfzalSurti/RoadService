@@ -30,6 +30,8 @@ class Project(Base):
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Short label for dashboard tiles / pickers (e.g. "Mahagaon – Khawasa").
     short_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Tile photo: a web asset path ("/packages/x.jpg"), Cloudinary URL or uploads/ filename.
+    image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -1,10 +1,18 @@
-"""Default overview text for the three O&M packages (keyed by package `name`).
+"""Default overview text and tile photos for the three O&M packages (keyed by package `name`).
 
-Loaded into projects.description only while it still holds the auto-generated
-placeholder, so edits made in the portal are never overwritten.
+Loaded into projects.description / image_url only while they still hold the
+auto-generated placeholder (or are empty), so edits made in the portal are never
+overwritten.
 """
 
 PLACEHOLDER_PREFIX = "Corridor stretch folder project:"
+
+# Default tile photos (static files in web/public/packages); replaceable from the portal.
+PACKAGE_IMAGES = {
+    "Jabalpur - Lakhnadon": "/packages/jabalpur-lakhnadon.jpg",
+    "Lakhnadon - Khawasa": "/packages/mahagaon-khawasa.jpg",
+    "Bokhedi - Kelapur": "/packages/borkhedi-kelapur.jpg",
+}
 
 PACKAGE_OVERVIEWS = {
     "Jabalpur - Lakhnadon": (

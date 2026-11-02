@@ -16,6 +16,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
 import {
+  projectImageUrl,
   projectShortName,
   projectTitle,
   resolveProjectId,
@@ -230,9 +231,17 @@ export function DashboardPage() {
                   setShowHero(false);
                 }}
               >
-                <span className="dash-hero-icon" aria-hidden="true">
-                  <HighwayIcon />
-                </span>
+                {projectImageUrl(p) ? (
+                  <span
+                    className="dash-hero-photo"
+                    aria-hidden="true"
+                    style={{ backgroundImage: `url("${projectImageUrl(p)}")` }}
+                  />
+                ) : (
+                  <span className="dash-hero-icon" aria-hidden="true">
+                    <HighwayIcon />
+                  </span>
+                )}
                 <span className="dash-hero-tile-name">
                   <span className="dash-hero-tile-no">{projects.indexOf(p) + 1}</span>
                   {projectShortName(p)}

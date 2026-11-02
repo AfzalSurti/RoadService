@@ -130,6 +130,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  uploadProjectImage: (token: string, id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("photo", file);
+    return request<Project>(`/api/v1/projects/${id}/image`, { method: "POST", token, body: fd });
+  },
+
   users: (token: string, role?: string) =>
     request<User[]>(`/api/v1/users${role ? `?role=${role}` : ""}`, { token }),
 

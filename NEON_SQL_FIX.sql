@@ -231,3 +231,6 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255);
 
 -- 025: project short name for dashboard tiles (also applied automatically on startup)
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS short_name VARCHAR(120);
+
+-- 026: project tile photo (also applied automatically on startup)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024);
