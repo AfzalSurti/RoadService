@@ -1,8 +1,11 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
+from io import BytesIO
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +17,7 @@ from app.models.billing import Vendor
 from app.models.project import Project
 from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
+from app.services.boq_excel import read_boq_rows, template_bytes
 from app.services.issue_service import notify_involved
 from app.schemas import (
     ProjectRateSummary,
@@ -478,4 +482,96 @@ async def create_vendor_bill(
         created_at=datetime.now(timezone.utc),
         lines=lines,
     )
+
+
+@router.get("/template")
+async def boq_template(_: Annotated[User, Depends(get_current_user)]):
+    """Sample BOQ sheet to fill in and import (Item No., Description, Unit, Quantity, Rate, Executed)."""
+    content = await asyncio.to_thread(template_bytes)
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="BOQ_format.xlsx"'},
+    )
+
+
+@router.post("/import")
+async def import_boq(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    project_id: Annotated[int, Form()],
+    file: Annotated[UploadFile, File()],
+    vendor_id: Annotated[int | None, Form()] = None,
+):
+    """Import BOQ items from the filled sample sheet into a package (optionally for a vendor).
+
+    A row whose Item No. already exists for that package / vendor updates the item;
+    other rows are added. "Quantity Executed till Date" sets the completed quantity.
+    """
+    await _get_project(db, project_id)
+    await _check_vendor(db, vendor_id, project_id)
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload the BOQ Excel file (.xlsx)")
+    try:
+        rows, problems = await asyncio.to_thread(read_boq_rows, await file.read())
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read the Excel file: {exc}") from exc
+    if not rows and not problems:
+        raise HTTPException(status_code=400, detail="No BOQ rows found — fill the sheet from row 2 (Item No., Description, Unit, Quantity, Rate)")
+
+    existing = {
+        i.item_no.strip().lower(): i
+        for i in (
+            await db.execute(
+                select(RateItem).where(
+                    RateItem.project_id == project_id,
+                    RateItem.vendor_id.is_(None) if vendor_id is None else RateItem.vendor_id == vendor_id,
+                )
+            )
+        ).scalars().all()
+    }
+    created = updated = 0
+    for row in rows:
+        item = existing.get(row["item_no"].lower())
+        if item is None:
+            item = RateItem(
+                project_id=project_id,
+                vendor_id=vendor_id,
+                item_no=row["item_no"],
+                description=row["description"],
+                unit=row["unit"],
+                boq_quantity=row["quantity"],
+                rate=row["rate"],
+                boq_amount=(row["quantity"] * row["rate"]).quantize(Decimal("0.01")),
+                executed_quantity=Decimal("0"),
+                executed_amount=Decimal("0"),
+            )
+            db.add(item)
+            await db.flush()
+            existing[row["item_no"].lower()] = item
+            created += 1
+        else:
+            item.description = row["description"]
+            item.unit = row["unit"]
+            item.boq_quantity = row["quantity"]
+            item.rate = row["rate"]
+            item.boq_amount = (row["quantity"] * row["rate"]).quantize(Decimal("0.01"))
+            item.executed_amount = ((item.executed_quantity or Decimal("0")) * row["rate"]).quantize(Decimal("0.01"))
+            updated += 1
+        if row["executed"] is not None:
+            if (item.executed_quantity or Decimal("0")) > row["quantity"]:
+                problems.append(f"Row {row['row']} (item {row['item_no']}): executed quantity is above the new BOQ quantity")
+            else:
+                _set_completed(db, item, row["executed"], user, f"Imported from Excel ({file.filename})")
+    await notify_involved(
+        db,
+        "BOQ imported",
+        f"{created} BOQ item(s) added and {updated} updated from {file.filename} by {user.full_name}",
+        project_id=project_id,
+        link=f"/rates?project={project_id}",
+        actor=user,
+        include_team=False,
+    )
+    await db.commit()
+    return {"created": created, "updated": updated, "skipped": len(problems), "problems": problems[:50]}
 

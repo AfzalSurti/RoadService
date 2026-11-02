@@ -443,6 +443,26 @@ export const api = {
     }
   ) => request<VendorBill>("/api/v1/rates/bills", { method: "POST", token, body: JSON.stringify(body) }),
 
+  /** Sample BOQ sheet (BOQ format with row formulas) to fill and import. */
+  downloadBoqTemplate: async (token: string) => {
+    const res = await fetch(`${API_URL}/api/v1/rates/template`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new ApiError("Could not download the BOQ sample", res.status);
+    return res.blob();
+  },
+
+  /** Import BOQ items from the filled sample into a package (optionally for one vendor). */
+  importBoq: (token: string, projectId: number, file: File, vendorId?: number | null) => {
+    const fd = new FormData();
+    fd.append("project_id", String(projectId));
+    if (vendorId) fd.append("vendor_id", String(vendorId));
+    fd.append("file", file);
+    return request<{ created: number; updated: number; skipped: number; problems: string[] }>("/api/v1/rates/import", {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
   deleteRateItem: (token: string, id: number) =>
     request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),
 

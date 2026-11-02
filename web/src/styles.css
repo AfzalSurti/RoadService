@@ -2082,3 +2082,13 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .task-text { flex: 1; display: grid; gap: 0.15rem; }
 .task-text span { color: var(--muted); font-size: 0.88rem; }
 .task-clear { margin: 0; color: #16a34a; font-weight: 600; }
+/* BOQ Excel import result */
+.boq-import-result {
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #16a34a;
+  background: color-mix(in srgb, #16a34a 10%, transparent);
+}
+.boq-import-result.warn { border-color: #ea580c; background: color-mix(in srgb, #ea580c 10%, transparent); }
+.boq-import-result ul { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; max-height: 180px; overflow-y: auto; }

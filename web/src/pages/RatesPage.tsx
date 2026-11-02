@@ -77,6 +77,49 @@ export function RatesPage() {
   const [qtyItemId, setQtyItemId] = useState<number | null>(null);
   const [qtyValue, setQtyValue] = useState("");
   const [qtyNote, setQtyNote] = useState("");
+  // Excel import (BOQ format)
+  const [showImport, setShowImport] = useState(false);
+  const [importVendor, setImportVendor] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    skipped: number;
+    problems: string[];
+  } | null>(null);
+
+  const downloadSample = async () => {
+    if (!token) return;
+    try {
+      const blob = await api.downloadBoqTemplate(token);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "BOQ_format.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Download failed");
+    }
+  };
+
+  const runImport = async () => {
+    if (!token || !projectId || !importFile) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.importBoq(token, Number(projectId), importFile, importVendor ? Number(importVendor) : null);
+      setImportResult(result);
+      setImportFile(null);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  };
   const canEnterQty = !isReadonly && (role === "admin" || role === "surveyor" || role === "contractor");
 
   const load = async () => {
@@ -274,11 +317,31 @@ export function RatesPage() {
               </label>
             ) : null}
           </div>
-          {canManage ? (
-            <button className="btn" type="button" disabled={!projectId} onClick={openCreate}>
-              Add item
+          <div className="btn-row">
+            <button className="btn ghost" type="button" onClick={downloadSample}>
+              Download sample (Excel)
             </button>
-          ) : null}
+            {canManage ? (
+              <>
+                <button
+                  className="btn secondary"
+                  type="button"
+                  disabled={!projectId}
+                  onClick={() => {
+                    setImportVendor(vendorFilter && vendorFilter !== UNASSIGNED ? vendorFilter : "");
+                    setImportFile(null);
+                    setImportResult(null);
+                    setShowImport(true);
+                  }}
+                >
+                  Import Excel
+                </button>
+                <button className="btn" type="button" disabled={!projectId} onClick={openCreate}>
+                  Add item
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {projectId ? (
@@ -401,7 +464,7 @@ export function RatesPage() {
                       ? "Select a project."
                       : items.length
                         ? "No BOQ items for this vendor."
-                        : `No BOQ items yet.${canManage ? " Click Add item." : ""}`}
+                        : `No BOQ items yet.${canManage ? " Click Add item or Import Excel." : ""}`}
                   </td>
                 </tr>
               ) : null}
@@ -552,6 +615,61 @@ export function RatesPage() {
             void load();
           }}
         />
+      ) : null}
+
+      {showImport ? (
+        <div className="modal-backdrop" onClick={() => setShowImport(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>Import BOQ from Excel</h2>
+            <p className="muted">
+              Fill the sample sheet from row 2: <strong>Item No., Description, Unit, Quantity, Rate</strong> and,
+              if any, <strong>Quantity Executed till Date</strong>. Amount, balance and progress are calculated. A
+              row whose Item No. already exists for this vendor updates that item; new numbers are added.
+            </p>
+            <div className="form-grid">
+              <label className="span-2">
+                Vendor
+                <select value={importVendor} onChange={(e) => setImportVendor(e.target.value)}>
+                  <option value="">No vendor (unassigned)</option>
+                  {projectVendors.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="span-2">
+                Filled BOQ file (.xlsx)
+                <input type="file" accept=".xlsx,.xlsm" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+              </label>
+            </div>
+            {importResult ? (
+              <div className={importResult.skipped ? "boq-import-result warn" : "boq-import-result"}>
+                <strong>
+                  {importResult.created} added · {importResult.updated} updated · {importResult.skipped} skipped
+                </strong>
+                {importResult.problems.length ? (
+                  <ul>
+                    {importResult.problems.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="btn-row" style={{ marginTop: "1rem" }}>
+              <button className="btn" type="button" onClick={runImport} disabled={busy || !importFile}>
+                {busy ? "Importing…" : "Import"}
+              </button>
+              <button className="btn ghost" type="button" onClick={downloadSample}>
+                Download sample
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setShowImport(false)}>
+                {importResult ? "Done" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {showModal ? (
