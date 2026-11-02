@@ -121,6 +121,8 @@ export type TokenResponse = {
 export type RateItem = {
   id: number;
   project_id: number;
+  /** Vendor executing the item; its bills roll up per vendor. */
+  vendor_id?: number | null;
   item_no: string;
   description: string;
   unit: string;
@@ -129,6 +131,8 @@ export type RateItem = {
   boq_amount: number;
   executed_quantity: number;
   executed_amount: number;
+  remaining_quantity?: number;
+  remaining_amount?: number;
   progress_pct?: number | null;
   remarks?: string | null;
   created_at: string;

@@ -219,15 +219,20 @@ class NotificationOut(BaseModel):
 
 class RateItemCreate(BaseModel):
     project_id: int
+    vendor_id: int | None = None
     item_no: str = Field(min_length=1, max_length=64)
     description: str = Field(min_length=2)
     unit: str = Field(min_length=1, max_length=32)
     boq_quantity: float = Field(gt=0)
     rate: float = Field(ge=0)
+    # Quantity already completed (billed) when the item is entered; amount = qty x rate.
+    completed_quantity: float = Field(default=0, ge=0)
     remarks: str | None = None
 
 
 class RateItemUpdate(BaseModel):
+    vendor_id: int | None = None
+    completed_quantity: float | None = Field(default=None, ge=0)
     item_no: str | None = Field(default=None, min_length=1, max_length=64)
     description: str | None = Field(default=None, min_length=2)
     unit: str | None = Field(default=None, min_length=1, max_length=32)
@@ -240,6 +245,7 @@ class RateItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     project_id: int
+    vendor_id: int | None = None
     item_no: str
     description: str
     unit: str
@@ -248,6 +254,8 @@ class RateItemOut(BaseModel):
     boq_amount: float
     executed_quantity: float
     executed_amount: float
+    remaining_quantity: float = 0
+    remaining_amount: float = 0
     progress_pct: float | None = None
     remarks: str | None
     created_at: datetime

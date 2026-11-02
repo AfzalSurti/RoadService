@@ -315,11 +315,13 @@ export const api = {
     token: string,
     body: {
       project_id: number;
+      vendor_id?: number | null;
       item_no: string;
       description: string;
       unit: string;
       boq_quantity: number;
       rate: number;
+      completed_quantity?: number;
       remarks?: string;
     }
   ) =>
@@ -339,6 +341,22 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  updateRateItem: (
+    token: string,
+    id: number,
+    body: Partial<{
+      vendor_id: number | null;
+      item_no: string;
+      description: string;
+      unit: string;
+      boq_quantity: number;
+      rate: number;
+      completed_quantity: number;
+      remarks: string | null;
+    }>
+  ) =>
+    request<RateItem>(`/api/v1/rates/${id}`, { method: "PATCH", token, body: JSON.stringify(body) }),
 
   deleteRateItem: (token: string, id: number) =>
     request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.enums import UserRole
+from app.models.billing import Vendor
 from app.models.project import Project
 from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
@@ -49,6 +50,7 @@ def _to_out(item: RateItem, *, hide_money: bool = False) -> RateItemOut | RateIt
     return RateItemOut(
         id=item.id,
         project_id=item.project_id,
+        vendor_id=item.vendor_id,
         item_no=item.item_no,
         description=item.description,
         unit=item.unit,
@@ -57,6 +59,8 @@ def _to_out(item: RateItem, *, hide_money: bool = False) -> RateItemOut | RateIt
         boq_amount=float(item.boq_amount),
         executed_quantity=executed_qty,
         executed_amount=float(item.executed_amount),
+        remaining_quantity=max(boq_qty - executed_qty, 0),
+        remaining_amount=max(float(item.boq_amount) - float(item.executed_amount), 0),
         progress_pct=progress,
         remarks=item.remarks,
         created_at=item.created_at,
@@ -85,6 +89,36 @@ def _can_view_project(user: User, project: Project) -> bool:
     if user.role == UserRole.CONTRACTOR:
         return any(c.id == user.id for c in project.contractors)
     return False
+
+
+async def _check_vendor(db: AsyncSession, vendor_id: int | None, project_id: int) -> None:
+    if vendor_id is None:
+        return
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=400, detail="Vendor not found")
+    if vendor.project_id not in (None, project_id):
+        raise HTTPException(status_code=400, detail="Vendor belongs to another package")
+
+
+def _set_completed(db: AsyncSession, item: RateItem, completed: Decimal, user: User, note: str) -> None:
+    """Set the completed (executed) quantity, logging the change as a quantity entry."""
+    if completed > item.boq_quantity:
+        raise HTTPException(status_code=400, detail="Completed quantity cannot exceed the BOQ quantity")
+    delta = completed - (item.executed_quantity or Decimal("0"))
+    item.executed_quantity = completed
+    item.executed_amount = (completed * item.rate).quantize(Decimal("0.01"))
+    if delta:
+        db.add(
+            QuantityEntry(
+                rate_item_id=item.id,
+                project_id=item.project_id,
+                quantity=delta,
+                amount=(delta * item.rate).quantize(Decimal("0.01")),
+                entered_by_id=user.id,
+                note=note,
+            )
+        )
 
 
 @router.get("")
@@ -140,13 +174,15 @@ async def project_rate_summary(
 async def create_rate_item(
     body: RateItemCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     await _get_project(db, body.project_id)
+    await _check_vendor(db, body.vendor_id, body.project_id)
     qty = _dec(body.boq_quantity)
     rate = _dec(body.rate)
     item = RateItem(
         project_id=body.project_id,
+        vendor_id=body.vendor_id,
         item_no=body.item_no.strip(),
         description=body.description.strip(),
         unit=body.unit.strip(),
@@ -158,6 +194,9 @@ async def create_rate_item(
         remarks=body.remarks,
     )
     db.add(item)
+    await db.flush()
+    if body.completed_quantity:
+        _set_completed(db, item, _dec(body.completed_quantity), user, "Completed quantity entered with BOQ item")
     await db.commit()
     await db.refresh(item)
     return _to_out(item)
@@ -168,12 +207,16 @@ async def update_rate_item(
     item_id: int,
     body: RateItemUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     item = (await db.execute(select(RateItem).where(RateItem.id == item_id))).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Rate item not found")
     data = body.model_dump(exclude_unset=True)
+    completed = data.pop("completed_quantity", None)
+    if "vendor_id" in data:
+        await _check_vendor(db, data["vendor_id"], item.project_id)
+        item.vendor_id = data.pop("vendor_id")
     for key, value in data.items():
         if key in ("boq_quantity", "rate") and value is not None:
             setattr(item, key, _dec(value))
@@ -183,6 +226,8 @@ async def update_rate_item(
             item.remarks = value
     item.boq_amount = (item.boq_quantity * item.rate).quantize(Decimal("0.01"))
     item.executed_amount = (item.executed_quantity * item.rate).quantize(Decimal("0.01"))
+    if completed is not None:
+        _set_completed(db, item, _dec(completed), user, "Completed quantity updated")
     await db.commit()
     await db.refresh(item)
     return _to_out(item)

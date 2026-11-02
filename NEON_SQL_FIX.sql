@@ -260,3 +260,7 @@ CREATE TABLE IF NOT EXISTS project_inventory_items (
   description TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_project_inventory_items_project_id ON project_inventory_items (project_id);
+
+-- 030: BOQ item vendor (also applied automatically on startup)
+ALTER TABLE rate_items ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id);

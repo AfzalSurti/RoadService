@@ -2,32 +2,68 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
-import type { Project, RateItem } from "../types";
+import type { RateItem, Vendor } from "../types";
 import * as v from "../lib/validation";
 import { projectIdFromUrl, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
 
 const emptyForm = {
+  vendor_id: "",
   item_no: "",
   description: "",
   unit: "km",
   boq_quantity: "",
   rate: "",
+  completed_quantity: "",
   remarks: "",
 };
+
+const UNASSIGNED = "none";
 
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function qty(n: number) {
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 4 });
+}
+
+function Progress({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="muted">—</span>;
+  return (
+    <div className="boq-progress" title={`${pct}%`}>
+      <div className="boq-progress-bar" style={{ width: `${Math.min(pct, 100)}%` }} />
+      <span>{pct}%</span>
+    </div>
+  );
+}
+
+function sums(items: RateItem[]) {
+  const total = items.reduce((s, i) => s + Number(i.boq_amount || 0), 0);
+  const done = items.reduce((s, i) => s + Number(i.executed_amount || 0), 0);
+  return {
+    total,
+    done,
+    remaining: Math.max(total - done, 0),
+    pct: total ? Math.round((done / total) * 10000) / 100 : null,
+  };
+}
+
+/**
+ * BOQ as per CA: each item belongs to a vendor; completed quantity × rate is the
+ * billed amount and the rest remains for later bills, summed per vendor.
+ */
 export function RatesPage() {
   const { token, role, isReadonly } = useAuth();
-  const [allProjects, setProjects] = useState<Project[]>([]);
-  // Sidebar package scope: only the chosen packages' rows are shown.
+  const canManage = role === "admin" && !isReadonly;
+  const canSeeVendors = role === "admin" || role === "government" || role === "contractor";
+  // Sidebar package scope: the project picker and default package follow it.
   const { inScope } = usePackageScope();
-  const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [projectId, setProjectId] = useState<number | "">("");
   const [items, setItems] = useState<RateItem[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendorFilter, setVendorFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<RateItem | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
@@ -59,44 +95,96 @@ export function RatesPage() {
   useEffect(() => {
     if (!token) return;
     api.projects(token).then((p) => {
-      setProjects(p);
       const fromQuery = projectIdFromUrl(new URLSearchParams(window.location.search).get("project"));
-      if (fromQuery && p.some((x) => x.id === fromQuery)) {
-        setProjectId(fromQuery);
-      } else if (p[0]) {
-        setProjectId(p[0].id);
-      }
+      const visible = p.filter((x) => inScope(x.id)).sort((a, b) => a.id - b.id);
+      if (fromQuery && p.some((x) => x.id === fromQuery)) setProjectId(fromQuery);
+      else if (visible[0]) setProjectId(visible[0].id);
     });
+    if (canSeeVendors) {
+      api
+        .vendors(token)
+        .then(setVendors)
+        .catch(() => setVendors([]));
+    }
   }, [token]);
 
   useEffect(() => {
-    load();
+    setVendorFilter("");
+    void load();
   }, [token, projectId]);
 
-  const totals = useMemo(() => {
-    const boq = items.reduce((s, i) => s + Number(i.boq_amount || 0), 0);
-    const exec = items.reduce((s, i) => s + Number(i.executed_amount || 0), 0);
-    return {
-      boq,
-      exec,
-      pct: boq ? Math.round((exec / boq) * 10000) / 100 : null,
-    };
-  }, [items]);
+  // Vendors that can carry this package's BOQ (linked to it, or to every package).
+  const projectVendors = useMemo(
+    () => vendors.filter((x) => !projectId || x.project_id == null || x.project_id === projectId),
+    [vendors, projectId]
+  );
+  const vendorName = (id: number | null | undefined) =>
+    id ? vendors.find((x) => x.id === id)?.name || `Vendor #${id}` : "Unassigned";
+
+  const shownItems = useMemo(() => {
+    if (!vendorFilter) return items;
+    if (vendorFilter === UNASSIGNED) return items.filter((i) => !i.vendor_id);
+    return items.filter((i) => String(i.vendor_id) === vendorFilter);
+  }, [items, vendorFilter]);
+  const totals = useMemo(() => sums(shownItems), [shownItems]);
+
+  // Bill summary per vendor across all of this package's BOQ items.
+  const vendorBills = useMemo(() => {
+    const groups = new Map<number | null, RateItem[]>();
+    for (const i of items) {
+      const key = i.vendor_id ?? null;
+      groups.set(key, [...(groups.get(key) || []), i]);
+    }
+    return [...groups.entries()]
+      .map(([id, list]) => ({ id, name: vendorName(id), count: list.length, ...sums(list) }))
+      .sort((a, b) => (a.id == null ? 1 : b.id == null ? -1 : a.name.localeCompare(b.name)));
+  }, [items, vendors]);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, vendor_id: vendorFilter && vendorFilter !== UNASSIGNED ? vendorFilter : "" });
+    setFieldErrors({});
+    setShowModal(true);
+  };
+  const openEdit = (i: RateItem) => {
+    setEditing(i);
+    setForm({
+      vendor_id: i.vendor_id ? String(i.vendor_id) : "",
+      item_no: i.item_no,
+      description: i.description,
+      unit: i.unit,
+      boq_quantity: String(i.boq_quantity),
+      rate: String(i.rate),
+      completed_quantity: i.executed_quantity ? String(i.executed_quantity) : "",
+      remarks: i.remarks || "",
+    });
+    setFieldErrors({});
+    setShowModal(true);
+  };
+
+  const formQty = Number(form.boq_quantity) || 0;
+  const formRate = Number(form.rate) || 0;
+  const formDone = Number(form.completed_quantity) || 0;
 
   const validate = () =>
     v.collect({
       item_no: v.required(form.item_no, "BOQ item no"),
       description: v.minLength(form.description, 2, "Description"),
       unit: v.required(form.unit, "Unit"),
-      boq_quantity: v.required(form.boq_quantity, "Quantity") ||
-        (Number(form.boq_quantity) > 0 ? null : "Quantity must be greater than 0"),
-      rate: v.required(form.rate, "Rate") ||
-        (Number(form.rate) >= 0 ? null : "Rate must be 0 or more"),
+      boq_quantity:
+        v.required(form.boq_quantity, "Quantity") || (formQty > 0 ? null : "Quantity must be greater than 0"),
+      rate: v.required(form.rate, "Rate") || (Number(form.rate) >= 0 ? null : "Rate must be 0 or more"),
+      completed_quantity:
+        formDone < 0
+          ? "Completed quantity cannot be negative"
+          : formDone > formQty
+            ? "Completed quantity cannot be more than the BOQ quantity"
+            : null,
     });
 
-  const onCreate = async (e: FormEvent) => {
+  const onSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (!token || !projectId || isReadonly) return;
+    if (!token || !projectId || !canManage) return;
     const errors = validate();
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
@@ -105,21 +193,31 @@ export function RatesPage() {
     }
     setBusy(true);
     setError(null);
+    const body = {
+      vendor_id: form.vendor_id ? Number(form.vendor_id) : null,
+      item_no: form.item_no.trim(),
+      description: form.description.trim(),
+      unit: form.unit.trim(),
+      boq_quantity: formQty,
+      rate: formRate,
+      completed_quantity: formDone,
+    };
     try {
-      await api.createRateItem(token, {
-        project_id: Number(projectId),
-        item_no: form.item_no.trim(),
-        description: form.description.trim(),
-        unit: form.unit.trim(),
-        boq_quantity: Number(form.boq_quantity),
-        rate: Number(form.rate),
-        remarks: form.remarks.trim() || undefined,
-      });
+      if (editing) {
+        await api.updateRateItem(token, editing.id, { ...body, remarks: form.remarks.trim() || null });
+      } else {
+        await api.createRateItem(token, {
+          ...body,
+          project_id: Number(projectId),
+          remarks: form.remarks.trim() || undefined,
+        });
+      }
       setForm(emptyForm);
+      setEditing(null);
       setShowModal(false);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -131,7 +229,7 @@ export function RatesPage() {
 
       <section className="panel">
         <div className="panel-head-row">
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div className="boq-filters">
             <h2 style={{ margin: 0 }}>BOQ as per CA</h2>
             <ProjectSelect
               label="Project"
@@ -142,36 +240,47 @@ export function RatesPage() {
                 if (typeof n === "number") setSelectedProjectId(n);
               }}
             />
+            {canSeeVendors ? (
+              <label>
+                Vendor
+                <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)}>
+                  <option value="">All vendors</option>
+                  {projectVendors.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                  <option value={UNASSIGNED}>Unassigned items</option>
+                </select>
+              </label>
+            ) : null}
           </div>
-          {!isReadonly ? (
-            <button className="btn" type="button" disabled={!projectId} onClick={() => setShowModal(true)}>
+          {canManage ? (
+            <button className="btn" type="button" disabled={!projectId} onClick={openCreate}>
               Add item
             </button>
           ) : null}
         </div>
 
         {projectId ? (
-          <>
-            <div className="stat-grid" style={{ marginTop: "1rem" }}>
-              <div className="stat">
-                <span>Total BOQ amount</span>
-                <strong>₹ {money(totals.boq)}</strong>
-              </div>
-              <div className="stat">
-                <span>Executed value</span>
-                <strong>₹ {money(totals.exec)}</strong>
-              </div>
-              <div className="stat">
-                <span>% progress</span>
-                <strong>{totals.pct == null ? "—" : `${totals.pct}%`}</strong>
-              </div>
+          <div className="stat-grid" style={{ marginTop: "1rem" }}>
+            <div className="stat">
+              <span>Total BOQ amount{vendorFilter ? " (filtered)" : ""}</span>
+              <strong>₹ {money(totals.total)}</strong>
             </div>
-            <p className="muted" style={{ marginTop: "0.75rem" }}>
-              Highlighted executed / value / % progress columns are <strong>not typed in Add BOQ item</strong>.
-              They come from quantity entries (Record qty below, or mobile field entry): cumulative qty × rate
-              updates value of work done and % progress automatically.
-            </p>
-          </>
+            <div className="stat">
+              <span>Completed / billed</span>
+              <strong>₹ {money(totals.done)}</strong>
+            </div>
+            <div className="stat">
+              <span>Remaining for next bills</span>
+              <strong>₹ {money(totals.remaining)}</strong>
+            </div>
+            <div className="stat">
+              <span>% progress</span>
+              <strong>{totals.pct == null ? "—" : `${totals.pct}%`}</strong>
+            </div>
+          </div>
         ) : null}
 
         <div className="table-scroll">
@@ -180,9 +289,10 @@ export function RatesPage() {
               <tr>
                 <th rowSpan={2}>BOQ item no</th>
                 <th rowSpan={2}>Brief description</th>
+                {canSeeVendors ? <th rowSpan={2}>Vendor</th> : null}
                 <th colSpan={4}>BOQ as per CA</th>
-                <th colSpan={2}>Quantity executed</th>
-                <th colSpan={2}>Value of work done</th>
+                <th colSpan={2}>Completed</th>
+                <th colSpan={2}>Remaining</th>
                 <th rowSpan={2}>% progress</th>
                 <th rowSpan={2}>Remarks</th>
                 {!isReadonly ? <th rowSpan={2}></th> : null}
@@ -192,29 +302,39 @@ export function RatesPage() {
                 <th>Quantity</th>
                 <th>Rate ₹</th>
                 <th>Amount ₹</th>
-                <th>Cumulative</th>
-                <th>This entry total</th>
-                <th>Cumulative ₹</th>
-                <th>Auto (qty × rate)</th>
+                <th>Qty</th>
+                <th>Amount ₹</th>
+                <th>Qty</th>
+                <th>Amount ₹</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((i) => (
+              {shownItems.map((i) => (
                 <tr key={i.id}>
                   <td>{i.item_no}</td>
                   <td>{i.description}</td>
+                  {canSeeVendors ? <td>{vendorName(i.vendor_id)}</td> : null}
                   <td>{i.unit}</td>
-                  <td>{i.boq_quantity}</td>
+                  <td>{qty(Number(i.boq_quantity))}</td>
                   <td>{money(Number(i.rate))}</td>
                   <td>{money(Number(i.boq_amount))}</td>
-                  <td>{i.executed_quantity}</td>
-                  <td>{i.executed_quantity}</td>
-                  <td>{money(Number(i.executed_amount))}</td>
-                  <td>{money(Number(i.executed_amount))}</td>
-                  <td>{i.progress_pct == null ? "—" : `${i.progress_pct}%`}</td>
+                  <td>{qty(Number(i.executed_quantity))}</td>
+                  <td className="boq-done">{money(Number(i.executed_amount))}</td>
+                  <td>{qty(Number(i.remaining_quantity ?? Math.max(i.boq_quantity - i.executed_quantity, 0)))}</td>
+                  <td className="boq-remaining">
+                    {money(Number(i.remaining_amount ?? Math.max(i.boq_amount - i.executed_amount, 0)))}
+                  </td>
+                  <td>
+                    <Progress pct={i.progress_pct ?? null} />
+                  </td>
                   <td>{i.remarks || "—"}</td>
                   {!isReadonly ? (
                     <td style={{ whiteSpace: "nowrap" }}>
+                      {canManage ? (
+                        <button className="btn ghost" type="button" onClick={() => openEdit(i)}>
+                          Edit
+                        </button>
+                      ) : null}{" "}
                       {canEnterQty ? (
                         <button
                           className="btn ghost"
@@ -228,7 +348,7 @@ export function RatesPage() {
                           Record qty
                         </button>
                       ) : null}{" "}
-                      {role === "admin" ? (
+                      {canManage ? (
                         <button
                           className="btn ghost"
                           type="button"
@@ -245,10 +365,14 @@ export function RatesPage() {
                   ) : null}
                 </tr>
               ))}
-              {!items.length ? (
+              {!shownItems.length ? (
                 <tr>
-                  <td colSpan={isReadonly ? 12 : 13}>
-                    {projectId ? "No BOQ items yet. Click Add item." : "Select a project."}
+                  <td colSpan={14}>
+                    {!projectId
+                      ? "Select a project."
+                      : items.length
+                        ? "No BOQ items for this vendor."
+                        : `No BOQ items yet.${canManage ? " Click Add item." : ""}`}
                   </td>
                 </tr>
               ) : null}
@@ -257,15 +381,75 @@ export function RatesPage() {
         </div>
       </section>
 
+      {canSeeVendors && projectId && items.length ? (
+        <section className="panel">
+          <h2>Bills by vendor</h2>
+          <p className="muted">
+            Completed amount = completed quantity × rate across the vendor&apos;s BOQ items; the remainder is
+            still to be billed.
+          </p>
+          <div className="table-scroll">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Vendor</th>
+                  <th>BOQ items</th>
+                  <th>Total amount ₹</th>
+                  <th>Completed / billed ₹</th>
+                  <th>Remaining ₹</th>
+                  <th>Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendorBills.map((b) => (
+                  <tr
+                    key={b.id ?? "none"}
+                    className={`clickable-row${vendorFilter === (b.id == null ? UNASSIGNED : String(b.id)) ? " row-active" : ""}`}
+                    onClick={() => setVendorFilter(b.id == null ? UNASSIGNED : String(b.id))}
+                    title="Show this vendor's BOQ items"
+                  >
+                    <td>
+                      <strong>{b.name}</strong>
+                    </td>
+                    <td>{b.count}</td>
+                    <td>{money(b.total)}</td>
+                    <td className="boq-done">{money(b.done)}</td>
+                    <td className="boq-remaining">{money(b.remaining)}</td>
+                    <td>
+                      <Progress pct={b.pct} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
       {showModal ? (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h2>Add BOQ item</h2>
+            <h2>{editing ? `Edit BOQ item ${editing.item_no}` : "Add BOQ item"}</h2>
             <p className="muted">
-              Fill only CA rate fields below. Amount = Quantity × Rate. Executed quantity and % progress
-              are filled later via Record qty (not in this form).
+              Amount = Quantity × Rate. Completed amount = Completed quantity × Rate; the rest stays remaining for
+              the next bills. Later progress can also be added with Record qty.
             </p>
-            <form className="form-grid" onSubmit={onCreate} noValidate>
+            <form className="form-grid" onSubmit={onSave} noValidate>
+              <label className="span-2">
+                Vendor
+                <select value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })}>
+                  <option value="">Select vendor…</option>
+                  {projectVendors.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                      {x.type_of_work ? ` · ${x.type_of_work}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {!projectVendors.length ? (
+                  <small className="muted">No vendors for this package yet — add them in Vendors.</small>
+                ) : null}
+              </label>
               <label>
                 BOQ item no
                 <input
@@ -282,9 +466,7 @@ export function RatesPage() {
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="e.g. Providing and laying bituminous concrete"
                 />
-                {fieldErrors.description ? (
-                  <span className="field-error">{fieldErrors.description}</span>
-                ) : null}
+                {fieldErrors.description ? <span className="field-error">{fieldErrors.description}</span> : null}
               </label>
               <label>
                 Unit
@@ -300,18 +482,18 @@ export function RatesPage() {
                 <input
                   type="number"
                   step="any"
+                  min={0}
                   value={form.boq_quantity}
                   onChange={(e) => setForm({ ...form, boq_quantity: e.target.value })}
                 />
-                {fieldErrors.boq_quantity ? (
-                  <span className="field-error">{fieldErrors.boq_quantity}</span>
-                ) : null}
+                {fieldErrors.boq_quantity ? <span className="field-error">{fieldErrors.boq_quantity}</span> : null}
               </label>
               <label>
                 Rate ₹
                 <input
                   type="number"
                   step="any"
+                  min={0}
                   value={form.rate}
                   onChange={(e) => setForm({ ...form, rate: e.target.value })}
                 />
@@ -319,25 +501,45 @@ export function RatesPage() {
               </label>
               <label>
                 Amount ₹ (auto)
-                <input
-                  disabled
-                  value={
-                    form.boq_quantity && form.rate
-                      ? money(Number(form.boq_quantity) * Number(form.rate))
-                      : ""
-                  }
-                />
+                <input disabled value={formQty && form.rate ? money(formQty * formRate) : ""} />
               </label>
               <label>
-                Remarks
+                Completed quantity
                 <input
-                  value={form.remarks}
-                  onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={form.completed_quantity}
+                  onChange={(e) => setForm({ ...form, completed_quantity: e.target.value })}
+                  placeholder="0"
                 />
+                {fieldErrors.completed_quantity ? (
+                  <span className="field-error">{fieldErrors.completed_quantity}</span>
+                ) : null}
               </label>
-              <div style={{ display: "flex", gap: "0.75rem" }}>
+              <label>
+                Completed amount ₹ (auto)
+                <input disabled value={form.rate ? money(formDone * formRate) : ""} />
+              </label>
+              <div className="span-2 boq-form-summary">
+                <span>
+                  Total <strong>₹ {money(formQty * formRate)}</strong>
+                </span>
+                <span>
+                  Completed <strong className="boq-done">₹ {money(formDone * formRate)}</strong>
+                </span>
+                <span>
+                  Remaining{" "}
+                  <strong className="boq-remaining">₹ {money(Math.max(formQty - formDone, 0) * formRate)}</strong>
+                </span>
+              </div>
+              <label className="span-2">
+                Remarks
+                <input value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+              </label>
+              <div className="span-2 btn-row">
                 <button className="btn" type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Save item"}
+                  {busy ? "Saving…" : editing ? "Save changes" : "Save item"}
                 </button>
                 <button className="btn ghost" type="button" onClick={() => setShowModal(false)}>
                   Cancel
@@ -375,10 +577,8 @@ export function RatesPage() {
               }
             }}
           >
-            <h2>Record executed quantity</h2>
-            <p className="muted">
-              This updates Quantity executed, Value of work done, and % progress for the BOQ item.
-            </p>
+            <h2>Record completed quantity</h2>
+            <p className="muted">Adds to the item&apos;s completed quantity and amount; the remaining amount drops.</p>
             <div className="form-grid">
               <label>
                 This entry quantity

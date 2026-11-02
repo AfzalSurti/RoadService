@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-029 and are
+browsers report as a CORS error. These statements mirror alembic 023-030 and are
 safe to run on every boot.
 """
 
@@ -156,6 +156,13 @@ async def ensure_schema() -> None:
                 await conn.execute(text(VENDOR_DOCUMENTS_BACKFILL))
                 log.warning("schema_guard: created vendor_documents")
             await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS location_map_url VARCHAR(1024)"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE rate_items ADD COLUMN IF NOT EXISTS vendor_id INTEGER "
+                    "REFERENCES vendors(id) ON DELETE SET NULL"
+                )
+            )
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id)"))
             if not await _table_exists(conn, "project_inventory_items"):
                 for stmt in INVENTORY_DDL:
                     await conn.execute(text(stmt))
