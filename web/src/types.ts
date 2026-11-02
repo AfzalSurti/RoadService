@@ -29,6 +29,12 @@ export type Project = {
   image_url?: string | null;
   /** Project Inventory photo (optional, GMC Experts add / change / remove). */
   location_map_url?: string | null;
+  /** Parties on RFI reports (Stage Payment Statement header). */
+  authority?: string | null;
+  project_impl_authority?: string | null;
+  concessionaire?: string | null;
+  gmc_name?: string | null;
+  epc_contractor?: string | null;
   location: string;
   description?: string | null;
   chainage_from?: string | null;

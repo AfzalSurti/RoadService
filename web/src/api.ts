@@ -129,6 +129,11 @@ export const api = {
       chainage_from: string | null;
       chainage_to: string | null;
       is_active: boolean;
+      authority: string;
+      project_impl_authority: string;
+      concessionaire: string;
+      gmc_name: string;
+      epc_contractor: string;
       contractor_ids: number[];
       surveyor_ids: number[];
     }>

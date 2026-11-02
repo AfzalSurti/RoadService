@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-032 and are
+browsers report as a CORS error. These statements mirror alembic 023-033 and are
 safe to run on every boot.
 """
 
@@ -16,6 +16,8 @@ from sqlalchemy import text
 from app.catalog.packages import (
     PACKAGE_IMAGES,
     PACKAGE_INVENTORY,
+    DEFAULT_PARTIES,
+    PACKAGE_CONCESSIONAIRES,
     PACKAGE_INVENTORY_WORKBOOKS,
     PACKAGE_OVERVIEWS,
     PLACEHOLDER_PREFIX,
@@ -150,6 +152,19 @@ def inventory_sheet_inserts(workbooks: dict[str, list[dict]]):
             }
 
 
+# alembic 033: parties on RFI reports; defaults fill only empty values.
+PARTY_COLUMNS = ("authority", "project_impl_authority", "concessionaire", "gmc_name", "epc_contractor")
+
+
+def party_statements():
+    for col in PARTY_COLUMNS:
+        yield f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR(255)", {}
+    for col, value in DEFAULT_PARTIES.items():
+        yield f"UPDATE projects SET {col} = :v WHERE {col} IS NULL", {"v": value}
+    for name, value in PACKAGE_CONCESSIONAIRES.items():
+        yield "UPDATE projects SET concessionaire = :v WHERE concessionaire IS NULL AND name = :n", {"v": value, "n": name}
+
+
 async def seed_inventory(conn) -> None:
     """Fill each package's table from the Project Location sheets."""
     for name, rows in PACKAGE_INVENTORY.items():
@@ -230,6 +245,8 @@ async def ensure_schema() -> None:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id)"))
             for stmt in BILL_COLUMNS_DDL:
                 await conn.execute(text(stmt))
+            for stmt, params in party_statements():
+                await conn.execute(text(stmt), params)
             if not await _table_exists(conn, "project_inventory_sheets"):
                 for stmt in INVENTORY_SHEETS_DDL:
                     await conn.execute(text(stmt))

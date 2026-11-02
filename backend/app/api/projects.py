@@ -115,6 +115,10 @@ async def update_project(
     for key in ("name", "location", "title", "short_name", "description", "chainage_from", "chainage_to"):
         if isinstance(data.get(key), str):
             data[key] = data[key].strip() or None
+    # Report parties keep "" when cleared, so the startup defaults do not refill them.
+    for key in ("authority", "project_impl_authority", "concessionaire", "gmc_name", "epc_contractor"):
+        if isinstance(data.get(key), str):
+            data[key] = data[key].strip()
     contractor_ids = data.pop("contractor_ids", None)
     surveyor_ids = data.pop("surveyor_ids", None)
     for key, value in data.items():

@@ -111,3 +111,16 @@ PACKAGE_INVENTORY_WORKBOOKS = {
     "Lakhnadon - Khawasa": "lakhnadon-khawasa.xlsx",
     "Bokhedi - Kelapur": "bokhedi-kelapur.xlsx",
 }
+
+
+# Parties shown on RFI reports (Stage Payment Statement header); editable per project.
+DEFAULT_PARTIES = {
+    "authority": "National Highways Authority of India",
+    "project_impl_authority": "National Highways InvIT Project Managers Private Limited",
+    "gmc_name": "M/s Geo Design & Research Pvt. Ltd.",
+}
+PACKAGE_CONCESSIONAIRES = {
+    "Jabalpur - Lakhnadon": "NHIT Eastern Projects Private Limited",
+    "Lakhnadon - Khawasa": "NHIT Eastern Projects Private Limited",
+    "Bokhedi - Kelapur": "NHIT Western Projects Private Limited",
+}

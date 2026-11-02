@@ -60,6 +60,11 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
+    authority: str | None = None
+    project_impl_authority: str | None = None
+    concessionaire: str | None = None
+    gmc_name: str | None = None
+    epc_contractor: str | None = None
     title: str | None = None
     short_name: str | None = None
     location: str | None = None
@@ -116,6 +121,11 @@ class ProjectOut(BaseModel):
     short_name: str | None = None
     image_url: str | None = None
     location_map_url: str | None = None
+    authority: str | None = None
+    project_impl_authority: str | None = None
+    concessionaire: str | None = None
+    gmc_name: str | None = None
+    epc_contractor: str | None = None
     location: str
     description: str | None
     chainage_from: str | None

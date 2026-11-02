@@ -1804,3 +1804,12 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .badge.gmc-pending { background: #fef3c7; color: #92400e; }
 .badge.gmc-approved { background: #dcfce7; color: #166534; }
 .badge.gmc-not_approved { background: #fee2e2; color: #991b1b; }
+/* RFI View: report parties shown read-only for non-editors */
+.rfi-party-value {
+  display: block;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+  font-weight: 500;
+}

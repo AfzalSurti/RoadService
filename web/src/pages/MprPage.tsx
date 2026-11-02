@@ -71,7 +71,7 @@ export function MprPage() {
     setMsg(null);
     try {
       await api.reviewMpr(token, r.id, { review_status: rv.status, review_remark: rv.remark });
-      setMsg("MPR review saved.");
+      setMsg("NSR review saved.");
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not save review");
@@ -80,7 +80,7 @@ export function MprPage() {
     }
   };
 
-  // One MPR card per active project package (names come from Projects).
+  // One NSR card per active project package (names come from Projects).
   const packageProjects = useMemo(
     () => [...projects].sort((a, b) => a.id - b.id).map((p) => ({ name: p.name, project: p })),
     [projects]
@@ -116,17 +116,17 @@ export function MprPage() {
         setError(
           e instanceof Error
             ? `${e.message} — run NEON_SQL_FIX.sql for monthly_progress_reports if this persists.`
-            : "Failed to load MPR"
+            : "Failed to load NSR"
         );
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load MPR");
+      setError(e instanceof Error ? e.message : "Failed to load NSR");
     }
   };
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "Monthly Progress Report";
+    if (el) el.textContent = "NSR";
   }, []);
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export function MprPage() {
       if (form.last_remarks.trim()) fd.append("last_remarks", form.last_remarks.trim());
       if (pdfFile) fd.append("pdf_file", pdfFile);
       await api.createMpr(token, fd);
-      setMsg("MPR saved and linked to the package MPR folder (PDF imported when provided).");
+      setMsg("NSR saved and linked to the package NSR folder (PDF imported when provided).");
       setPdfFile(null);
       setForm((f) => ({
         ...empty,
@@ -200,7 +200,7 @@ export function MprPage() {
       <section className="panel">
         <h2>Daily &amp; Weekly reports</h2>
         <p className="muted">
-          Merged here with MPR — quick Excel downloads for today’s issues or the current week
+          Merged here with NSR — quick Excel downloads for today’s issues or the current week
           (Monday–Sunday).
         </p>
         <div className="form-grid" style={{ marginBottom: "0.75rem" }}>
@@ -231,10 +231,10 @@ export function MprPage() {
       </section>
 
       <section className="panel">
-        <h2>Package folders (MPR)</h2>
+        <h2>Package folders (NSR)</h2>
         <p className="muted">
-          Each corridor package has a Documents leaf folder: Civil Related → Monthly Progress Report
-          (MPR). Agency reports are interlinked with vendor profiles.
+          Each corridor package has a Documents leaf folder: Civil Related → Monthly Progress Reports
+          (MPR) — NSR files are stored there. Agency reports are interlinked with vendor profiles.
         </p>
         <div
           className="billing-status-grid"
@@ -255,7 +255,7 @@ export function MprPage() {
               }
             >
               <div>{projectShortName(pkg.project)}</div>
-              <strong style={{ fontSize: "0.95rem" }}>MPR folder</strong>
+              <strong style={{ fontSize: "0.95rem" }}>NSR folder</strong>
               <span style={{ opacity: 0.9 }}>
                 {`Project #${pkg.project.id}`}
               </span>
@@ -341,7 +341,7 @@ export function MprPage() {
               />
             </label>
             <label className="span-2">
-              Upload MPR PDF
+              Upload NSR PDF
               <input
                 type="file"
                 accept="application/pdf,.pdf"
@@ -353,7 +353,7 @@ export function MprPage() {
             </label>
             <div className="span-2">
               <button className="btn" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Save MPR"}
+                {busy ? "Saving…" : "Save NSR"}
               </button>
             </div>
           </form>
@@ -362,7 +362,7 @@ export function MprPage() {
 
       <section className="panel">
         {!canEdit ? (
-          <p className="muted">View only for GMC MIS Expert and NHIPMPL. Contractor fills the MPR.</p>
+          <p className="muted">View only for GMC MIS Expert and NHIPMPL. Contractor fills the NSR.</p>
         ) : null}
         <h2>Submitted MPRs</h2>
         <table className="data">
@@ -399,7 +399,7 @@ export function MprPage() {
                       <span className="muted">—</span>
                     )}
                     {(canEdit || role === "admin") && !isReadonly ? (
-                      <label className="upload-icon-btn" title="Upload MPR PDF">
+                      <label className="upload-icon-btn" title="Upload NSR PDF">
                         ⬆
                         <input
                           type="file"
@@ -412,7 +412,7 @@ export function MprPage() {
                             try {
                               await api.uploadMprPdf(token, r.id, file);
                               await load();
-                              setMsg("MPR PDF uploaded.");
+                              setMsg("NSR PDF uploaded.");
                             } catch (err: unknown) {
                               setError(err instanceof Error ? err.message : "PDF upload failed");
                             }
@@ -487,7 +487,7 @@ export function MprPage() {
             {!rows.length ? (
               <tr>
                 <td colSpan={8} className="muted">
-                  No MPR submitted yet.
+                  No NSR submitted yet.
                 </td>
               </tr>
             ) : null}

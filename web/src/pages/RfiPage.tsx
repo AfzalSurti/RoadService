@@ -23,6 +23,24 @@ const empty = {
 
 const REPORT_VIEWS = ["RFI View", "RFI ScheduleH View", "Stake Holder View"];
 
+type PartyKey = "authority" | "project_impl_authority" | "concessionaire" | "gmc_name" | "epc_contractor";
+
+/** Report header parties: four come pre-filled (editable), EPC Contractor is free text. */
+const PARTY_FIELDS: [PartyKey, string, string][] = [
+  ["authority", "Authority", "National Highways Authority of India"],
+  ["project_impl_authority", "Project Impl. Authority", "National Highways InvIT Project Managers Private Limited"],
+  ["concessionaire", "Concessionaire", "NHIT Western Projects Private Limited"],
+  ["gmc_name", "General Management Consultant", "M/s Geo Design & Research Pvt. Ltd."],
+  ["epc_contractor", "EPC Contractor", "e.g. M/s. Mak Paramount Infraventures Pvt. Ltd"],
+];
+const PARTIES_EMPTY: Record<PartyKey, string> = {
+  authority: "",
+  project_impl_authority: "",
+  concessionaire: "",
+  gmc_name: "",
+  epc_contractor: "",
+};
+
 export function RfiPage() {
   const { token, role } = useAuth();
   const [searchParams] = useSearchParams();
@@ -72,16 +90,39 @@ export function RfiPage() {
     }
   }, [scopedProjectId]);
 
-  const aeOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of rows) if (r.ae_name) set.add(r.ae_name);
-    return [...set];
-  }, [rows]);
-  const contractorOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of rows) if (r.contractor_name) set.add(r.contractor_name);
-    return [...set];
-  }, [rows]);
+  // Report parties of the chosen project (Stage Payment Statement header).
+  const reportProject = useMemo(
+    () => (filters.project_id ? projects.find((p) => String(p.id) === filters.project_id) || null : null),
+    [projects, filters.project_id]
+  );
+  const [parties, setParties] = useState(PARTIES_EMPTY);
+  const [partiesBusy, setPartiesBusy] = useState(false);
+  useEffect(() => {
+    setParties({
+      authority: reportProject?.authority || "",
+      project_impl_authority: reportProject?.project_impl_authority || "",
+      concessionaire: reportProject?.concessionaire || "",
+      gmc_name: reportProject?.gmc_name || "",
+      epc_contractor: reportProject?.epc_contractor || "",
+    });
+  }, [reportProject]);
+  const partiesChanged =
+    !!reportProject && PARTY_FIELDS.some(([k]) => (reportProject[k] || "") !== parties[k]);
+  const canEditParties = role === "admin";
+
+  const saveParties = async () => {
+    if (!token || !reportProject) return;
+    setPartiesBusy(true);
+    try {
+      const updated = await api.updateProject(token, reportProject.id, parties);
+      setProjects((list) => list.map((p) => (p.id === updated.id ? updated : p)));
+      setMsg("Report details saved for this project.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setPartiesBusy(false);
+    }
+  };
 
   const load = async () => {
     if (!token) return;
@@ -169,6 +210,14 @@ export function RfiPage() {
   };
 
   const downloadReport = () => {
+    const csv = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const preface = reportProject
+      ? [
+          ["Project", reportProject.title || reportProject.name],
+          ...PARTY_FIELDS.map(([k, label]) => [label, parties[k]]),
+          [],
+        ].map((r) => r.map(csv).join(","))
+      : [];
     const headers = [
       "RFI No",
       "Project",
@@ -197,7 +246,7 @@ export function RfiPage() {
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
     );
-    const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([[...preface, headers.join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -248,58 +297,42 @@ export function RfiPage() {
       <section className="panel">
         <h2>{reportView}</h2>
         <div className="form-grid">
-          <label>
-            AE Name
-            <select
-              value={filters.ae_name}
-              onChange={(e) => setFilters({ ...filters, ae_name: e.target.value })}
-            >
-              <option value="">Select AE</option>
-              {aeOptions.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
           <ProjectSelect
-            label="Project Code / EPC"
+            className="span-2"
+            label="Project"
             allowAll
             allLabel="All projects"
             value={filters.project_id}
             onChange={(id) => setFilters({ ...filters, project_id: id })}
           />
-          <label>
-            Contractor
-            <select
-              value={filters.contractor}
-              onChange={(e) => setFilters({ ...filters, contractor: e.target.value })}
-            >
-              <option value="">Select Contractor</option>
-              {contractorOptions.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            RFI Status
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            >
-              <option value="">Select Status</option>
-              <option value="open">Open</option>
-              <option value="answered">Answered</option>
-              <option value="closed">Closed</option>
-            </select>
-          </label>
+          {reportProject ? (
+            PARTY_FIELDS.map(([key, label, hint]) => (
+              <label key={key} className={key === "epc_contractor" ? "span-2" : undefined}>
+                {label}
+                {canEditParties ? (
+                  <input
+                    value={parties[key]}
+                    placeholder={hint}
+                    onChange={(e) => setParties({ ...parties, [key]: e.target.value })}
+                  />
+                ) : (
+                  <span className="rfi-party-value">{parties[key] || "—"}</span>
+                )}
+              </label>
+            ))
+          ) : (
+            <p className="muted span-2">Choose a project to see its Authority, Concessionaire, GMC and EPC Contractor.</p>
+          )}
         </div>
         <div className="btn-row" style={{ marginTop: "1rem" }}>
           <button className="btn" type="button" onClick={downloadReport}>
             Download Report
           </button>
+          {canEditParties && reportProject ? (
+            <button className="btn secondary" type="button" onClick={saveParties} disabled={partiesBusy || !partiesChanged}>
+              {partiesBusy ? "Saving…" : "Save details"}
+            </button>
+          ) : null}
           <button
             className="btn ghost"
             type="button"

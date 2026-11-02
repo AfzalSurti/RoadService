@@ -284,3 +284,9 @@ CREATE TABLE IF NOT EXISTS project_inventory_sheets (
 CREATE INDEX IF NOT EXISTS ix_project_inventory_sheets_project_id ON project_inventory_sheets (project_id);
 -- Note: if you create the table by hand here, the app will not load the workbooks;
 -- use Project Inventory > Replace from Excel for each package instead.
+-- 033: project parties for RFI reports (also applied, with defaults, on startup)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS authority VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_impl_authority VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS concessionaire VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS gmc_name VARCHAR(255);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS epc_contractor VARCHAR(255);

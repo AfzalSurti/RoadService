@@ -34,6 +34,12 @@ class Project(Base):
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # Project Inventory route map (Cloudinary URL or uploads/ filename).
     location_map_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Parties on RFI reports: four defaults (editable) + EPC contractor text.
+    authority: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_impl_authority: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    concessionaire: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gmc_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    epc_contractor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
