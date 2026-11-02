@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { BackButton } from "./BackButton";
 import { DeveloperCredit } from "./DeveloperCredit";
+import {
+  getSelectedProjectId,
+  projectShortName,
+  setSelectedProjectId,
+  withProjectQuery,
+} from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
+import type { Project } from "../types";
 import { useTheme } from "../theme";
 
 export function AppLayout() {
@@ -15,6 +22,24 @@ export function AppLayout() {
   const staff = role === "admin" || role === "contractor" || role === "government";
   const adminGov = role === "admin" || role === "government";
   const billingRoles = role === "admin" || role === "government" || role === "contractor";
+  const location = useLocation();
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  // Current package: the page's ?project= first, else the one picked on the dashboard.
+  // Project-aware sections keep it in their sidebar links so the flow stays in that package.
+  const urlProject = Number(new URLSearchParams(location.search).get("project") || 0) || null;
+  const pid = urlProject || getSelectedProjectId();
+  const currentProject = pid ? projects.find((p) => p.id === pid) || null : null;
+  const scoped = (path: string) => (currentProject ? withProjectQuery(path, currentProject.id) : path);
+
+  useEffect(() => {
+    if (!token) return;
+    api
+      .projects(token)
+      .then(setProjects)
+      .catch(() => setProjects([]));
+    // Refresh on navigation so renamed / removed packages show up right away.
+  }, [token, location.pathname]);
 
   useEffect(() => {
     if (!token) return;
@@ -47,15 +72,34 @@ export function AppLayout() {
           <NavLink to="/dashboard" end state={{ hero: true }}>
             Dashboard
           </NavLink>
+          {currentProject && location.pathname !== "/dashboard" ? (
+            <div className="nav-project" title={currentProject.title || currentProject.name}>
+              <small>Current package</small>
+              <strong>{projectShortName(currentProject)}</strong>
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setSelectedProjectId(null);
+                  const next = new URLSearchParams(location.search);
+                  next.delete("project");
+                  const qs = next.toString();
+                  navigate(`${location.pathname}${qs ? `?${qs}` : ""}`, { replace: true });
+                }}
+              >
+                Show all packages
+              </button>
+            </div>
+          ) : null}
 
           <div className="nav-group-label">Civil Dashboard</div>
           {staff ? <NavLink to="/civil-assets">Project Inventory</NavLink> : null}
-          <NavLink to="/issues">Issues</NavLink>
-          {staff ? <NavLink to="/rfi">RFI</NavLink> : null}
+          <NavLink to={scoped("/issues")}>Issues</NavLink>
+          {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}
-          {staff ? <NavLink to="/executive">Project Overview</NavLink> : null}
+          {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
           {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
-          <NavLink to="/map">Map</NavLink>
+          <NavLink to={scoped("/map")}>Map</NavLink>
 
           <div className="nav-group-label">TMS Dashboard</div>
           {staff ? <NavLink to="/toll">Toll Ops</NavLink> : null}
@@ -73,7 +117,7 @@ export function AppLayout() {
 
           <div className="nav-group-label">General / MIS</div>
           <NavLink to="/staff-details">Staff Details</NavLink>
-          {staff ? <NavLink to="/queries">Query Raise</NavLink> : null}
+          {staff ? <NavLink to={scoped("/queries")}>Query Raise</NavLink> : null}
           {adminGov ? <NavLink to="/billing">GMC Billing</NavLink> : null}
           {billingRoles ? <NavLink to="/contractor-billing">Contractor Billing</NavLink> : null}
           {staff ? <NavLink to="/documents">Documents</NavLink> : null}
@@ -85,8 +129,8 @@ export function AppLayout() {
           <NavLink to="/reports">Reports</NavLink>
           {role === "admin" ? (
             <>
-              <NavLink to="/projects">Projects</NavLink>
-              <NavLink to="/rates">BOQ</NavLink>
+              <NavLink to={scoped("/projects")}>Projects</NavLink>
+              <NavLink to={scoped("/rates")}>BOQ</NavLink>
               <NavLink to="/users">Users</NavLink>
             </>
           ) : null}
