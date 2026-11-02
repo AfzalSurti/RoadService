@@ -242,6 +242,16 @@ export type DocumentFolder = {
   document_count: number;
 };
 
+export type VendorDocument = {
+  id: number;
+  vendor_id: number;
+  doc_type: "work_order" | "loa" | "boq" | "eot" | "bill" | string;
+  file_path: string;
+  file_name?: string | null;
+  uploaded_by_id?: number | null;
+  created_at: string;
+};
+
 export type Vendor = {
   id: number;
   project_id: number | null;

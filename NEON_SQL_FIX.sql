@@ -237,3 +237,15 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024);
 
 -- 027: vendor extension of time in days (also applied automatically on startup)
 ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128);
+
+-- 028: vendor documents, several per type (also applied automatically on startup)
+CREATE TABLE IF NOT EXISTS vendor_documents (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  doc_type VARCHAR(32) NOT NULL,
+  file_path VARCHAR(1024) NOT NULL,
+  file_name VARCHAR(255),
+  uploaded_by_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_vendor_documents_vendor_id ON vendor_documents (vendor_id);

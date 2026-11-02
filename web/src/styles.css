@@ -1435,6 +1435,20 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .works-brief { font-size: 0.82rem; margin-top: 0.2rem; max-width: 320px; }
 .vendor-filter { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .works-hint { margin: 0 0 0.5rem; font-size: 0.85rem; }
+/* Vendor "View details" documents window */
+.modal-card.vendor-docs { width: min(760px, 100%); max-height: 88vh; overflow-y: auto; }
+.vendor-docs-groups { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.vendor-docs-group {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.vendor-docs-group h3 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.5rem; font-size: 0.95rem; }
+.vendor-docs-group ul { margin: 0 0 0.5rem; padding-left: 1.1rem; display: grid; gap: 0.3rem; }
+.vendor-docs-group a { word-break: break-word; }
+.sidebar .vendor-docs-remove, .vendor-docs-remove { margin-left: 0.5rem; font-size: 0.8rem; color: var(--danger); background: none; border: 0; cursor: pointer; }
+.vendor-docs-add { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--accent); font-weight: 600; font-size: 0.88rem; cursor: pointer; }
+.vendor-docs-add input { font-size: 0.8rem; max-width: 220px; }
 /* Dashboard narrowed to one vendor's data */
 .vendor-scope {
   display: flex;

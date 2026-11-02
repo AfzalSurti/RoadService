@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, mediaUrl } from "../api";
+import { api } from "../api";
+import { VendorDocumentsModal } from "./VendorDocumentsModal";
 import { useAuth } from "../auth";
 import { WORK_CATEGORIES, formatDays, vendorCategory, type WorkCategoryKey } from "../lib/workCategories";
 import type { Vendor } from "../types";
@@ -23,6 +24,7 @@ export function PackageWorks({
   const [vendors, setVendors] = useState<Vendor[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<WorkCategoryKey>(WORK_CATEGORIES[0].key);
+  const [docsVendor, setDocsVendor] = useState<Vendor | null>(null);
   const canManage = role === "admin";
   const canOpenVendors = role === "admin" || role === "government";
 
@@ -138,19 +140,9 @@ export function PackageWorks({
                   <td>{v.progress_notes || "—"}</td>
                   <td>{v.delay_notes || "—"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <div className="btn-row">
-                      {v.work_order_path ? (
-                        <a href={mediaUrl(v.work_order_path)} target="_blank" rel="noreferrer">
-                          Work order
-                        </a>
-                      ) : null}
-                      {v.loa_path ? (
-                        <a href={mediaUrl(v.loa_path)} target="_blank" rel="noreferrer">
-                          LOA
-                        </a>
-                      ) : null}
-                      {!v.work_order_path && !v.loa_path ? "—" : null}
-                    </div>
+                    <button type="button" className="btn ghost" onClick={() => setDocsVendor(v)}>
+                      View details
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -163,6 +155,7 @@ export function PackageWorks({
           {canManage ? " Add one in Vendors with this package and type of work." : ""}
         </p>
       )}
+      {docsVendor ? <VendorDocumentsModal vendor={docsVendor} onClose={() => setDocsVendor(null)} /> : null}
     </section>
   );
 }

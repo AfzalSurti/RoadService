@@ -16,6 +16,7 @@ import type {
   TokenResponse,
   User,
   Vendor,
+  VendorDocument,
 } from "./types";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
@@ -508,7 +509,21 @@ export const api = {
 
   vendors: (token: string) => request<Vendor[]>("/api/v1/vendors", { token }),
 
-  /** Update vendor details (JSON; documents are uploaded only on create). */
+  vendorDocuments: (token: string, vendorId: number) =>
+    request<VendorDocument[]>(`/api/v1/vendors/${vendorId}/documents`, { token }),
+
+  /** Attach several files of one type (work_order, loa, boq, eot, bill). */
+  uploadVendorDocuments: (token: string, vendorId: number, docType: string, files: File[]) => {
+    const fd = new FormData();
+    fd.append("doc_type", docType);
+    for (const f of files) fd.append("files", f);
+    return request<VendorDocument[]>(`/api/v1/vendors/${vendorId}/documents`, { method: "POST", token, body: fd });
+  },
+
+  deleteVendorDocument: (token: string, vendorId: number, docId: number) =>
+    request<{ ok: boolean }>(`/api/v1/vendors/${vendorId}/documents/${docId}`, { method: "DELETE", token }),
+
+  /** Update vendor details (JSON); files go through uploadVendorDocuments. */
   updateVendor: (token: string, id: number, body: Record<string, string | number | null>) =>
     request<Vendor>(`/api/v1/vendors/${id}`, {
       method: "PATCH",

@@ -1,8 +1,15 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, mediaUrl } from "../api";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { projectShortName } from "../lib/projectScope";
-import { WORK_CATEGORIES, daysInputValue, formatDays, vendorCategory } from "../lib/workCategories";
+import { VendorDocumentsModal } from "../components/VendorDocumentsModal";
+import {
+  VENDOR_DOC_TYPES,
+  WORK_CATEGORIES,
+  daysInputValue,
+  formatDays,
+  vendorCategory,
+} from "../lib/workCategories";
 import type { Project, User, Vendor } from "../types";
 
 const empty = {
@@ -50,8 +57,9 @@ export function VendorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(empty);
-  const [workOrderFile, setWorkOrderFile] = useState<File | null>(null);
-  const [loaFile, setLoaFile] = useState<File | null>(null);
+  // Files picked in the form, per document type; uploaded after the vendor is saved.
+  const [newFiles, setNewFiles] = useState<Record<string, File[]>>({});
+  const [docsVendor, setDocsVendor] = useState<Vendor | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [contractors, setContractors] = useState<User[]>([]);
@@ -79,6 +87,7 @@ export function VendorsPage() {
     setEditingId(null);
     setForm(empty);
     setLegacyDays({ time: "", dlp: "", eot: "" });
+    setNewFiles({});
     setShowForm(true);
   };
   const openEdit = (v: Vendor) => {
@@ -89,6 +98,7 @@ export function VendorsPage() {
       dlp: v.defects_liability_period && !daysInputValue(v.defects_liability_period) ? v.defects_liability_period : "",
       eot: v.extension_of_time && !daysInputValue(v.extension_of_time) ? v.extension_of_time : "",
     });
+    setNewFiles({});
     setShowForm(true);
   };
   const contractorName = (id: number | null) =>
@@ -120,6 +130,15 @@ export function VendorsPage() {
     load();
   }, [token]);
 
+  const uploadPicked = async (vendorId: number) => {
+    if (!token) return;
+    for (const t of VENDOR_DOC_TYPES) {
+      const files = newFiles[t.key] || [];
+      if (files.length) await api.uploadVendorDocuments(token, vendorId, t.key, files);
+    }
+    setNewFiles({});
+  };
+
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !canManage) return;
@@ -144,6 +163,7 @@ export function VendorsPage() {
           delay_notes: opt(form.delay_notes),
           escalation_matrix: opt(form.escalation_matrix),
         });
+        await uploadPicked(editingId);
         setEditingId(null);
         setForm(empty);
         setShowForm(false);
@@ -167,12 +187,9 @@ export function VendorsPage() {
       }
       if (form.extension_of_time.trim()) fd.append("extension_of_time", form.extension_of_time.trim());
       if (form.remarks.trim()) fd.append("remarks", form.remarks.trim());
-      if (workOrderFile) fd.append("work_order_file", workOrderFile);
-      if (loaFile) fd.append("loa_file", loaFile);
-      await api.createVendor(token, fd);
+      const created = await api.createVendor(token, fd);
+      await uploadPicked(created.id);
       setForm(empty);
-      setWorkOrderFile(null);
-      setLoaFile(null);
       setShowForm(false);
       await load();
     } catch (err: unknown) {
@@ -275,17 +292,10 @@ export function VendorsPage() {
                   <strong>Escalation:</strong> {v.escalation_matrix}
                 </p>
               ) : null}
-              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                {v.work_order_path ? (
-                  <a className="btn ghost" href={mediaUrl(v.work_order_path)} target="_blank" rel="noreferrer">
-                    Vendor Work Order
-                  </a>
-                ) : null}
-                {v.loa_path ? (
-                  <a className="btn ghost" href={mediaUrl(v.loa_path)} target="_blank" rel="noreferrer">
-                    Letter of Acceptance (LOA)
-                  </a>
-                ) : null}
+              <div className="btn-row">
+                <button type="button" className="btn ghost" onClick={() => setDocsVendor(v)}>
+                  View details · Documents
+                </button>
               </div>
             </article>
             );
@@ -415,18 +425,25 @@ export function VendorsPage() {
                 />
                 {legacyDays.eot ? <small className="muted">Was: {legacyDays.eot} — enter it in days</small> : null}
               </label>
-              {!editingId ? (
-              <>
-              <label>
-                Vendor Work Order (upload)
-                <input type="file" onChange={(e) => setWorkOrderFile(e.target.files?.[0] || null)} />
-              </label>
-              <label>
-                Letter of Acceptance — LOA (upload)
-                <input type="file" onChange={(e) => setLoaFile(e.target.files?.[0] || null)} />
-              </label>
-              </>
-              ) : null}
+              <h3 className="span-2 form-section">
+                Documents <small className="muted">(several files allowed per type{editingId ? "; existing files are under View details" : ""})</small>
+              </h3>
+              {VENDOR_DOC_TYPES.map((t) => (
+                <label key={t.key}>
+                  {t.label} (upload)
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setNewFiles((prev) => ({ ...prev, [t.key]: files }));
+                    }}
+                  />
+                  {newFiles[t.key]?.length ? (
+                    <small className="muted">{newFiles[t.key].length} file(s) selected</small>
+                  ) : null}
+                </label>
+              ))}
               <label className="span-2">
                 Brief
                 <textarea
@@ -481,6 +498,7 @@ export function VendorsPage() {
           </form>
         </div>
       ) : null}
+      {docsVendor ? <VendorDocumentsModal vendor={docsVendor} onClose={() => setDocsVendor(null)} /> : null}
     </>
   );
 }

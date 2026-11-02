@@ -439,6 +439,17 @@ class VendorCreate(BaseModel):
     loa_path: str | None = None
 
 
+class VendorDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    vendor_id: int
+    doc_type: str
+    file_path: str
+    file_name: str | None = None
+    uploaded_by_id: int | None = None
+    created_at: datetime
+
+
 class VendorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

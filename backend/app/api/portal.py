@@ -8,12 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_OVERVIEWS
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
-from app.models.billing import DocumentFolder, PortalDocument, Vendor
+from app.models.billing import VENDOR_DOC_TYPES, DocumentFolder, PortalDocument, Vendor, VendorDocument
 from app.models.enums import UserRole
 from app.models.portal_ops import DocumentVersion, MonthlyProgressReport
 from app.models.project import Project
 from app.models.user import User
-from app.schemas import DocumentFolderOut, DocumentOut, MprOut, VendorCreate, VendorOut
+from app.schemas import (
+    DocumentFolderOut,
+    DocumentOut,
+    MprOut,
+    VendorCreate,
+    VendorDocumentOut,
+    VendorOut,
+)
 from app.services.audit import write_audit
 from app.services.storage import save_upload
 
@@ -567,7 +574,7 @@ async def list_vendors(
 @vendors_router.post("", response_model=VendorOut, status_code=201)
 async def create_vendor(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
     name: Annotated[str, Form()],
     project_id: Annotated[int | None, Form()] = None,
     contractor_user_id: Annotated[int | None, Form()] = None,
@@ -618,9 +625,100 @@ async def create_vendor(
         loa_path=loa_path,
     )
     db.add(vendor)
+    await db.flush()
+    for doc_type, path, upload in (("work_order", work_order_path, work_order_file), ("loa", loa_path, loa_file)):
+        if path:
+            db.add(
+                VendorDocument(
+                    vendor_id=vendor.id,
+                    doc_type=doc_type,
+                    file_path=path,
+                    file_name=upload.filename if upload else None,
+                    uploaded_by_id=user.id,
+                )
+            )
     await db.commit()
     await db.refresh(vendor)
     return vendor
+
+
+async def _vendor_or_404(db: AsyncSession, vendor_id: int) -> Vendor:
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    return vendor
+
+
+@vendors_router.get("/{vendor_id}/documents", response_model=list[VendorDocumentOut])
+async def list_vendor_documents(
+    vendor_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
+):
+    await _vendor_or_404(db, vendor_id)
+    rows = await db.execute(
+        select(VendorDocument).where(VendorDocument.vendor_id == vendor_id).order_by(VendorDocument.id)
+    )
+    return rows.scalars().all()
+
+
+@vendors_router.post("/{vendor_id}/documents", response_model=list[VendorDocumentOut], status_code=201)
+async def upload_vendor_documents(
+    vendor_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    doc_type: Annotated[str, Form()],
+    files: Annotated[list[UploadFile], File()],
+):
+    """Attach one or more files of a type (work_order, loa, boq, eot, bill)."""
+    if doc_type not in VENDOR_DOC_TYPES:
+        raise HTTPException(status_code=400, detail=f"doc_type must be one of {', '.join(VENDOR_DOC_TYPES)}")
+    vendor = await _vendor_or_404(db, vendor_id)
+    created: list[VendorDocument] = []
+    for f in files:
+        if not f.filename:
+            continue
+        path = await save_upload(f, f"vendor_{doc_type}_{vendor_id}")
+        doc = VendorDocument(
+            vendor_id=vendor_id, doc_type=doc_type, file_path=path, file_name=f.filename, uploaded_by_id=user.id
+        )
+        db.add(doc)
+        created.append(doc)
+        # Keep the original single-file columns filled for older screens.
+        if doc_type == "work_order" and not vendor.work_order_path:
+            vendor.work_order_path = path
+        if doc_type == "loa" and not vendor.loa_path:
+            vendor.loa_path = path
+    if not created:
+        raise HTTPException(status_code=400, detail="Choose at least one file")
+    await db.commit()
+    for doc in created:
+        await db.refresh(doc)
+    return created
+
+
+@vendors_router.delete("/{vendor_id}/documents/{doc_id}")
+async def delete_vendor_document(
+    vendor_id: int,
+    doc_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    doc = (
+        await db.execute(
+            select(VendorDocument).where(VendorDocument.id == doc_id, VendorDocument.vendor_id == vendor_id)
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    vendor = await _vendor_or_404(db, vendor_id)
+    if vendor.work_order_path == doc.file_path:
+        vendor.work_order_path = None
+    if vendor.loa_path == doc.file_path:
+        vendor.loa_path = None
+    await db.delete(doc)
+    await db.commit()
+    return {"ok": True}
 
 
 @mpr_router.get("", response_model=list[MprOut])

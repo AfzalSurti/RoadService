@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-027 and are
+browsers report as a CORS error. These statements mirror alembic 023-028 and are
 safe to run on every boot.
 """
 
@@ -54,6 +54,36 @@ _SHORT_NAMES = {
 }
 
 
+# alembic 028: several files per vendor and type; existing work order / LOA copied in once.
+VENDOR_DOCUMENTS_DDL = (
+    "CREATE TABLE IF NOT EXISTS vendor_documents ("
+    " id SERIAL PRIMARY KEY,"
+    " vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,"
+    " doc_type VARCHAR(32) NOT NULL,"
+    " file_path VARCHAR(1024) NOT NULL,"
+    " file_name VARCHAR(255),"
+    " uploaded_by_id INTEGER REFERENCES users(id),"
+    " created_at TIMESTAMPTZ DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS ix_vendor_documents_vendor_id ON vendor_documents (vendor_id)",
+)
+VENDOR_DOCUMENTS_BACKFILL = (
+    "INSERT INTO vendor_documents (vendor_id, doc_type, file_path) "
+    "SELECT id, 'work_order', work_order_path FROM vendors WHERE work_order_path IS NOT NULL "
+    "UNION ALL SELECT id, 'loa', loa_path FROM vendors WHERE loa_path IS NOT NULL"
+)
+
+
+async def _table_exists(conn, table: str) -> bool:
+    row = await conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = :t"
+        ),
+        {"t": table},
+    )
+    return row.first() is not None
+
+
 async def _column_exists(conn, table: str, column: str) -> bool:
     row = await conn.execute(
         text(
@@ -95,6 +125,11 @@ async def ensure_schema() -> None:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024)"))
             await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128)"))
+            if not await _table_exists(conn, "vendor_documents"):
+                for stmt in VENDOR_DOCUMENTS_DDL:
+                    await conn.execute(text(stmt))
+                await conn.execute(text(VENDOR_DOCUMENTS_BACKFILL))
+                log.warning("schema_guard: created vendor_documents")
             for name, image in PACKAGE_IMAGES.items():
                 await conn.execute(
                     text("UPDATE projects SET image_url = :i WHERE name = :n AND image_url IS NULL"),

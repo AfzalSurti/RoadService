@@ -26,6 +26,15 @@ export function vendorCategory(v: Pick<Vendor, "type_of_work">): WorkCategoryKey
   return null;
 }
 
+/** Vendor document types; each can hold several files. */
+export const VENDOR_DOC_TYPES = [
+  { key: "work_order", label: "Vendor Work Order" },
+  { key: "loa", label: "Letter of Acceptance (LOA)" },
+  { key: "boq", label: "BOQ" },
+  { key: "eot", label: "EOT — Extension of Time" },
+  { key: "bill", label: "Bills" },
+] as const;
+
 /** Time limit / DLP are stored as a number of days; older free text is shown as-is. */
 export function formatDays(value: string | null | undefined): string {
   const v = (value || "").trim();
