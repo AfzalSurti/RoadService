@@ -2,14 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
-import { WORK_CATEGORIES, vendorCategory, type WorkCategoryKey } from "../lib/workCategories";
+import { WORK_CATEGORIES, formatDays, vendorCategory, type WorkCategoryKey } from "../lib/workCategories";
 import type { Vendor } from "../types";
 
 /**
  * Four work tabs for one package, filled from the Vendors list: each vendor
- * linked to this project appears under its "Type of work" category.
+ * linked to this project appears under its "Type of work" category. When
+ * `onSelectVendor` is given, clicking a vendor scopes the dashboard to it.
  */
-export function PackageWorks({ projectId }: { projectId: number }) {
+export function PackageWorks({
+  projectId,
+  selectedVendorId = null,
+  onSelectVendor,
+}: {
+  projectId: number;
+  selectedVendorId?: number | null;
+  onSelectVendor?: (vendor: Vendor | null) => void;
+}) {
   const { token, role } = useAuth();
   const [vendors, setVendors] = useState<Vendor[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,14 +88,18 @@ export function PackageWorks({ projectId }: { projectId: number }) {
         <p className="muted">Loading works…</p>
       ) : rows.length ? (
         <div className="table-scroll">
+          {onSelectVendor ? (
+            <p className="muted works-hint">Click a vendor to see its issues, invoices and documents in the cards below.</p>
+          ) : null}
           <table className="data">
             <thead>
               <tr>
                 <th>Vendor</th>
                 <th>Work order date</th>
                 <th>Commencement</th>
-                <th>Time limit</th>
-                <th>DLP</th>
+                <th>Time limit (days)</th>
+                <th>DLP (days)</th>
+                <th>EOT (days)</th>
                 <th>Progress</th>
                 <th>Delays</th>
                 <th>Documents</th>
@@ -94,18 +107,37 @@ export function PackageWorks({ projectId }: { projectId: number }) {
             </thead>
             <tbody>
               {rows.map((v) => (
-                <tr key={v.id}>
+                <tr
+                  key={v.id}
+                  className={
+                    onSelectVendor ? `clickable-row${selectedVendorId === v.id ? " row-active" : ""}` : undefined
+                  }
+                  onClick={onSelectVendor ? () => onSelectVendor(selectedVendorId === v.id ? null : v) : undefined}
+                  onKeyDown={
+                    onSelectVendor
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectVendor(selectedVendorId === v.id ? null : v);
+                          }
+                        }
+                      : undefined
+                  }
+                  tabIndex={onSelectVendor ? 0 : undefined}
+                  title={onSelectVendor ? "Show this vendor's data in the cards below" : undefined}
+                >
                   <td>
                     <strong>{v.name}</strong>
                     {v.brief ? <div className="muted works-brief">{v.brief}</div> : null}
                   </td>
                   <td>{v.work_order_date || "—"}</td>
                   <td>{v.commencement_date || "—"}</td>
-                  <td>{v.time_limit_completion || "—"}</td>
-                  <td>{v.defects_liability_period || "—"}</td>
+                  <td>{formatDays(v.time_limit_completion)}</td>
+                  <td>{formatDays(v.defects_liability_period)}</td>
+                  <td>{formatDays(v.extension_of_time)}</td>
                   <td>{v.progress_notes || "—"}</td>
                   <td>{v.delay_notes || "—"}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="btn-row">
                       {v.work_order_path ? (
                         <a href={mediaUrl(v.work_order_path)} target="_blank" rel="noreferrer">

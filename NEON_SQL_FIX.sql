@@ -234,3 +234,6 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS short_name VARCHAR(120);
 
 -- 026: project tile photo (also applied automatically on startup)
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024);
+
+-- 027: vendor extension of time in days (also applied automatically on startup)
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128);

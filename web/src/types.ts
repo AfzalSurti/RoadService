@@ -258,6 +258,8 @@ export type Vendor = {
   commencement_date?: string | null;
   time_limit_completion?: string | null;
   defects_liability_period?: string | null;
+  /** Extension of time granted, in days. */
+  extension_of_time?: string | null;
   remarks?: string | null;
   created_at: string;
   updated_at: string;

@@ -24,7 +24,7 @@ import {
   setSelectedProjectId,
   withProjectQuery,
 } from "../lib/projectScope";
-import type { DashboardStats, Project, ProjectRateSummary } from "../types";
+import type { DashboardStats, Project, ProjectRateSummary, Vendor } from "../types";
 
 const COLORS: Record<string, string> = {
   open: "#e11d48",
@@ -121,16 +121,23 @@ export function DashboardPage() {
       .catch((e: Error) => setError(e.message));
   }, [token]);
 
+  // Vendor picked in the Works tabs: cards and charts narrow to its contractor login.
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const vendorContractorId = selectedVendor?.contractor_user_id ?? null;
+  useEffect(() => {
+    setSelectedVendor(null);
+  }, [selectedId]);
+
   useEffect(() => {
     if (!token || !selectedId) {
       setStats(null);
       return;
     }
     api
-      .dashboard(token, selectedId)
+      .dashboard(token, selectedId, vendorContractorId)
       .then(setStats)
       .catch((e: Error) => setError(e.message));
-  }, [token, selectedId]);
+  }, [token, selectedId, vendorContractorId]);
 
   const pieData = useMemo(
     () =>
@@ -425,7 +432,36 @@ export function DashboardPage() {
           </section>
 
           {/* Works by category (from Vendors); GMC representatives have no vendor access. */}
-          {role !== "surveyor" ? <PackageWorks key={selected.id} projectId={selected.id} /> : null}
+          {role !== "surveyor" ? (
+            <PackageWorks
+              key={selected.id}
+              projectId={selected.id}
+              selectedVendorId={selectedVendor?.id ?? null}
+              onSelectVendor={role === "admin" || role === "government" ? setSelectedVendor : undefined}
+            />
+          ) : null}
+
+          {selectedVendor ? (
+            <div className={`vendor-scope${vendorContractorId ? "" : " warn"}`}>
+              <div>
+                {vendorContractorId ? (
+                  <>
+                    Showing data for vendor <strong>{selectedVendor.name}</strong> — issues assigned to its
+                    contractor login, its invoices, documents and recorded BOQ quantities.
+                  </>
+                ) : (
+                  <>
+                    <strong>{selectedVendor.name}</strong> is not linked to a contractor login yet, so the cards
+                    below still show the whole package.
+                    {role === "admin" ? " Edit the vendor in Vendors and pick its contractor login." : ""}
+                  </>
+                )}
+              </div>
+              <button type="button" className="btn ghost" onClick={() => setSelectedVendor(null)}>
+                Show whole package
+              </button>
+            </div>
+          ) : null}
 
           {stats ? (
             <>
@@ -530,7 +566,10 @@ export function DashboardPage() {
 
               <section className="charts">
                 <div className="panel">
-                  <h2>Issue status · {projectShortName(selected)}</h2>
+                  <h2>
+                    Issue status · {projectShortName(selected)}
+                    {selectedVendor && vendorContractorId ? ` · ${selectedVendor.name}` : ""}
+                  </h2>
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -556,7 +595,10 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="panel">
-                  <h2>Contractor performance · {projectShortName(selected)}</h2>
+                  <h2>
+                    Contractor performance · {projectShortName(selected)}
+                    {selectedVendor && vendorContractorId ? ` · ${selectedVendor.name}` : ""}
+                  </h2>
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={barData}>

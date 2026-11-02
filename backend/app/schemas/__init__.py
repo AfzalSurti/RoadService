@@ -433,6 +433,7 @@ class VendorCreate(BaseModel):
     commencement_date: date | None = None
     time_limit_completion: str | None = None
     defects_liability_period: str | None = None
+    extension_of_time: str | None = None
     remarks: str | None = None
     work_order_path: str | None = None
     loa_path: str | None = None
@@ -455,6 +456,7 @@ class VendorOut(BaseModel):
     commencement_date: date | None = None
     time_limit_completion: str | None = None
     defects_liability_period: str | None = None
+    extension_of_time: str | None = None
     remarks: str | None = None
     created_at: datetime
     updated_at: datetime

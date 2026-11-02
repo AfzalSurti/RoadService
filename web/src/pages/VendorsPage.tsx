@@ -2,12 +2,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { projectShortName } from "../lib/projectScope";
-import { WORK_CATEGORIES, vendorCategory } from "../lib/workCategories";
-import type { Project, Vendor } from "../types";
+import { WORK_CATEGORIES, daysInputValue, formatDays, vendorCategory } from "../lib/workCategories";
+import type { Project, User, Vendor } from "../types";
 
 const empty = {
   name: "",
   project_id: "",
+  contractor_user_id: "",
   brief: "",
   progress_notes: "",
   delay_notes: "",
@@ -17,6 +18,7 @@ const empty = {
   commencement_date: "",
   time_limit_completion: "",
   defects_liability_period: "",
+  extension_of_time: "",
   remarks: "",
 };
 
@@ -26,6 +28,7 @@ function vendorToForm(v: Vendor) {
   return {
     name: v.name,
     project_id: v.project_id ? String(v.project_id) : "",
+    contractor_user_id: v.contractor_user_id ? String(v.contractor_user_id) : "",
     brief: v.brief || "",
     progress_notes: v.progress_notes || "",
     delay_notes: v.delay_notes || "",
@@ -33,8 +36,9 @@ function vendorToForm(v: Vendor) {
     type_of_work: v.type_of_work || "",
     work_order_date: v.work_order_date || "",
     commencement_date: v.commencement_date || "",
-    time_limit_completion: v.time_limit_completion || "",
-    defects_liability_period: v.defects_liability_period || "",
+    time_limit_completion: daysInputValue(v.time_limit_completion),
+    defects_liability_period: daysInputValue(v.defects_liability_period),
+    extension_of_time: daysInputValue(v.extension_of_time),
     remarks: v.remarks || "",
   };
 }
@@ -50,6 +54,13 @@ export function VendorsPage() {
   const [loaFile, setLoaFile] = useState<File | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [contractors, setContractors] = useState<User[]>([]);
+  // Old free-text values ("18 months") that do not fit the days inputs, shown as hints while editing.
+  const [legacyDays, setLegacyDays] = useState<{ time: string; dlp: string; eot: string }>({
+    time: "",
+    dlp: "",
+    eot: "",
+  });
   const [filter, setFilter] = useState<Filter>("all");
   const canManage = role === "admin" && !isReadonly;
 
@@ -67,20 +78,33 @@ export function VendorsPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(empty);
+    setLegacyDays({ time: "", dlp: "", eot: "" });
     setShowForm(true);
   };
   const openEdit = (v: Vendor) => {
     setEditingId(v.id);
     setForm(vendorToForm(v));
+    setLegacyDays({
+      time: v.time_limit_completion && !daysInputValue(v.time_limit_completion) ? v.time_limit_completion : "",
+      dlp: v.defects_liability_period && !daysInputValue(v.defects_liability_period) ? v.defects_liability_period : "",
+      eot: v.extension_of_time && !daysInputValue(v.extension_of_time) ? v.extension_of_time : "",
+    });
     setShowForm(true);
   };
+  const contractorName = (id: number | null) =>
+    id ? contractors.find((c) => c.id === id)?.full_name || `User #${id}` : null;
 
   const load = async () => {
     if (!token) return;
     try {
-      const [v, p] = await Promise.all([api.vendors(token), api.projects(token)]);
+      const [v, p, c] = await Promise.all([
+        api.vendors(token),
+        api.projects(token),
+        role === "admin" ? api.users(token, "contractor").catch(() => [] as User[]) : Promise.resolve([] as User[]),
+      ]);
       setVendors(v);
       setProjects(p);
+      setContractors(c);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load vendors");
@@ -107,11 +131,13 @@ export function VendorsPage() {
         await api.updateVendor(token, editingId, {
           name: form.name.trim(),
           project_id: form.project_id ? Number(form.project_id) : null,
+          contractor_user_id: form.contractor_user_id ? Number(form.contractor_user_id) : null,
           type_of_work: opt(form.type_of_work),
           work_order_date: form.work_order_date || null,
           commencement_date: form.commencement_date || null,
           time_limit_completion: opt(form.time_limit_completion),
           defects_liability_period: opt(form.defects_liability_period),
+          extension_of_time: opt(form.extension_of_time),
           brief: opt(form.brief),
           remarks: opt(form.remarks),
           progress_notes: opt(form.progress_notes),
@@ -127,6 +153,7 @@ export function VendorsPage() {
       const fd = new FormData();
       fd.append("name", form.name.trim());
       if (form.project_id) fd.append("project_id", form.project_id);
+      if (form.contractor_user_id) fd.append("contractor_user_id", form.contractor_user_id);
       if (form.brief.trim()) fd.append("brief", form.brief.trim());
       if (form.progress_notes.trim()) fd.append("progress_notes", form.progress_notes.trim());
       if (form.delay_notes.trim()) fd.append("delay_notes", form.delay_notes.trim());
@@ -138,6 +165,7 @@ export function VendorsPage() {
       if (form.defects_liability_period.trim()) {
         fd.append("defects_liability_period", form.defects_liability_period.trim());
       }
+      if (form.extension_of_time.trim()) fd.append("extension_of_time", form.extension_of_time.trim());
       if (form.remarks.trim()) fd.append("remarks", form.remarks.trim());
       if (workOrderFile) fd.append("work_order_file", workOrderFile);
       if (loaFile) fd.append("loa_file", loaFile);
@@ -201,6 +229,12 @@ export function VendorsPage() {
                 Project:{" "}
                 {v.project_id ? (project ? projectShortName(project) : `#${v.project_id}`) : "All / unassigned"}
               </p>
+              {canManage ? (
+                <p className="muted">
+                  Contractor login:{" "}
+                  {contractorName(v.contractor_user_id) || "Not linked — edit to link its mobile-app login"}
+                </p>
+              ) : null}
               <p>
                 <strong>Type of work:</strong>{" "}
                 {v.type_of_work || <span className="muted">Not set — edit to place it under a work tab</span>}
@@ -210,9 +244,10 @@ export function VendorsPage() {
                   WO date: {v.work_order_date || "—"} · Commencement: {v.commencement_date || "—"}
                 </p>
               )}
-              {(v.time_limit_completion || v.defects_liability_period) && (
+              {(v.time_limit_completion || v.defects_liability_period || v.extension_of_time) && (
                 <p className="muted">
-                  Time limit: {v.time_limit_completion || "—"} · DLP: {v.defects_liability_period || "—"}
+                  Time limit: {formatDays(v.time_limit_completion)} · DLP: {formatDays(v.defects_liability_period)} ·
+                  EOT: {formatDays(v.extension_of_time)}
                 </p>
               )}
               {v.brief ? (
@@ -294,6 +329,20 @@ export function VendorsPage() {
                   ))}
                 </select>
               </label>
+              <label className="span-2">
+                Contractor login <small className="muted">(the vendor&apos;s mobile-app user — its issues, invoices and documents)</small>
+                <select
+                  value={form.contractor_user_id}
+                  onChange={(e) => setForm({ ...form, contractor_user_id: e.target.value })}
+                >
+                  <option value="">Not linked</option>
+                  {contractors.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name} · {c.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Type of Work
                 <select
@@ -328,20 +377,43 @@ export function VendorsPage() {
                 />
               </label>
               <label>
-                Time Limit for Completion
+                Time Limit for Completion (days)
                 <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
                   value={form.time_limit_completion}
                   onChange={(e) => setForm({ ...form, time_limit_completion: e.target.value })}
-                  placeholder="e.g. 18 months"
+                  placeholder="e.g. 540"
                 />
+                {legacyDays.time ? <small className="muted">Was: {legacyDays.time} — enter it in days</small> : null}
               </label>
               <label>
-                Defects Liability&apos;s Period
+                Defects Liability Period (days)
                 <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
                   value={form.defects_liability_period}
                   onChange={(e) => setForm({ ...form, defects_liability_period: e.target.value })}
-                  placeholder="e.g. 12 months"
+                  placeholder="e.g. 365"
                 />
+                {legacyDays.dlp ? <small className="muted">Was: {legacyDays.dlp} — enter it in days</small> : null}
+              </label>
+              <label>
+                EOT — Extension of Time (days)
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={form.extension_of_time}
+                  onChange={(e) => setForm({ ...form, extension_of_time: e.target.value })}
+                  placeholder="e.g. 90"
+                />
+                {legacyDays.eot ? <small className="muted">Was: {legacyDays.eot} — enter it in days</small> : null}
               </label>
               {!editingId ? (
               <>

@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-026 and are
+browsers report as a CORS error. These statements mirror alembic 023-027 and are
 safe to run on every boot.
 """
 
@@ -94,6 +94,7 @@ async def ensure_schema() -> None:
                 log.warning("schema_guard: added projects.short_name")
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024)"))
+            await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128)"))
             for name, image in PACKAGE_IMAGES.items():
                 await conn.execute(
                     text("UPDATE projects SET image_url = :i WHERE name = :n AND image_url IS NULL"),

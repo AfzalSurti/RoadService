@@ -25,3 +25,16 @@ export function vendorCategory(v: Pick<Vendor, "type_of_work">): WorkCategoryKey
   if (t.includes("item") || t.includes("civil")) return "item_wise_civil";
   return null;
 }
+
+/** Time limit / DLP are stored as a number of days; older free text is shown as-is. */
+export function formatDays(value: string | null | undefined): string {
+  const v = (value || "").trim();
+  if (!v) return "—";
+  return /^\d+$/.test(v) ? `${v} ${v === "1" ? "day" : "days"}` : v;
+}
+
+/** Value for a days input: digits only ("12 days" → "12"); non-day text → "". */
+export function daysInputValue(value: string | null | undefined): string {
+  const m = (value || "").trim().match(/^(\d+)\s*(days?)?$/i);
+  return m ? m[1] : "";
+}

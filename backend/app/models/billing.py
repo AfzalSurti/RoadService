@@ -156,6 +156,8 @@ class Vendor(Base):
     commencement_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     time_limit_completion: Mapped[str | None] = mapped_column(String(128), nullable=True)
     defects_liability_period: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Extension of time granted, in days (like time limit / DLP).
+    extension_of_time: Mapped[str | None] = mapped_column(String(128), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

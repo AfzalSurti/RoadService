@@ -81,9 +81,13 @@ export const api = {
 
   me: (token: string) => request<User>("/api/v1/auth/me", { token }),
 
-  dashboard: (token: string, projectId?: number | null) => {
-    const q = projectId ? `?project_id=${projectId}` : "";
-    return request<DashboardStats>(`/api/v1/analytics/dashboard${q}`, { token });
+  /** KPIs for a project; `contractorId` narrows them to one vendor's contractor login. */
+  dashboard: (token: string, projectId?: number | null, contractorId?: number | null) => {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("project_id", String(projectId));
+    if (contractorId) qs.set("contractor_id", String(contractorId));
+    const q = qs.toString();
+    return request<DashboardStats>(`/api/v1/analytics/dashboard${q ? `?${q}` : ""}`, { token });
   },
 
   projects: (token: string) => request<Project[]>("/api/v1/projects", { token }),
