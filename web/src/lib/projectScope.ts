@@ -5,6 +5,11 @@ export function projectTitle(p: Pick<Project, "name" | "title">): string {
   return p.title?.trim() || p.name;
 }
 
+/** Short tile label when set, else the package name. */
+export function projectShortName(p: Pick<Project, "name" | "short_name">): string {
+  return p.short_name?.trim() || p.name;
+}
+
 /** Persist the active project across portal pages (dashboard → issues/RFI/…). */
 
 const KEY = "roadservice.selectedProjectId";

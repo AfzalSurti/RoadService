@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023/024 and are
+browsers report as a CORS error. These statements mirror alembic 023-025 and are
 safe to run on every boot.
 """
 
@@ -10,6 +10,7 @@ import logging
 
 from sqlalchemy import text
 
+from app.catalog.packages import PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
 from app.core.database import engine
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,14 @@ _PACKAGES = [
 ]
 
 
+# Dashboard tile labels (alembic 025).
+_SHORT_NAMES = {
+    "Jabalpur - Lakhnadon": "Jabalpur – Lakhnadon",
+    "Lakhnadon - Khawasa": "Mahagaon – Khawasa",
+    "Bokhedi - Kelapur": "Borkhedi – Wadner – Kelapur",
+}
+
+
 async def _column_exists(conn, table: str, column: str) -> bool:
     row = await conn.execute(
         text(
@@ -75,6 +84,23 @@ async def ensure_schema() -> None:
                     text("UPDATE projects SET is_active = false WHERE name = 'NH Demo Corridor'")
                 )
                 log.warning("schema_guard: added projects.title and loaded package titles")
+            if not await _column_exists(conn, "projects", "short_name"):
+                await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS short_name VARCHAR(120)"))
+                for name, short in _SHORT_NAMES.items():
+                    await conn.execute(
+                        text("UPDATE projects SET short_name = :s WHERE name = :n AND short_name IS NULL"),
+                        {"n": name, "s": short},
+                    )
+                log.warning("schema_guard: added projects.short_name")
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
+            # Package overview text replaces only the auto placeholder, never a portal edit.
+            for name, overview in PACKAGE_OVERVIEWS.items():
+                await conn.execute(
+                    text(
+                        "UPDATE projects SET description = :d WHERE name = :n "
+                        "AND (description IS NULL OR description LIKE :p)"
+                    ),
+                    {"n": name, "d": overview, "p": PLACEHOLDER_PREFIX + "%"},
+                )
     except Exception:  # noqa: BLE001 — never block startup; endpoints will surface the error
         log.exception("schema_guard: could not verify schema")

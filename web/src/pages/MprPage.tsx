@@ -2,12 +2,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
+import { projectShortName } from "../lib/projectScope";
 import type { MprReport, Project, Vendor } from "../types";
 
-const PACKAGES = ["Jabalpur - Lakhnadon", "Lakhnadon - Khawasa", "Bokhedi - Kelapur"];
-
 const empty = {
-  package_name: PACKAGES[0],
+  package_name: "",
   project_id: "",
   vendor_id: "",
   report_month: new Date().toISOString().slice(0, 7) + "-01",
@@ -76,10 +75,11 @@ export function MprPage() {
     }
   };
 
-  const packageProjects = useMemo(() => {
-    const byName = new Map(projects.map((p) => [p.name, p]));
-    return PACKAGES.map((name) => ({ name, project: byName.get(name) || null }));
-  }, [projects]);
+  // One MPR card per active project package (names come from Projects).
+  const packageProjects = useMemo(
+    () => [...projects].sort((a, b) => a.id - b.id).map((p) => ({ name: p.name, project: p })),
+    [projects]
+  );
 
   const linkedVendors = useMemo(() => {
     const pid = form.project_id ? Number(form.project_id) : null;
@@ -97,7 +97,7 @@ export function MprPage() {
       setProjects(p);
       setVendors(v);
       if (!form.project_id) {
-        const first = p.find((x) => x.name === PACKAGES[0]) || p[0];
+        const first = [...p].sort((a, b) => a.id - b.id)[0];
         if (first) {
           setForm((f) => ({ ...f, project_id: String(first.id), package_name: first.name }));
         }
@@ -226,12 +226,15 @@ export function MprPage() {
       </section>
 
       <section className="panel">
-        <h2>Three package folders (MPR)</h2>
+        <h2>Package folders (MPR)</h2>
         <p className="muted">
           Each corridor package has a Documents leaf folder: Civil Related → Monthly Progress Report
           (MPR). Agency reports are interlinked with vendor profiles.
         </p>
-        <div className="billing-status-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div
+          className="billing-status-grid"
+          style={{ gridTemplateColumns: `repeat(${Math.min(packageProjects.length, 3) || 1}, minmax(0, 1fr))` }}
+        >
           {packageProjects.map((pkg) => (
             <button
               key={pkg.name}
@@ -242,14 +245,14 @@ export function MprPage() {
                 setForm((f) => ({
                   ...f,
                   package_name: pkg.name,
-                  project_id: pkg.project ? String(pkg.project.id) : f.project_id,
+                  project_id: String(pkg.project.id),
                 }))
               }
             >
-              <div>{pkg.name}</div>
+              <div>{projectShortName(pkg.project)}</div>
               <strong style={{ fontSize: "0.95rem" }}>MPR folder</strong>
               <span style={{ opacity: 0.9 }}>
-                {pkg.project ? `Project #${pkg.project.id}` : "Open Documents → Setup folders"}
+                {`Project #${pkg.project.id}`}
               </span>
             </button>
           ))}

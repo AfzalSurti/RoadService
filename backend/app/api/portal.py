@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog.packages import PACKAGE_OVERVIEWS
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.billing import DocumentFolder, PortalDocument, Vendor
@@ -33,6 +34,7 @@ PACKAGE_DETAILS = {
             "Lakhnadon section of NH-30 (Km 880.600 to Km 891.780) and NH-34 (Km 1358.000 to "
             "Km 1428.557) in the State of Madhya Pradesh."
         ),
+        "short_name": "Jabalpur – Lakhnadon",
         "location": "NH-30 & NH-34, Madhya Pradesh",
         "chainage_from": "880+600 (NH-30) / 1358+000 (NH-34)",
         "chainage_to": "891+780 (NH-30) / 1428+557 (NH-34)",
@@ -43,6 +45,7 @@ PACKAGE_DETAILS = {
             "NH-44 in the State of Madhya Pradesh (Mohagaon-Khawasa Section existing Chainage "
             "624+480 km to 653+770 km, Length of the Section = 29.29 km)."
         ),
+        "short_name": "Mahagaon – Khawasa",
         "location": "NH-44, Madhya Pradesh",
         "chainage_from": "624+480",
         "chainage_to": "653+770",
@@ -52,6 +55,7 @@ PACKAGE_DETAILS = {
             "Tolling, Operation, Maintenance & Transfer of Borkhedi–Wadner–Deodhari from "
             "km 36+600 to km 175+000 of NH-44 section in the State of Maharashtra."
         ),
+        "short_name": "Borkhedi – Wadner – Kelapur",
         "location": "NH-44, Maharashtra",
         "chainage_from": "36+600",
         "chainage_to": "175+000",
@@ -273,16 +277,30 @@ async def _ensure_folder_tree(db: AsyncSession) -> None:
 
     # 2) (re)build the canonical tree for each package
     for s_idx, stretch in enumerate(STRETCHES):
-        project = (
-            await db.execute(select(Project).where(Project.name == stretch))
-        ).scalar_one_or_none()
+        project = None
+        root = (
+            await db.execute(
+                select(DocumentFolder).where(
+                    DocumentFolder.name == stretch, DocumentFolder.parent_id.is_(None)
+                )
+            )
+        ).scalars().first()
+        if root and root.project_id:
+            project = (
+                await db.execute(select(Project).where(Project.id == root.project_id))
+            ).scalar_one_or_none()
+        if not project:
+            project = (
+                await db.execute(select(Project).where(Project.name == stretch))
+            ).scalar_one_or_none()
         if not project:
             details = PACKAGE_DETAILS.get(stretch, {})
             project = Project(
                 name=stretch,
                 title=details.get("title"),
+                short_name=details.get("short_name"),
                 location=details.get("location", stretch),
-                description=f"Corridor stretch folder project: {stretch}",
+                description=PACKAGE_OVERVIEWS.get(stretch, f"Corridor stretch folder project: {stretch}"),
                 chainage_from=details.get("chainage_from", "0+000"),
                 chainage_to=details.get("chainage_to", "0+000"),
             )

@@ -1,61 +1,62 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { projectTitle } from "../lib/projectScope";
-import * as v from "../lib/validation";
+import { ProjectForm, projectToForm, type ProjectFormValues } from "../components/ProjectForm";
+import { projectShortName, projectTitle } from "../lib/projectScope";
 import type { Project, ProjectRateSummary, User } from "../types";
-
-const emptyForm = {
-  name: "",
-  title: "",
-  location: "",
-  description: "",
-  chainage_from: "",
-  chainage_to: "",
-  contractor_id: "",
-  surveyor_id: "",
-};
 
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Form values → API body: blank optional text is stored as null. */
+function toBody(v: ProjectFormValues) {
+  const opt = (s: string) => s.trim() || null;
+  return {
+    name: v.name.trim(),
+    location: v.location.trim(),
+    short_name: opt(v.short_name),
+    title: opt(v.title),
+    description: opt(v.description),
+    chainage_from: opt(v.chainage_from),
+    chainage_to: opt(v.chainage_to),
+    contractor_ids: v.contractor_ids,
+    surveyor_ids: v.surveyor_ids,
+  };
+}
+
 export function ProjectsPage() {
-  const { token, isReadonly } = useAuth();
+  const { token, role, isReadonly } = useAuth();
+  const canManage = role === "admin" && !isReadonly;
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = Number(searchParams.get("project") || 0) || null;
+  const editing = searchParams.get("edit") === "1";
   const [projects, setProjects] = useState<Project[]>([]);
   const [summaries, setSummaries] = useState<Record<number, ProjectRateSummary>>({});
   const [contractors, setContractors] = useState<User[]>([]);
   const [surveyors, setSurveyors] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [fieldErrors, setFieldErrors] = useState<v.FieldErrors>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [msg, setMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const sortedProjects = useMemo(
-    () => [...projects].sort((a, b) => a.id - b.id),
-    [projects]
-  );
-
+  const sortedProjects = useMemo(() => [...projects].sort((a, b) => a.id - b.id), [projects]);
   const selected = useMemo(
     () => (highlightId ? sortedProjects.find((p) => p.id === highlightId) || null : null),
     [highlightId, sortedProjects]
   );
   const selectedSum = selected ? summaries[selected.id] : undefined;
 
-  const selectProject = (id: number) => {
-    setSearchParams({ project: String(id) });
+  const selectProject = (id: number, edit = false) => {
+    setSearchParams(edit ? { project: String(id), edit: "1" } : { project: String(id) });
   };
 
   const load = () => {
     if (!token) return;
     Promise.all([
       api.projects(token),
-      api.users(token, "contractor"),
-      api.users(token, "surveyor"),
+      canManage ? api.users(token, "contractor") : Promise.resolve([] as User[]),
+      canManage ? api.users(token, "surveyor") : Promise.resolve([] as User[]),
     ])
       .then(async ([p, c, s]) => {
         setProjects(p);
@@ -64,17 +65,14 @@ export function ProjectsPage() {
         const entries = await Promise.all(
           p.map(async (proj) => {
             try {
-              const sum = await api.projectRateSummary(token, proj.id);
-              return [proj.id, sum] as const;
+              return [proj.id, await api.projectRateSummary(token, proj.id)] as const;
             } catch {
               return null;
             }
           })
         );
         const map: Record<number, ProjectRateSummary> = {};
-        for (const e of entries) {
-          if (e) map[e[0]] = e[1];
-        }
+        for (const e of entries) if (e) map[e[0]] = e[1];
         setSummaries(map);
       })
       .catch((e: Error) => setError(e.message));
@@ -89,77 +87,67 @@ export function ProjectsPage() {
     load();
   }, [token]);
 
-  const validate = (next = form) => {
-    const errors = v.collect({
-      name: v.minLength(next.name, 2, "Name"),
-      location: v.minLength(next.location, 2, "Location"),
-      description:
-        next.description.trim() && next.description.trim().length < 3
-          ? "Description must be at least 3 characters if provided"
-          : null,
-      contractor_id: next.contractor_id ? null : "Select a contractor",
-      surveyor_id: next.surveyor_id ? null : "Select a GMC representative",
+  const onCreate = async (values: ProjectFormValues) => {
+    if (!token) return;
+    const body = toBody(values);
+    const created = await api.createProject(token, {
+      ...body,
+      short_name: body.short_name ?? undefined,
+      title: body.title ?? undefined,
+      description: body.description ?? undefined,
+      chainage_from: body.chainage_from ?? undefined,
+      chainage_to: body.chainage_to ?? undefined,
     });
-    setFieldErrors(errors);
-    return errors;
+    setShowCreate(false);
+    setMsg(`Project “${projectShortName(created)}” created.`);
+    load();
+    selectProject(created.id);
   };
 
-  const setField = (key: keyof typeof emptyForm, value: string) => {
-    const next = { ...form, [key]: value };
-    setForm(next);
-    if (touched[key]) validate(next);
+  const onUpdate = async (values: ProjectFormValues) => {
+    if (!token || !selected) return;
+    const updated = await api.updateProject(token, selected.id, toBody(values));
+    setMsg(`Project “${projectShortName(updated)}” saved. The dashboard shows the new details.`);
+    load();
+    selectProject(updated.id);
   };
 
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!token || isReadonly) return;
-    setTouched({
-      name: true,
-      location: true,
-      description: true,
-      contractor_id: true,
-      surveyor_id: true,
-    });
-    const errors = validate();
-    if (Object.keys(errors).length) {
-      setError(v.firstError(errors));
+  const onRemove = async () => {
+    if (!token || !selected) return;
+    const label = projectShortName(selected);
+    if (
+      !window.confirm(
+        `Remove “${label}” from the portal?\n\nIt disappears from the dashboard and project lists. ` +
+          "Its issues, documents and invoices are kept."
+      )
+    )
       return;
-    }
-    setError(null);
     try {
-      const created = await api.createProject(token, {
-        name: form.name.trim(),
-        title: form.title.trim() || undefined,
-        location: form.location.trim(),
-        description: form.description.trim() || undefined,
-        chainage_from: form.chainage_from.trim() || undefined,
-        chainage_to: form.chainage_to.trim() || undefined,
-        contractor_ids: form.contractor_id ? [Number(form.contractor_id)] : [],
-        surveyor_ids: form.surveyor_id ? [Number(form.surveyor_id)] : [],
-      });
-      setForm(emptyForm);
-      setTouched({});
-      setFieldErrors({});
-      setShowCreate(false);
+      await api.updateProject(token, selected.id, { is_active: false });
+      setMsg(`Project “${label}” removed.`);
+      setSearchParams({});
       load();
-      if (created?.id) selectProject(created.id);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Create failed");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Remove failed");
     }
   };
 
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      {msg ? <div className="success">{msg}</div> : null}
 
       <section className="panel">
         <div className="panel-head-row">
           <h2>All projects</h2>
-          {!isReadonly ? (
+          {canManage ? (
             <button
               type="button"
               className="btn secondary"
-              onClick={() => setShowCreate((v) => !v)}
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setMsg(null);
+              }}
             >
               {showCreate ? "Hide create form" : "Add project"}
             </button>
@@ -198,8 +186,8 @@ export function ProjectsPage() {
                 >
                   <td>{p.id}</td>
                   <td className="project-name-cell">
-                    <strong>{projectTitle(p)}</strong>
-                    {p.title ? <span className="muted">{p.name}</span> : null}
+                    <strong>{projectShortName(p)}</strong>
+                    {p.title ? <span className="muted">{p.title}</span> : null}
                   </td>
                   <td>{p.location}</td>
                   <td>
@@ -211,10 +199,13 @@ export function ProjectsPage() {
                   <td>{sum ? `₹ ${money(sum.total_boq_amount)}` : "—"}</td>
                   <td>{sum ? `₹ ${money(sum.total_executed_amount)}` : "—"}</td>
                   <td>{sum?.progress_pct == null ? "—" : `${sum.progress_pct}%`}</td>
-                  <td>
-                    <Link to={`/rates?project=${p.id}`} onClick={(e) => e.stopPropagation()}>
-                      Rates
-                    </Link>
+                  <td className="btn-row" onClick={(e) => e.stopPropagation()}>
+                    {canManage ? (
+                      <button type="button" className="btn ghost" onClick={() => selectProject(p.id, true)}>
+                        Edit
+                      </button>
+                    ) : null}
+                    <Link to={`/rates?project=${p.id}`}>Rates</Link>
                   </td>
                 </tr>
               );
@@ -228,170 +219,80 @@ export function ProjectsPage() {
         </table>
       </section>
 
-      {selected ? (
+      {showCreate && canManage ? (
+        <section className="panel">
+          <h2>Create project</h2>
+          <ProjectForm
+            initial={projectToForm(null)}
+            contractors={contractors}
+            surveyors={surveyors}
+            submitLabel="Create project"
+            onSubmit={onCreate}
+            onCancel={() => setShowCreate(false)}
+          />
+        </section>
+      ) : null}
+
+      {selected && editing && canManage ? (
+        <section className="panel">
+          <h2>Edit · {projectShortName(selected)}</h2>
+          <ProjectForm
+            key={selected.id}
+            initial={projectToForm(selected)}
+            contractors={contractors}
+            surveyors={surveyors}
+            submitLabel="Save changes"
+            onSubmit={onUpdate}
+            onCancel={() => selectProject(selected.id)}
+          />
+        </section>
+      ) : selected ? (
         <section className="panel">
           <div className="selected-project-banner">
             <div>
               <strong>
-                Selected · #{selected.id} · {selected.name}
+                #{selected.id} · {projectShortName(selected)}
               </strong>
-              {selected.title ? <p>{selected.title}</p> : null}
+              {selected.title ? <p>{projectTitle(selected)}</p> : null}
               <p>
                 {selected.location}
                 {selected.chainage_from || selected.chainage_to
                   ? ` · ${selected.chainage_from || "—"} – ${selected.chainage_to || "—"}`
                   : ""}
               </p>
-              {selected.description ? <p className="muted">{selected.description}</p> : null}
               <p className="muted" style={{ marginTop: "0.35rem" }}>
-                {selected.contractors.length} contractors · {selected.surveyors.length} GMC
-                representatives
+                {selected.contractors.length} contractors · {selected.surveyors.length} GMC representatives
                 {selectedSum
                   ? ` · BOQ ₹ ${money(selectedSum.total_boq_amount)} · Executed ₹ ${money(
                       selectedSum.total_executed_amount
-                    )} · ${
-                      selectedSum.progress_pct == null ? "—" : `${selectedSum.progress_pct}%`
-                    } progress`
+                    )} · ${selectedSum.progress_pct == null ? "—" : `${selectedSum.progress_pct}%`} progress`
                   : ""}
               </p>
+              {selected.description ? <p className="project-overview">{selected.description}</p> : null}
             </div>
             <div className="btn-row">
-              <Link className="btn" to={`/rates?project=${selected.id}`}>
+              {canManage ? (
+                <button type="button" className="btn" onClick={() => selectProject(selected.id, true)}>
+                  Edit details
+                </button>
+              ) : null}
+              <Link className="btn ghost" to={`/rates?project=${selected.id}`}>
                 Open rates
               </Link>
               <Link className="btn ghost" to={`/issues?project=${selected.id}`}>
                 Issues
               </Link>
+              {canManage ? (
+                <button type="button" className="btn ghost danger" onClick={onRemove}>
+                  Remove
+                </button>
+              ) : null}
             </div>
           </div>
         </section>
       ) : (
-        <p className="muted">Select a project row above to see details.</p>
+        <p className="muted">Select a project row above to see details{canManage ? " or edit it" : ""}.</p>
       )}
-
-      {showCreate && !isReadonly ? (
-        <section className="panel">
-          <h2>Create project</h2>
-          <form className="form-grid" onSubmit={onCreate} noValidate>
-            <label>
-              Name
-              <input
-                value={form.name}
-                aria-invalid={Boolean(touched.name && fieldErrors.name)}
-                onChange={(e) => setField("name", e.target.value)}
-                onBlur={() => {
-                  setTouched((t) => ({ ...t, name: true }));
-                  validate();
-                }}
-              />
-              {touched.name && fieldErrors.name ? (
-                <span className="field-error">{fieldErrors.name}</span>
-              ) : null}
-            </label>
-            <label>
-              Official title
-              <textarea
-                value={form.title}
-                onChange={(e) => setField("title", e.target.value)}
-                placeholder="e.g. Tolling, Operation, Maintenance & Transfer of …"
-              />
-            </label>
-            <label>
-              Location
-              <input
-                value={form.location}
-                aria-invalid={Boolean(touched.location && fieldErrors.location)}
-                onChange={(e) => setField("location", e.target.value)}
-                onBlur={() => {
-                  setTouched((t) => ({ ...t, location: true }));
-                  validate();
-                }}
-              />
-              {touched.location && fieldErrors.location ? (
-                <span className="field-error">{fieldErrors.location}</span>
-              ) : null}
-            </label>
-            <label>
-              Description
-              <textarea
-                value={form.description}
-                aria-invalid={Boolean(touched.description && fieldErrors.description)}
-                onChange={(e) => setField("description", e.target.value)}
-                onBlur={() => {
-                  setTouched((t) => ({ ...t, description: true }));
-                  validate();
-                }}
-              />
-              {touched.description && fieldErrors.description ? (
-                <span className="field-error">{fieldErrors.description}</span>
-              ) : null}
-            </label>
-            <label>
-              Chainage from
-              <input
-                value={form.chainage_from}
-                onChange={(e) => setField("chainage_from", e.target.value)}
-                placeholder="e.g. 10+000"
-              />
-            </label>
-            <label>
-              Chainage to
-              <input
-                value={form.chainage_to}
-                onChange={(e) => setField("chainage_to", e.target.value)}
-                placeholder="e.g. 25+500"
-              />
-            </label>
-            <label>
-              Contractor
-              <select
-                value={form.contractor_id}
-                aria-invalid={Boolean(touched.contractor_id && fieldErrors.contractor_id)}
-                onChange={(e) => setField("contractor_id", e.target.value)}
-                onBlur={() => {
-                  setTouched((t) => ({ ...t, contractor_id: true }));
-                  validate();
-                }}
-              >
-                <option value="">Select…</option>
-                {contractors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.full_name}
-                  </option>
-                ))}
-              </select>
-              {touched.contractor_id && fieldErrors.contractor_id ? (
-                <span className="field-error">{fieldErrors.contractor_id}</span>
-              ) : null}
-            </label>
-            <label>
-              GMC representative
-              <select
-                value={form.surveyor_id}
-                aria-invalid={Boolean(touched.surveyor_id && fieldErrors.surveyor_id)}
-                onChange={(e) => setField("surveyor_id", e.target.value)}
-                onBlur={() => {
-                  setTouched((t) => ({ ...t, surveyor_id: true }));
-                  validate();
-                }}
-              >
-                <option value="">Select…</option>
-                {surveyors.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.full_name}
-                  </option>
-                ))}
-              </select>
-              {touched.surveyor_id && fieldErrors.surveyor_id ? (
-                <span className="field-error">{fieldErrors.surveyor_id}</span>
-              ) : null}
-            </label>
-            <button className="btn" type="submit">
-              Create project
-            </button>
-          </form>
-        </section>
-      ) : null}
     </>
   );
 }

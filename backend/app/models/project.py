@@ -28,6 +28,8 @@ class Project(Base):
     # Full official package title shown in the portal; `name` stays the short key
     # (e.g. "Jabalpur - Lakhnadon") that document folders / MPR / NHIT match on.
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Short label for dashboard tiles / pickers (e.g. "Mahagaon – Khawasa").
+    short_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)

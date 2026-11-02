@@ -93,6 +93,7 @@ export const api = {
     body: {
       name: string;
       title?: string;
+      short_name?: string;
       location: string;
       description?: string;
       chainage_from?: string;
@@ -103,6 +104,28 @@ export const api = {
   ) =>
     request<Project>("/api/v1/projects", {
       method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  updateProject: (
+    token: string,
+    id: number,
+    body: Partial<{
+      name: string;
+      title: string | null;
+      short_name: string | null;
+      location: string;
+      description: string | null;
+      chainage_from: string | null;
+      chainage_to: string | null;
+      is_active: boolean;
+      contractor_ids: number[];
+      surveyor_ids: number[];
+    }>
+  ) =>
+    request<Project>(`/api/v1/projects/${id}`, {
+      method: "PATCH",
       token,
       body: JSON.stringify(body),
     }),

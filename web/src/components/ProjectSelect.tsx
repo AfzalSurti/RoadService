@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import type { Project } from "../types";
+import { projectShortName } from "../lib/projectScope";
 
 type Props = {
   value: string | number | "";
@@ -55,7 +56,7 @@ export function ProjectSelect({
         {allowAll ? <option value="">{allLabel}</option> : <option value="">Select project…</option>}
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.name}
+            {projectShortName(p)}
             {p.location && p.location !== p.name ? ` · ${p.location}` : ""}
           </option>
         ))}

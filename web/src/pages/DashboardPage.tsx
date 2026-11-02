@@ -16,6 +16,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
 import {
+  projectShortName,
   projectTitle,
   resolveProjectId,
   setSelectedProjectId,
@@ -34,13 +35,6 @@ const COLORS: Record<string, string> = {
 
 const PREVIEW_COUNT = 3;
 
-
-// Short corridor labels for the splash tiles, keyed by the package `name`.
-const HERO_SHORT_NAMES: Record<string, string> = {
-  "Jabalpur - Lakhnadon": "Jabalpur – Lakhnadon",
-  "Lakhnadon - Khawasa": "Mahagaon – Khawasa",
-  "Bokhedi - Kelapur": "Borkhedi – Wadner – Kelapur",
-};
 
 function HighwayIcon() {
   return (
@@ -77,7 +71,7 @@ function StatCard({
 }
 
 export function DashboardPage() {
-  const { token, role } = useAuth();
+  const { token, role, isReadonly } = useAuth();
   const [params, setParams] = useSearchParams();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -89,6 +83,8 @@ export function DashboardPage() {
   // Splash photo shows on every visit to the dashboard; clicking it reveals the
   // dashboard as it was left (selected project is kept via URL / projectScope).
   const [showHero, setShowHero] = useState(true);
+  // Package whose overview is shown on the splash (hover / keyboard focus).
+  const [previewId, setPreviewId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const projectsPath = role === "admin" ? "/projects" : "/executive";
   const ratesPath = role === "admin" ? "/rates" : "/executive";
@@ -181,7 +177,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = selected ? `Dashboard · ${selected.name}` : "Dashboard";
+    if (el) el.textContent = selected ? `Dashboard · ${projectShortName(selected)}` : "Dashboard";
   }, [selected]);
 
   // Drop a stale selection (e.g. a retired project still in session storage).
@@ -193,6 +189,7 @@ export function DashboardPage() {
   }, [projects, selectedId]);
 
   const pid = selectedId;
+  const preview = previewId ? projects.find((p) => p.id === previewId) || null : null;
 
   if (showHero) {
     return (
@@ -213,13 +210,20 @@ export function DashboardPage() {
         <span className="dash-hero-bg" />
         <span className="dash-hero-wash" />
         <div className="dash-hero-inner">
-          <div className="dash-hero-tiles">
-            {projects.map((p, idx) => (
+          <div
+            className={`dash-hero-tiles${preview ? " is-previewing" : ""}`}
+            onMouseLeave={() => setPreviewId(null)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPreviewId(null);
+            }}
+          >
+            {(preview ? [preview] : projects).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 className="dash-hero-tile"
-                title={projectTitle(p)}
+                onMouseEnter={() => setPreviewId(p.id)}
+                onFocus={() => setPreviewId(p.id)}
                 onClick={(e) => {
                   e.stopPropagation();
                   openProject(p);
@@ -230,11 +234,38 @@ export function DashboardPage() {
                   <HighwayIcon />
                 </span>
                 <span className="dash-hero-tile-name">
-                  <span className="dash-hero-tile-no">{idx + 1}</span>
-                  {HERO_SHORT_NAMES[p.name] || p.name}
+                  <span className="dash-hero-tile-no">{projects.indexOf(p) + 1}</span>
+                  {projectShortName(p)}
                 </span>
+                {preview ? <span className="dash-hero-tile-cta">Open package →</span> : null}
               </button>
             ))}
+            {preview ? (
+              <div className="dash-hero-details" onClick={(e) => e.stopPropagation()}>
+                <h3>{projectTitle(preview)}</h3>
+                <p className="dash-hero-details-meta">
+                  {preview.location}
+                  {preview.chainage_from || preview.chainage_to
+                    ? ` · Ch. ${preview.chainage_from || "—"} – ${preview.chainage_to || "—"}`
+                    : ""}
+                </p>
+                {(preview.description || "")
+                  .split(/\n\s*\n/)
+                  .map((para) => para.trim())
+                  .filter(Boolean)
+                  .map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                {!preview.description ? (
+                  <p className="dash-hero-details-meta">No overview added yet.</p>
+                ) : null}
+                {role === "admin" && !isReadonly ? (
+                  <Link className="dash-hero-edit" to={`/projects?project=${preview.id}&edit=1`}>
+                    Edit details
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -295,8 +326,8 @@ export function DashboardPage() {
                 >
                   <td>{p.id}</td>
                   <td className="project-name-cell">
-                    <strong>{projectTitle(p)}</strong>
-                    {p.title ? <span className="muted">{p.name}</span> : null}
+                    <strong>{projectShortName(p)}</strong>
+                    {p.title ? <span className="muted">{p.title}</span> : null}
                   </td>
                   <td>{p.location}</td>
                   <td>
@@ -352,7 +383,7 @@ export function DashboardPage() {
             <div className="selected-project-banner">
               <div>
                 <strong>
-                  Selected · #{selected.id} · {selected.name}
+                  Selected · #{selected.id} · {projectShortName(selected)}
                 </strong>
                 {selected.title ? <p>{selected.title}</p> : null}
                 <p>
@@ -371,9 +402,16 @@ export function DashboardPage() {
                     : ""}
                 </p>
               </div>
-              <button type="button" className="btn ghost" onClick={() => setShowHero(true)}>
-                ← Change package
-              </button>
+              <div className="btn-row">
+                {role === "admin" && !isReadonly ? (
+                  <Link className="btn" to={`/projects?project=${selected.id}&edit=1`}>
+                    Edit project
+                  </Link>
+                ) : null}
+                <button type="button" className="btn ghost" onClick={() => setShowHero(true)}>
+                  ← Change package
+                </button>
+              </div>
             </div>
           </section>
 
@@ -382,7 +420,7 @@ export function DashboardPage() {
               <section className="stat-grid">
                 <StatCard
                   label="This project"
-                  value={selected.name}
+                  value={projectShortName(selected)}
                   to={withProjectQuery(projectsPath, pid)}
                   hint="Project page →"
                 />
@@ -480,7 +518,7 @@ export function DashboardPage() {
 
               <section className="charts">
                 <div className="panel">
-                  <h2>Issue status · {selected.name}</h2>
+                  <h2>Issue status · {projectShortName(selected)}</h2>
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -506,7 +544,7 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="panel">
-                  <h2>Contractor performance · {selected.name}</h2>
+                  <h2>Contractor performance · {projectShortName(selected)}</h2>
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={barData}>

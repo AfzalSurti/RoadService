@@ -228,3 +228,6 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS title VARCHAR(512);
 
 -- 024: notification link to the portal page (also applied automatically on startup)
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255);
+
+-- 025: project short name for dashboard tiles (also applied automatically on startup)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS short_name VARCHAR(120);

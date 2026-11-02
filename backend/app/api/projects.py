@@ -55,6 +55,7 @@ async def create_project(
     project = Project(
         name=body.name,
         title=body.title,
+        short_name=body.short_name,
         location=body.location,
         description=body.description,
         chainage_from=body.chainage_from,
@@ -93,6 +94,13 @@ async def update_project(
 ):
     project = await _load_project(db, project_id)
     data = body.model_dump(exclude_unset=True)
+    # Required text fields cannot be blanked; optional ones store NULL when cleared.
+    for key in ("name", "location"):
+        if key in data and not (data[key] or "").strip():
+            raise HTTPException(status_code=400, detail=f"{key.capitalize()} cannot be empty")
+    for key in ("name", "location", "title", "short_name", "description", "chainage_from", "chainage_to"):
+        if isinstance(data.get(key), str):
+            data[key] = data[key].strip() or None
     contractor_ids = data.pop("contractor_ids", None)
     surveyor_ids = data.pop("surveyor_ids", None)
     for key, value in data.items():

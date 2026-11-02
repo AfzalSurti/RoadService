@@ -23,6 +23,8 @@ export type Project = {
   name: string;
   /** Full official package title; `name` is the short package key. */
   title?: string | null;
+  /** Short label for dashboard tiles / pickers. */
+  short_name?: string | null;
   location: string;
   description?: string | null;
   chainage_from?: string | null;
