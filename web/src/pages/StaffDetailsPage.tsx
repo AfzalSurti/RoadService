@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import type { OrgStaffDetail, StaffMeta } from "../types";
+import type { OrgStaffDetail, Project, StaffMeta } from "../types";
 
 const empty = {
   project_name: "",
@@ -12,6 +12,32 @@ const empty = {
   alternate_mobile_no: "",
   email_id: "",
 };
+
+const words = (text: string) =>
+  text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((w) => w.length > 2 && !["section", "the", "and", "package"].includes(w));
+
+/**
+ * Staff "Project name" is free text ("JABALPUR - LAKHNADON SECTION"); match it to
+ * the package whose name / short name / title shares the most words.
+ */
+function packageIndex(projectName: string, projects: Project[]): number {
+  const mine = new Set(words(projectName));
+  let best = -1;
+  let bestScore = 0;
+  projects.forEach((p, i) => {
+    const theirs = new Set(words(`${p.name} ${p.short_name || ""} ${p.title || ""}`));
+    let score = 0;
+    for (const w of mine) if (theirs.has(w)) score += 1;
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  });
+  return best === -1 ? Number.MAX_SAFE_INTEGER : best;
+}
 
 export function StaffDetailsPage() {
   const { token, role, isReadonly } = useAuth();
@@ -24,18 +50,33 @@ export function StaffDetailsPage() {
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  // Rows in package order (1 Jabalpur – Lakhnadon, 2 …, 3 …), then project text, then name.
+  const sortedRows = useMemo(() => {
+    const ordered = [...projects].sort((a, b) => a.id - b.id);
+    return rows
+      .map((r) => ({ r, pkg: packageIndex(r.project_name || "", ordered) }))
+      .sort(
+        (a, b) =>
+          a.pkg - b.pkg ||
+          (a.r.project_name || "").localeCompare(b.r.project_name || "", undefined, { sensitivity: "base" }) ||
+          (a.r.name || "").localeCompare(b.r.name || "", undefined, { sensitivity: "base" })
+      )
+      .map((x) => x.r);
+  }, [rows, projects]);
 
   const canManage = Boolean(meta?.can_add) && !isReadonly;
 
   const grouped = useMemo(() => {
     const map = new Map<string, OrgStaffDetail[]>();
-    for (const r of rows) {
+    for (const r of sortedRows) {
       const key = r.organization;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(r);
     }
     return map;
-  }, [rows]);
+  }, [sortedRows]);
 
   const load = async () => {
     if (!token) return;
@@ -60,6 +101,14 @@ export function StaffDetailsPage() {
   useEffect(() => {
     void load();
   }, [token, filterOrg]);
+
+  useEffect(() => {
+    if (!token) return;
+    api
+      .projects(token)
+      .then(setProjects)
+      .catch(() => setProjects([]));
+  }, [token]);
 
   const openCreate = () => {
     setEditId(null);
