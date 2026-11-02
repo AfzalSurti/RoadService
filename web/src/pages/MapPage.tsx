@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { IssueDetailPanel } from "../components/IssueDetailPanel";
 import { StatusBadge, formatLabel } from "../components/StatusBadge";
-import { projectIdFromUrl } from "../lib/projectScope";
-import type { Issue } from "../types";
+import { getSelectedProjectId, projectShortName, setSelectedProjectId } from "../lib/projectScope";
+import type { Issue, Project, Vendor } from "../types";
 
 const COLORS: Record<string, string> = {
   open: "#e11d48",
@@ -15,11 +16,22 @@ const COLORS: Record<string, string> = {
   under_review: "#ea580c",
   closed: "#16a34a",
 };
+const STATUSES = Object.keys(COLORS);
+const INDIA: [number, number] = [20.5937, 78.9629];
 
+const hasCoords = (i: Issue) =>
+  Number.isFinite(i.before_lat) && Number.isFinite(i.before_lng) && !(i.before_lat === 0 && i.before_lng === 0);
+
+/** Zoom to the visible pins whenever the filters change. */
 function FitBounds({ issues }: { issues: Issue[] }) {
   const map = useMap();
+  const key = issues.map((i) => i.id).join(",");
   useEffect(() => {
     if (!issues.length) return;
+    if (issues.length === 1) {
+      map.setView([issues[0].before_lat, issues[0].before_lng], 15);
+      return;
+    }
     const lats = issues.map((i) => i.before_lat);
     const lngs = issues.map((i) => i.before_lng);
     map.fitBounds(
@@ -27,167 +39,321 @@ function FitBounds({ issues }: { issues: Issue[] }) {
         [Math.min(...lats), Math.min(...lngs)],
         [Math.max(...lats), Math.max(...lngs)],
       ],
-      { padding: [40, 40] }
+      { padding: [60, 60] }
     );
-  }, [issues, map]);
+  }, [key, map]);
   return null;
 }
 
-function historyLines(issue: Issue) {
-  const status = [...(issue.status_history || [])].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  const rejects = [...(issue.rejection_history || [])].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  return { status, rejects };
+/** Leaflet needs a size refresh after entering / leaving browser full screen. */
+function ResizeOnFullscreen() {
+  const map = useMap();
+  useEffect(() => {
+    const onChange = () => window.setTimeout(() => map.invalidateSize(), 150);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [map]);
+  return null;
 }
 
+/**
+ * Issue map: full-height map with Package → Vendor → Issue filters. A pin opens a
+ * summary popup; "View more" opens the full issue side panel.
+ */
 export function MapPage() {
-  const { token } = useAuth();
-  const [searchParams] = useSearchParams();
-  const projectId = projectIdFromUrl(searchParams.get("project"));
+  const { token, role } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [selected, setSelected] = useState<Issue | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [vendorId, setVendorId] = useState("");
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [defect, setDefect] = useState("");
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [isFull, setIsFull] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+  const canFilterVendor = role === "admin" || role === "government";
+
+  const urlProject = Number(params.get("project") || 0) || null;
+  const projectId = urlProject ?? (params.has("all") ? null : getSelectedProjectId());
+  const sortedProjects = useMemo(() => [...projects].sort((a, b) => a.id - b.id), [projects]);
+  const project = projectId ? sortedProjects.find((p) => p.id === projectId) || null : null;
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = projectId ? `Map · Project #${projectId}` : "Map";
-  }, [projectId]);
+    if (el) el.textContent = project ? `Map · ${projectShortName(project)}` : "Map";
+  }, [project]);
+
+  const load = () => {
+    if (!token) return;
+    api
+      .issues(token, null, null)
+      .then((rows) => {
+        setIssues(rows);
+        setError(null);
+      })
+      .catch((e: Error) => setError(e.message));
+  };
 
   useEffect(() => {
     if (!token) return;
+    load();
     api
-      .issues(token, null, projectId)
-      .then(setIssues)
-      .catch((e: Error) => setError(e.message));
-  }, [token, projectId]);
+      .projects(token)
+      .then(setProjects)
+      .catch(() => setProjects([]));
+    if (canFilterVendor) {
+      api
+        .vendors(token)
+        .then(setVendors)
+        .catch(() => setVendors([]));
+    }
+  }, [token]);
 
-  const center = useMemo<[number, number]>(() => {
-    if (!issues.length) return [20.5937, 78.9629];
-    const lat = issues.reduce((s, i) => s + i.before_lat, 0) / issues.length;
-    const lng = issues.reduce((s, i) => s + i.before_lng, 0) / issues.length;
-    return [lat, lng];
-  }, [issues]);
+  useEffect(() => {
+    const onChange = () => setIsFull(document.fullscreenElement === wrapRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
-  const openIssue = async (issue: Issue) => {
-    if (!token) return;
-    setSelected(issue);
-    setLoadingDetail(true);
-    setError(null);
-    try {
-      const full = await api.issue(token, issue.id);
-      setSelected(full);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load issue history");
-    } finally {
-      setLoadingDetail(false);
+  const pickProject = (id: string) => {
+    setVendorId("");
+    if (id) {
+      setSelectedProjectId(Number(id));
+      setParams({ project: id });
+    } else {
+      setSelectedProjectId(null);
+      setParams({ all: "1" });
     }
   };
 
-  const hist = selected ? historyLines(selected) : null;
+  // Vendor filter: vendors of the chosen package that are linked to a contractor login.
+  const packageVendors = useMemo(
+    () => vendors.filter((v) => v.contractor_user_id && (!projectId || v.project_id === projectId)),
+    [vendors, projectId]
+  );
+  const vendor = vendorId ? packageVendors.find((v) => String(v.id) === vendorId) || null : null;
+  const vendorByContractor = useMemo(() => {
+    const map = new Map<number, Vendor>();
+    for (const v of vendors) if (v.contractor_user_id) map.set(v.contractor_user_id, v);
+    return map;
+  }, [vendors]);
+
+  const scoped = useMemo(
+    () =>
+      issues.filter(
+        (i) =>
+          hasCoords(i) &&
+          (!projectId || i.project_id === projectId) &&
+          (!vendor || i.assigned_contractor_id === vendor.contractor_user_id)
+      ),
+    [issues, projectId, vendor]
+  );
+  const defectOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const i of scoped) set.set(i.issue_type, i.issue_type_label || i.issue_type);
+    return [...set.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [scoped]);
+  const visible = useMemo(
+    () =>
+      scoped.filter(
+        (i) => (!statuses.length || statuses.includes(i.status)) && (!defect || i.issue_type === defect)
+      ),
+    [scoped, statuses, defect]
+  );
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const i of scoped) if (!defect || i.issue_type === defect) c[i.status] = (c[i.status] || 0) + 1;
+    return c;
+  }, [scoped, defect]);
+
+  const toggleStatus = (s: string) =>
+    setStatuses((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  const resetFilters = () => {
+    setVendorId("");
+    setStatuses([]);
+    setDefect("");
+  };
+  const filtersActive = Boolean(vendorId || statuses.length || defect);
+
+  const toggleFullscreen = async () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await el.requestFullscreen();
+    } catch {
+      /* browser refused (e.g. iframe) — the page-height map still works */
+    }
+  };
+
+  const projectName = (id: number) => {
+    const p = projects.find((x) => x.id === id);
+    return p ? projectShortName(p) : `Project #${id}`;
+  };
 
   return (
-    <div className="docs-layout">
-      <section className="panel" style={{ minWidth: 0 }}>
-        {error ? <div className="error">{error}</div> : null}
-        <div className="legend">
-          {Object.keys(COLORS).map((k) => (
-            <StatusBadge key={k} status={k} />
-          ))}
-        </div>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Click a coloured marker to open issue / defect history for that location.
-        </p>
-        <div className="map-canvas">
-          <MapContainer center={center} zoom={issues.length ? 12 : 5} style={{ height: "100%", width: "100%" }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <FitBounds issues={issues} />
-            {issues.map((i) => (
-              <CircleMarker
-                key={i.id}
-                center={[i.before_lat, i.before_lng]}
-                radius={selected?.id === i.id ? 12 : 9}
-                eventHandlers={{ click: () => void openIssue(i) }}
-                pathOptions={{
-                  color: COLORS[i.status] || "#64748b",
-                  fillColor: COLORS[i.status] || "#64748b",
-                  fillOpacity: 0.85,
-                  weight: selected?.id === i.id ? 3 : 1,
-                }}
-              >
-                <Popup>
-                  <strong>
-                    #{i.id} {i.issue_type}
-                  </strong>
-                  <br />
-                  <StatusBadge status={i.status} />
-                  <br />
-                  <small>Click marker for full history</small>
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MapContainer>
-        </div>
-      </section>
-
-      <aside className="panel docs-sidebar">
-        <h2>Issue / defect history</h2>
-        {!selected ? (
-          <p className="muted">Select a coloured pin on the map.</p>
-        ) : (
-          <>
-            <div className="panel-head-row">
-              <div>
-                <strong>
-                  #{selected.id} · {selected.issue_type}
-                </strong>
-                <div className="muted">{selected.work_category}</div>
-              </div>
-              <StatusBadge status={selected.status} />
-            </div>
-            <p className="muted" style={{ marginBottom: "0.5rem" }}>
-              Chainage: {selected.chainage || "—"} · Priority: {formatLabel(selected.priority)}
-            </p>
-            {loadingDetail ? <p className="muted">Loading history…</p> : null}
-            <h3 style={{ fontSize: "0.95rem" }}>Status history</h3>
-            <ul className="folder-tree" style={{ marginBottom: "1rem" }}>
-              {(hist?.status || []).length ? (
-                hist!.status.map((h) => (
-                  <li key={h.id} style={{ marginBottom: "0.45rem", fontSize: "0.88rem" }}>
+    <div ref={wrapRef} className={`map-page${isFull ? " is-full" : ""}`}>
+      <MapContainer center={INDIA} zoom={5} className="map-page-canvas">
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitBounds issues={visible} />
+        <ResizeOnFullscreen />
+        {visible.map((i) => {
+          const v = vendorByContractor.get(i.assigned_contractor_id);
+          return (
+            <CircleMarker
+              key={i.id}
+              center={[i.before_lat, i.before_lng]}
+              radius={detailId === i.id ? 12 : 9}
+              pathOptions={{
+                color: "#fff",
+                weight: 2,
+                fillColor: COLORS[i.status] || "#64748b",
+                fillOpacity: 0.95,
+              }}
+            >
+              <Popup className="map-popup" minWidth={240} maxWidth={300}>
+                <div className="map-popup-body">
+                  {i.before_photo_path ? (
+                    <img src={mediaUrl(i.before_photo_path)} alt={`Issue #${i.id}`} className="map-popup-photo" />
+                  ) : null}
+                  <div className="map-popup-head">
                     <strong>
-                      {formatLabel(h.from_status || "—")} → {formatLabel(h.to_status)}
+                      #{i.id} · {i.issue_type_label || i.issue_type}
                     </strong>
-                    <div className="muted">{new Date(h.created_at).toLocaleString()}</div>
-                    {h.note ? <div>{h.note}</div> : null}
-                  </li>
-                ))
-              ) : (
-                <li className="muted">No status history yet.</li>
-              )}
-            </ul>
-            <h3 style={{ fontSize: "0.95rem" }}>Rejection / rework history</h3>
-            <ul className="folder-tree">
-              {(hist?.rejects || []).length ? (
-                hist!.rejects.map((r) => (
-                  <li key={r.id} style={{ marginBottom: "0.45rem", fontSize: "0.88rem" }}>
-                    <strong>{r.reason || "Rework"}</strong>
-                    <div className="muted">{new Date(r.created_at).toLocaleString()}</div>
-                    {r.comments ? <div>{r.comments}</div> : null}
-                  </li>
-                ))
-              ) : (
-                <li className="muted">No rejection / defect rework history.</li>
-              )}
-            </ul>
+                    <StatusBadge status={i.status} />
+                  </div>
+                  <dl className="map-popup-meta">
+                    <dt>Package</dt>
+                    <dd>{projectName(i.project_id)}</dd>
+                    {v ? (
+                      <>
+                        <dt>Vendor</dt>
+                        <dd>{v.name}</dd>
+                      </>
+                    ) : null}
+                    <dt>Chainage</dt>
+                    <dd>{i.chainage || "—"}</dd>
+                    <dt>Priority</dt>
+                    <dd>{formatLabel(i.priority)}</dd>
+                    <dt>Raised</dt>
+                    <dd>{new Date(i.created_at).toLocaleDateString()}</dd>
+                    <dt>Deadline</dt>
+                    <dd>
+                      {i.deadline_date}
+                      {i.status !== "closed" && (i.remaining_days ?? 0) < 0 ? (
+                        <span className="map-popup-late"> · {Math.abs(i.remaining_days ?? 0)}d late</span>
+                      ) : null}
+                    </dd>
+                  </dl>
+                  <button type="button" className="btn map-popup-more" onClick={() => setDetailId(i.id)}>
+                    View more
+                  </button>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+      </MapContainer>
+
+      <div className={`map-filters${showFilters ? "" : " collapsed"}`}>
+        <div className="map-filters-head">
+          <strong>Filters</strong>
+          <span className="muted">
+            {visible.length} of {issues.filter(hasCoords).length} issues
+          </span>
+          <button type="button" className="linkish" onClick={() => setShowFilters((s) => !s)}>
+            {showFilters ? "Hide" : "Show"}
+          </button>
+        </div>
+        {showFilters ? (
+          <>
+            {error ? <div className="error">{error}</div> : null}
+            <label>
+              <span className="map-filter-step">1</span> Package
+              <select value={projectId ? String(projectId) : ""} onChange={(e) => pickProject(e.target.value)}>
+                <option value="">All packages</option>
+                {sortedProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {projectShortName(p)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {canFilterVendor ? (
+              <label>
+                <span className="map-filter-step">2</span> Vendor
+                <select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+                  <option value="">All vendors</option>
+                  {packageVendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {!projectId && v.project_id ? ` · ${projectName(v.project_id)}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {!packageVendors.length ? (
+                  <small className="muted">No vendors linked to a contractor login for this package.</small>
+                ) : null}
+              </label>
+            ) : null}
+            <div className="map-filter-group">
+              <span>
+                <span className="map-filter-step">{canFilterVendor ? 3 : 2}</span> Issue
+              </span>
+              <div className="map-status-chips">
+                {STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`map-status-chip${statuses.includes(s) ? " active" : ""}`}
+                    style={{ ["--chip" as string]: COLORS[s] }}
+                    onClick={() => toggleStatus(s)}
+                  >
+                    <span className="map-status-dot" />
+                    {formatLabel(s)}
+                    <span className="map-status-count">{statusCounts[s] || 0}</span>
+                  </button>
+                ))}
+              </div>
+              <select value={defect} onChange={(e) => setDefect(e.target.value)}>
+                <option value="">All defect types</option>
+                {defectOptions.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="btn-row">
+              <button type="button" className="btn ghost" onClick={resetFilters} disabled={!filtersActive}>
+                Reset filters
+              </button>
+              <button type="button" className="btn ghost" onClick={() => void toggleFullscreen()}>
+                {isFull ? "Exit full screen" : "⛶ Full screen"}
+              </button>
+            </div>
+            {!visible.length ? (
+              <p className="muted map-empty">No issues with a location match these filters.</p>
+            ) : null}
           </>
-        )}
-      </aside>
+        ) : null}
+      </div>
+
+      {/* Rendered inside the map wrapper so it also shows in browser full screen. */}
+      {detailId ? (
+        <IssueDetailPanel
+          issueId={detailId}
+          fallback={issues.find((i) => i.id === detailId) || null}
+          onClose={() => setDetailId(null)}
+          onChanged={load}
+        />
+      ) : null}
     </div>
   );
 }
