@@ -1435,9 +1435,22 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .works-brief { font-size: 0.82rem; margin-top: 0.2rem; max-width: 320px; }
 .vendor-filter { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .works-hint { margin: 0 0 0.5rem; font-size: 0.85rem; }
-/* Project Inventory: scope table */
+/* Project Inventory: scope table + optional photo */
 .inventory-tabs { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .inventory-layout { display: block; }
+/* With a photo: photo left, table right (stacks on narrow screens) */
+.inventory-layout.has-photo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.inventory-photo { margin: 0; display: grid; gap: 0.6rem; }
+.inventory-photo img { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+.inventory-photo-pick { cursor: pointer; }
+@media (max-width: 900px) {
+  .inventory-layout.has-photo { grid-template-columns: 1fr; }
+}
 .inventory-table th:first-child,
 .inventory-table td:first-child { width: 4.5rem; text-align: center; }
 .inventory-table td { vertical-align: top; }

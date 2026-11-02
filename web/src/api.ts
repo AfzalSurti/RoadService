@@ -147,6 +147,15 @@ export const api = {
       body: JSON.stringify(rows),
     }),
 
+  uploadLocationMap: (token: string, projectId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("photo", file);
+    return request<Project>(`/api/v1/projects/${projectId}/location-map`, { method: "POST", token, body: fd });
+  },
+
+  removeLocationMap: (token: string, projectId: number) =>
+    request<Project>(`/api/v1/projects/${projectId}/location-map`, { method: "DELETE", token }),
+
   uploadProjectImage: (token: string, id: number, file: File) => {
     const fd = new FormData();
     fd.append("photo", file);

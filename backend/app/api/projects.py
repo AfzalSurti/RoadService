@@ -181,3 +181,32 @@ async def replace_inventory(
         )
     await db.commit()
     return await _inventory(db, project_id)
+
+
+@router.post("/{project_id}/location-map", response_model=ProjectOut)
+async def upload_location_map(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    photo: Annotated[UploadFile, File()],
+):
+    """Add or replace the Project Inventory photo (e.g. route map)."""
+    if not (photo.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Upload an image file (JPG / PNG / WebP)")
+    project = await _load_project(db, project_id)
+    project.location_map_url = await save_upload(photo, f"project_map_{project_id}")
+    await db.commit()
+    return await _load_project(db, project_id)
+
+
+@router.delete("/{project_id}/location-map", response_model=ProjectOut)
+async def remove_location_map(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Remove the Project Inventory photo."""
+    project = await _load_project(db, project_id)
+    project.location_map_url = None
+    await db.commit()
+    return await _load_project(db, project_id)
