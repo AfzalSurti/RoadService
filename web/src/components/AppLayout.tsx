@@ -44,7 +44,7 @@ export function AppLayout() {
           </button>
         </div>
         <nav>
-          <NavLink to="/dashboard" end>
+          <NavLink to="/dashboard" end state={{ hero: true }}>
             Dashboard
           </NavLink>
 

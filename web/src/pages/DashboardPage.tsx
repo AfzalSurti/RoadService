@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -152,15 +152,23 @@ export function DashboardPage() {
     [stats]
   );
 
-  const visibleProjects = useMemo(
-    () => (showAllProjects ? projects : projects.slice(0, PREVIEW_COUNT)),
-    [projects, showAllProjects]
-  );
-
   const selected = useMemo(
     () => (selectedId ? projects.find((p) => p.id === selectedId) || null : null),
     [projects, selectedId]
   );
+
+  // A package picked from the splash shows on its own; switch via "Change package".
+  const visibleProjects = useMemo(() => {
+    if (selected) return [selected];
+    return showAllProjects ? projects : projects.slice(0, PREVIEW_COUNT);
+  }, [projects, showAllProjects, selected]);
+
+  // Sidebar "Dashboard" link sends { hero } state: go back to the package icons
+  // even when the dashboard is already open.
+  const location = useLocation();
+  useEffect(() => {
+    if ((location.state as { hero?: unknown } | null)?.hero) setShowHero(true);
+  }, [location.key]);
   const selectedSum = selectedId ? summaries[selectedId] : undefined;
 
   const openProject = (project: Project) => {
@@ -239,12 +247,21 @@ export function DashboardPage() {
 
       <section className="panel" id="latest-projects">
         <div className="panel-head-row">
-          <h2>Projects</h2>
-          <Link className="btn ghost" to={projectsPath}>
-            Open full list
-          </Link>
+          <h2>{selected ? "Package" : "Projects"}</h2>
+          <div className="btn-row">
+            <button type="button" className="btn ghost" onClick={() => setShowHero(true)}>
+              ← Change package
+            </button>
+            <Link className="btn ghost" to={projectsPath}>
+              Open full list
+            </Link>
+          </div>
         </div>
-        <p className="muted">Select a project to open its Issues, RFI, Query Raise, rates and other modules.</p>
+        <p className="muted">
+          {selected
+            ? "Showing this package only. Use “Change package” to pick another one."
+            : "Select a project to open its Issues, RFI, Query Raise, rates and other modules."}
+        </p>
         <table className="data">
           <thead>
             <tr>
@@ -312,7 +329,7 @@ export function DashboardPage() {
             ) : null}
           </tbody>
         </table>
-        {projects.length > PREVIEW_COUNT ? (
+        {!selected && projects.length > PREVIEW_COUNT ? (
           <div className="show-more-row">
             <button
               type="button"
@@ -354,18 +371,8 @@ export function DashboardPage() {
                     : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => {
-                  setSelectedId(null);
-                  setSelectedProjectId(null);
-                  const next = new URLSearchParams(params);
-                  next.delete("project");
-                  setParams(next, { replace: true });
-                }}
-              >
-                Clear selection
+              <button type="button" className="btn ghost" onClick={() => setShowHero(true)}>
+                ← Change package
               </button>
             </div>
           </section>
