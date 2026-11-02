@@ -90,14 +90,14 @@ export function AppLayout() {
           <NavGroup
             id="civil"
             title="Civil Dashboard"
-            paths={["/civil-assets", "/issues", "/rfi", "/mpr", "/executive", "/vendors", "/map"]}
+            paths={["/executive", "/civil-assets", "/vendors", "/issues", "/rfi", "/mpr", "/map"]}
           >
+            {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
             {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
+            {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
             <NavLink to={scoped("/issues")}>Issues</NavLink>
             {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
             {staff ? <NavLink to={scoped("/mpr")}>MSR</NavLink> : null}
-            {staff ? <NavLink to={scoped("/executive")}>Project Overview</NavLink> : null}
-            {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
             <NavLink to={scoped("/map")}>Map</NavLink>
           </NavGroup>
 
