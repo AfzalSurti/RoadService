@@ -102,7 +102,7 @@ PROJECT_DOCS = [
     "Design Calculations",
     "Project Schedule",
     "Baseline Programme",
-    "Monthly Progress Reports (MPR)",
+    "Monthly Status Reports (MSR)",
     "Inspection Reports",
     "Audit Reports",
     "Commissioning Certificates",
@@ -227,7 +227,7 @@ async def _prune_children(db: AsyncSession, parent_id: int, allowed: set[str]) -
 
 
 async def _find_mpr_leaf(db: AsyncSession, project_id: int) -> int | None:
-    """Folder id of the 'Monthly Progress Reports (MPR)' leaf for a package project."""
+    """Folder id of the 'Monthly Status Reports (MSR)' leaf (formerly MPR) for a package project."""
     pkg = (
         await db.execute(
             select(DocumentFolder).where(
@@ -261,7 +261,7 @@ async def _find_mpr_leaf(db: AsyncSession, project_id: int) -> int | None:
         await db.execute(
             select(DocumentFolder).where(
                 DocumentFolder.parent_id.in_(parents),
-                DocumentFolder.name.like("Monthly Progress Report%"),
+                DocumentFolder.name.like("Monthly Status Report%") | DocumentFolder.name.like("Monthly Progress Report%"),
             )
         )
     ).scalars().first()
@@ -779,7 +779,7 @@ async def create_mpr(
         if not vendor:
             raise HTTPException(404, "Vendor not found")
 
-    # Link to the "Monthly Progress Reports (MPR)" leaf under Civil Related > Project Documents
+    # Link to the "Monthly Status Reports (MSR)" leaf under Civil Related > Project Documents
     folder_id = await _find_mpr_leaf(db, project_id)
 
     pdf_path = None
@@ -810,8 +810,8 @@ async def create_mpr(
         doc = PortalDocument(
             project_id=project_id,
             folder_id=folder_id,
-            category="Monthly Progress Report (MPR)",
-            title=f"MPR {package_name} {month.isoformat()}",
+            category="Monthly Status Report (MSR)",
+            title=f"MSR {package_name} {month.isoformat()}",
             description=last_remarks,
             file_path=pdf_path,
             uploaded_by_id=user.id,
@@ -827,7 +827,7 @@ async def create_mpr(
                 document_id=doc.id,
                 version_no=1,
                 file_path=pdf_path,
-                change_note="MPR PDF import",
+                change_note="MSR PDF import",
                 uploaded_by_id=user.id,
             )
         )
@@ -866,7 +866,7 @@ async def upload_mpr_pdf(
         doc = PortalDocument(
             project_id=row.project_id,
             folder_id=row.folder_id,
-            category="Monthly Progress Report (MPR)",
+            category="Monthly Status Report (MSR)",
             title=f"MPR {row.package_name} {row.report_month}",
             description=row.last_remarks,
             file_path=pdf_path,

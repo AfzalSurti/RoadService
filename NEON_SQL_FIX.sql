@@ -290,3 +290,6 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_impl_authority VARCHAR(255
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS concessionaire VARCHAR(255);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS gmc_name VARCHAR(255);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS epc_contractor VARCHAR(255);
+
+-- 034: MPR -> MSR (Monthly Status Report) folder name (also applied automatically on startup)
+UPDATE document_folders SET name = 'Monthly Status Reports (MSR)' WHERE name = 'Monthly Progress Reports (MPR)';

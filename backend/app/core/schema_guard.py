@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-033 and are
+browsers report as a CORS error. These statements mirror alembic 023-034 and are
 safe to run on every boot.
 """
 
@@ -165,6 +165,13 @@ def party_statements():
         yield "UPDATE projects SET concessionaire = :v WHERE concessionaire IS NULL AND name = :n", {"v": value, "n": name}
 
 
+# alembic 034: MPR -> MSR folder name (files stay in the renamed folder).
+MSR_FOLDER_RENAME = (
+    "UPDATE document_folders SET name = 'Monthly Status Reports (MSR)' "
+    "WHERE name = 'Monthly Progress Reports (MPR)'"
+)
+
+
 async def seed_inventory(conn) -> None:
     """Fill each package's table from the Project Location sheets."""
     for name, rows in PACKAGE_INVENTORY.items():
@@ -247,6 +254,8 @@ async def ensure_schema() -> None:
                 await conn.execute(text(stmt))
             for stmt, params in party_statements():
                 await conn.execute(text(stmt), params)
+            # MPR is now MSR (Monthly Status Report): rename the package folders in place.
+            await conn.execute(text(MSR_FOLDER_RENAME))
             if not await _table_exists(conn, "project_inventory_sheets"):
                 for stmt in INVENTORY_SHEETS_DDL:
                     await conn.execute(text(stmt))

@@ -533,10 +533,10 @@ export function DashboardPage() {
                   hint="Project overview for package →"
                 />
                 <StatCard
-                  label="NSR"
+                  label="MSR"
                   value="Progress"
                   to={withProjectQuery("/mpr", pid)}
-                  hint="Open NSR →"
+                  hint="Open MSR →"
                 />
                 <StatCard
                   label="Map"

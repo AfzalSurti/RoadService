@@ -4,7 +4,7 @@ import type { Project } from "../types";
 
 /**
  * Sidebar package picker: All packages, or tick one or more. The choice scopes
- * every module (Issues, RFI, Billing, Documents, NSR, Map…).
+ * every module (Issues, RFI, Billing, Documents, MSR, Map…).
  */
 export function PackageScopePicker({
   projects,
