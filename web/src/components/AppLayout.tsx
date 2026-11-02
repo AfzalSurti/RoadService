@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { BackButton } from "./BackButton";
 import { DeveloperCredit } from "./DeveloperCredit";
+import { GlobalSearch } from "./GlobalSearch";
 import { PackageScopePicker } from "./PackageScopePicker";
 import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
@@ -143,6 +144,7 @@ export function AppLayout() {
         <div className="topbar">
           <BackButton />
           <h1 id="page-title">RoadService</h1>
+          <GlobalSearch />
           <DeveloperCredit className="navbar" />
           <div className="topbar-actions">
             <div className="topbar-user">

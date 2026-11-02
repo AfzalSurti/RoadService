@@ -85,7 +85,9 @@ export function DashboardPage() {
   const [showAllProjects, setShowAllProjects] = useState(false);
   // Splash photo shows on every visit to the dashboard; clicking it reveals the
   // dashboard as it was left (selected project is kept via URL / projectScope).
-  const [showHero, setShowHero] = useState(true);
+  // Splash on every visit, except when a package was picked in the portal search.
+  const arrivedFromSearch = Boolean((useLocation().state as { skipHero?: boolean } | null)?.skipHero);
+  const [showHero, setShowHero] = useState(!arrivedFromSearch);
   // Package whose overview is shown on the splash (hover / keyboard focus).
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);

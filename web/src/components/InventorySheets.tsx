@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import type { InventorySheet, InventorySheetSummary } from "../types";
@@ -24,6 +25,9 @@ export function InventorySheets({ projectId }: { projectId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [params] = useSearchParams();
+  const linkSheet = Number(params.get("sheet") || 0) || null;
+
   const loadTabs = (selectFirst = true) => {
     if (!token) return;
     api
@@ -31,7 +35,9 @@ export function InventorySheets({ projectId }: { projectId: number }) {
       .then((t) => {
         setTabs(t);
         setError(null);
-        if (selectFirst || !t.some((x) => x.id === activeId)) setActiveId(t[0]?.id ?? null);
+        const linked = linkSheet && t.some((x) => x.id === linkSheet) ? linkSheet : null;
+        if (linked) setActiveId(linked);
+        else if (selectFirst || !t.some((x) => x.id === activeId)) setActiveId(t[0]?.id ?? null);
       })
       .catch((e: Error) => setError(e.message));
   };
@@ -41,7 +47,7 @@ export function InventorySheets({ projectId }: { projectId: number }) {
     setSheet(null);
     setActiveId(null);
     loadTabs();
-  }, [token, projectId]);
+  }, [token, projectId, linkSheet]);
 
   useEffect(() => {
     if (!token || !activeId) return;

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
@@ -166,6 +167,33 @@ export function DocumentsPage() {
   useEffect(() => {
     loadDocs(selectedFolderId).catch((e: Error) => setError(e.message));
   }, [selectedFolderId, token]);
+
+  // Deep link (global search): /documents?folder=ID&doc=ID
+  const [params] = useSearchParams();
+  const linkFolder = Number(params.get("folder") || 0) || null;
+  const linkDoc = Number(params.get("doc") || 0) || null;
+  useEffect(() => {
+    if (!linkFolder || !allFolders.length) return;
+    const trail: number[] = [];
+    const walk = (nodes: DocumentFolder[], path: number[]): boolean => {
+      for (const n of nodes) {
+        if (n.id === linkFolder) {
+          trail.push(...path, n.id);
+          return true;
+        }
+        if (walk(n.children || [], [...path, n.id])) return true;
+      }
+      return false;
+    };
+    if (!walk(allFolders, [])) return;
+    setExpanded((prev) => new Set([...prev, ...trail]));
+    setSelectedFolderId(linkFolder);
+  }, [linkFolder, allFolders]);
+  useEffect(() => {
+    if (!linkDoc || selected?.id === linkDoc) return;
+    const hit = docs.find((d) => d.id === linkDoc);
+    if (hit) void openDoc(hit);
+  }, [linkDoc, docs]);
 
   const openDoc = async (d: PortalDocument) => {
     if (!token) return;

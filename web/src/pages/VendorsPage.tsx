@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { projectShortName, usePackageScope } from "../lib/projectScope";
@@ -86,6 +87,18 @@ export function VendorsPage() {
     () => (filter === "all" ? vendors : vendors.filter((v) => (vendorCategory(v) || "other") === filter)),
     [vendors, filter]
   );
+
+  // Deep link (global search): /vendors?id=ID
+  const [params] = useSearchParams();
+  const linkVendor = Number(params.get("id") || 0) || null;
+  useEffect(() => {
+    if (!linkVendor || !vendors.length) return;
+    setFilter("all");
+    window.setTimeout(
+      () => document.getElementById(`vendor-${linkVendor}`)?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      50
+    );
+  }, [linkVendor, vendors.length]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -237,7 +250,11 @@ export function VendorsPage() {
           {shown.map((v) => {
             const project = v.project_id ? projects.find((p) => p.id === v.project_id) : null;
             return (
-            <article className="panel nested" key={v.id}>
+            <article
+              className={`panel nested${linkVendor === v.id ? " search-hit" : ""}`}
+              key={v.id}
+              id={`vendor-${v.id}`}
+            >
               <div className="panel-head-row">
                 <h3>{v.name}</h3>
                 {canManage ? (
