@@ -2,15 +2,24 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-031 and are
+browsers report as a CORS error. These statements mirror alembic 023-032 and are
 safe to run on every boot.
 """
 
+import asyncio
+import json
 import logging
+from pathlib import Path
 
 from sqlalchemy import text
 
-from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_INVENTORY, PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
+from app.catalog.packages import (
+    PACKAGE_IMAGES,
+    PACKAGE_INVENTORY,
+    PACKAGE_INVENTORY_WORKBOOKS,
+    PACKAGE_OVERVIEWS,
+    PLACEHOLDER_PREFIX,
+)
 from app.core.database import engine
 
 log = logging.getLogger(__name__)
@@ -94,6 +103,53 @@ BILL_COLUMNS_DDL = (
 )
 
 
+# alembic 032: package inventory workbooks as Project Inventory tabs.
+INVENTORY_SHEETS_DDL = (
+    "CREATE TABLE IF NOT EXISTS project_inventory_sheets ("
+    " id SERIAL PRIMARY KEY,"
+    " project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,"
+    " sort_order INTEGER NOT NULL DEFAULT 0,"
+    " name VARCHAR(120) NOT NULL,"
+    " grid TEXT NOT NULL DEFAULT '[]',"
+    " merges TEXT NOT NULL DEFAULT '[]',"
+    " updated_at TIMESTAMPTZ DEFAULT NOW())",
+    "CREATE INDEX IF NOT EXISTS ix_project_inventory_sheets_project_id ON project_inventory_sheets (project_id)",
+)
+WORKBOOK_DIR = Path(__file__).resolve().parent.parent / "catalog" / "inventory"
+
+
+def load_bundled_workbooks() -> dict[str, list[dict]]:
+    """Parse the bundled package workbooks (package name -> sheets); missing files are skipped."""
+    from app.services.inventory_sheets import parse_workbook
+
+    out: dict[str, list[dict]] = {}
+    for name, filename in PACKAGE_INVENTORY_WORKBOOKS.items():
+        path = WORKBOOK_DIR / filename
+        if path.is_file():
+            try:
+                out[name] = parse_workbook(path)
+            except Exception:  # noqa: BLE001
+                log.exception("schema_guard: could not read %s", filename)
+    return out
+
+
+def inventory_sheet_inserts(workbooks: dict[str, list[dict]]):
+    """INSERT statements for every sheet of every bundled workbook."""
+    stmt = (
+        "INSERT INTO project_inventory_sheets (project_id, sort_order, name, grid, merges) "
+        "SELECT id, :o, :s, :g, :m FROM projects WHERE name = :n"
+    )
+    for name, sheets in workbooks.items():
+        for order, sheet in enumerate(sheets, start=1):
+            yield stmt, {
+                "n": name,
+                "o": order,
+                "s": sheet["name"][:120],
+                "g": json.dumps(sheet["grid"], ensure_ascii=False),
+                "m": json.dumps(sheet["merges"]),
+            }
+
+
 async def seed_inventory(conn) -> None:
     """Fill each package's table from the Project Location sheets."""
     for name, rows in PACKAGE_INVENTORY.items():
@@ -174,6 +230,13 @@ async def ensure_schema() -> None:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_rate_items_vendor_id ON rate_items (vendor_id)"))
             for stmt in BILL_COLUMNS_DDL:
                 await conn.execute(text(stmt))
+            if not await _table_exists(conn, "project_inventory_sheets"):
+                for stmt in INVENTORY_SHEETS_DDL:
+                    await conn.execute(text(stmt))
+                workbooks = await asyncio.to_thread(load_bundled_workbooks)
+                for stmt, params in inventory_sheet_inserts(workbooks):
+                    await conn.execute(text(stmt), params)
+                log.warning("schema_guard: created project_inventory_sheets")
             if not await _table_exists(conn, "project_inventory_items"):
                 for stmt in INVENTORY_DDL:
                     await conn.execute(text(stmt))

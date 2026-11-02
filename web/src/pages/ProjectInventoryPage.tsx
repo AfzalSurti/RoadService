@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { getSelectedProjectId, projectShortName, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
+import { InventorySheets } from "../components/InventorySheets";
 import type { InventoryItem, Project } from "../types";
 
 type Row = { scope: string; description: string };
@@ -292,6 +293,8 @@ export function ProjectInventoryPage() {
       ) : (
         <p className="muted">No projects yet.</p>
       )}
+
+      {project ? <InventorySheets key={project.id} projectId={project.id} /> : null}
     </>
   );
 }

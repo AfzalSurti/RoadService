@@ -16,6 +16,8 @@ import type {
   TokenResponse,
   User,
   InventoryItem,
+  InventorySheet,
+  InventorySheetSummary,
   Vendor,
   VendorBill,
   VendorDocument,
@@ -147,6 +149,35 @@ export const api = {
       token,
       body: JSON.stringify(rows),
     }),
+
+  inventorySheets: (token: string, projectId: number) =>
+    request<InventorySheetSummary[]>(`/api/v1/projects/${projectId}/inventory-sheets`, { token }),
+
+  inventorySheet: (token: string, projectId: number, sheetId: number) =>
+    request<InventorySheet>(`/api/v1/projects/${projectId}/inventory-sheets/${sheetId}`, { token }),
+
+  saveInventorySheet: (
+    token: string,
+    projectId: number,
+    sheetId: number,
+    body: { name?: string; grid: string[][]; merges: number[][] }
+  ) =>
+    request<InventorySheet>(`/api/v1/projects/${projectId}/inventory-sheets/${sheetId}`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify(body),
+    }),
+
+  /** Replace a package's inventory tabs with the visible sheets of an .xlsx file. */
+  importInventoryWorkbook: (token: string, projectId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<InventorySheetSummary[]>(`/api/v1/projects/${projectId}/inventory-sheets/import`, {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
 
   uploadLocationMap: (token: string, projectId: number, file: File) => {
     const fd = new FormData();

@@ -85,6 +85,25 @@ class InventoryItemOut(BaseModel):
     description: str
 
 
+class InventorySheetSummary(BaseModel):
+    id: int
+    name: str
+    sort_order: int
+    rows: int
+    cols: int
+
+
+class InventorySheetOut(InventorySheetSummary):
+    grid: list[list[str]]
+    merges: list[list[int]]
+
+
+class InventorySheetIn(BaseModel):
+    name: str | None = None
+    grid: list[list[str]]
+    merges: list[list[int]] = []
+
+
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

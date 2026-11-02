@@ -1588,6 +1588,64 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
   border-radius: 10px;
   font-size: 0.9rem;
 }
+/* Project Inventory workbook: sheet tabs + Excel-like grid */
+.inv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.25rem 0 1rem;
+  padding: 0.6rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+.inv-tab {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #d4b106;
+  border-radius: 8px;
+  background: #fde047;
+  color: #1f2937;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.inv-tab:hover { background: #facc15; }
+.inv-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.inv-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
+.inv-toolbar input[type="search"] {
+  margin-left: auto;
+  min-width: 220px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.inv-grid-wrap { max-height: 70vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.inv-grid { border-collapse: collapse; font-size: 0.82rem; min-width: 100%; }
+.inv-grid td {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.inv-grid td.inv-merged { font-weight: 700; text-align: center; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.inv-grid tr.inv-title td { font-weight: 800; font-size: 0.9rem; }
+.inv-grid.editing td { padding: 0.15rem; }
+.inv-grid.editing input {
+  width: 100%;
+  min-width: 70px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.inv-grid.editing input:focus { border-color: var(--accent); outline: none; background: var(--surface); }
+.inv-rowtools { width: 1.8rem; text-align: center; }
+.inv-rowtools .linkish { background: none; border: 0; cursor: pointer; }
+.inv-rowtools .linkish:disabled { opacity: 0.25; cursor: default; }
 /* Vendor bills (RA bills) */
 .modal-card.boq-bill-modal { width: min(880px, 100%); max-height: 90vh; overflow-y: auto; }
 .boq-bill-table input {

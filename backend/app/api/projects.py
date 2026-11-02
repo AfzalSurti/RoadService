@@ -1,3 +1,5 @@
+import asyncio
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -8,9 +10,19 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.enums import UserRole
-from app.models.project import Project, ProjectInventoryItem
+from app.models.project import Project, ProjectInventoryItem, ProjectInventorySheet
 from app.models.user import User
-from app.schemas import InventoryItemIn, InventoryItemOut, ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas import (
+    InventoryItemIn,
+    InventoryItemOut,
+    InventorySheetIn,
+    InventorySheetOut,
+    InventorySheetSummary,
+    ProjectCreate,
+    ProjectOut,
+    ProjectUpdate,
+)
+from app.services.inventory_sheets import parse_workbook
 from app.services.storage import save_upload
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -210,3 +222,113 @@ async def remove_location_map(
     project.location_map_url = None
     await db.commit()
     return await _load_project(db, project_id)
+
+
+def _sheet_summary(sheet: ProjectInventorySheet, grid: list | None = None) -> InventorySheetSummary:
+    grid = json.loads(sheet.grid) if grid is None else grid
+    return InventorySheetSummary(
+        id=sheet.id,
+        name=sheet.name,
+        sort_order=sheet.sort_order,
+        rows=len(grid),
+        cols=max((len(r) for r in grid), default=0),
+    )
+
+
+async def _sheet_or_404(db: AsyncSession, project_id: int, sheet_id: int) -> ProjectInventorySheet:
+    sheet = (
+        await db.execute(
+            select(ProjectInventorySheet).where(
+                ProjectInventorySheet.id == sheet_id, ProjectInventorySheet.project_id == project_id
+            )
+        )
+    ).scalar_one_or_none()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Inventory sheet not found")
+    return sheet
+
+
+@router.get("/{project_id}/inventory-sheets", response_model=list[InventorySheetSummary])
+async def list_inventory_sheets(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    """Tabs of the package inventory workbook (no cell data)."""
+    await _load_project(db, project_id)
+    rows = await db.execute(
+        select(ProjectInventorySheet)
+        .where(ProjectInventorySheet.project_id == project_id)
+        .order_by(ProjectInventorySheet.sort_order, ProjectInventorySheet.id)
+    )
+    return [_sheet_summary(s) for s in rows.scalars().all()]
+
+
+@router.get("/{project_id}/inventory-sheets/{sheet_id}", response_model=InventorySheetOut)
+async def get_inventory_sheet(
+    project_id: int,
+    sheet_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    sheet = await _sheet_or_404(db, project_id, sheet_id)
+    grid = json.loads(sheet.grid)
+    return InventorySheetOut(**_sheet_summary(sheet, grid).model_dump(), grid=grid, merges=json.loads(sheet.merges))
+
+
+@router.put("/{project_id}/inventory-sheets/{sheet_id}", response_model=InventorySheetOut)
+async def save_inventory_sheet(
+    project_id: int,
+    sheet_id: int,
+    body: InventorySheetIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Save edited cells (and row changes) of one sheet."""
+    sheet = await _sheet_or_404(db, project_id, sheet_id)
+    width = max((len(r) for r in body.grid), default=0)
+    grid = [[str(c) for c in r] + [""] * (width - len(r)) for r in body.grid]
+    merges = [m for m in body.merges if len(m) == 4 and m[0] < len(grid) and m[1] < width]
+    if body.name and body.name.strip():
+        sheet.name = body.name.strip()[:120]
+    sheet.grid = json.dumps(grid, ensure_ascii=False)
+    sheet.merges = json.dumps(merges)
+    await db.commit()
+    await db.refresh(sheet)
+    return InventorySheetOut(**_sheet_summary(sheet, grid).model_dump(), grid=grid, merges=merges)
+
+
+@router.post("/{project_id}/inventory-sheets/import", response_model=list[InventorySheetSummary])
+async def import_inventory_workbook(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    file: Annotated[UploadFile, File()],
+):
+    """Replace the package's inventory tabs with the visible sheets of an .xlsx file."""
+    await _load_project(db, project_id)
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload an Excel workbook (.xlsx)")
+    content = await file.read()
+    try:
+        sheets = await asyncio.to_thread(parse_workbook, content)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read the workbook: {exc}") from exc
+    if not sheets:
+        raise HTTPException(status_code=400, detail="The workbook has no visible sheets with data")
+    old = await db.execute(select(ProjectInventorySheet).where(ProjectInventorySheet.project_id == project_id))
+    for sheet in old.scalars().all():
+        await db.delete(sheet)
+    await db.flush()
+    for order, s in enumerate(sheets, start=1):
+        db.add(
+            ProjectInventorySheet(
+                project_id=project_id,
+                sort_order=order,
+                name=s["name"][:120],
+                grid=json.dumps(s["grid"], ensure_ascii=False),
+                merges=json.dumps(s["merges"]),
+            )
+        )
+    await db.commit()
+    return await list_inventory_sheets(project_id, db, _)

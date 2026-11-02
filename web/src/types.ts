@@ -278,6 +278,20 @@ export type InventoryItem = {
   description: string;
 };
 
+export type InventorySheetSummary = {
+  id: number;
+  name: string;
+  sort_order: number;
+  rows: number;
+  cols: number;
+};
+
+/** One workbook sheet as a grid; merges = [row, col, rowspan, colspan]. */
+export type InventorySheet = InventorySheetSummary & {
+  grid: string[][];
+  merges: number[][];
+};
+
 export type VendorDocument = {
   id: number;
   vendor_id: number;

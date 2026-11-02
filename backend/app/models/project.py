@@ -61,3 +61,19 @@ class ProjectInventoryItem(Base):
     scope: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
+
+class ProjectInventorySheet(Base):
+    """One sheet of a package's inventory workbook, kept as a display grid."""
+
+    __tablename__ = "project_inventory_sheets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # JSON: grid = [[cell text, ...], ...]; merges = [[row, col, rowspan, colspan], ...]
+    grid: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    merges: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -104,3 +104,10 @@ PACKAGE_INVENTORY = {
     ],
 }
 
+
+# Inventory workbooks (visible sheets become Project Inventory tabs), in app/catalog/inventory/.
+PACKAGE_INVENTORY_WORKBOOKS = {
+    "Jabalpur - Lakhnadon": "jabalpur-lakhnadon.xlsx",
+    "Lakhnadon - Khawasa": "lakhnadon-khawasa.xlsx",
+    "Bokhedi - Kelapur": "bokhedi-kelapur.xlsx",
+}

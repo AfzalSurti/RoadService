@@ -270,3 +270,17 @@ ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS vendor_id INTEGER REFERENC
 ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_no VARCHAR(64);
 ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_date DATE;
 CREATE INDEX IF NOT EXISTS ix_quantity_entries_vendor_id ON quantity_entries (vendor_id);
+
+-- 032: Project Inventory sheets (created and filled from the bundled workbooks on startup)
+CREATE TABLE IF NOT EXISTS project_inventory_sheets (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  name VARCHAR(120) NOT NULL,
+  grid TEXT NOT NULL DEFAULT '[]',
+  merges TEXT NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_project_inventory_sheets_project_id ON project_inventory_sheets (project_id);
+-- Note: if you create the table by hand here, the app will not load the workbooks;
+-- use Project Inventory > Replace from Excel for each package instead.
