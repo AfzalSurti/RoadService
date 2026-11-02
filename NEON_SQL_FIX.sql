@@ -249,3 +249,14 @@ CREATE TABLE IF NOT EXISTS vendor_documents (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_vendor_documents_vendor_id ON vendor_documents (vendor_id);
+
+-- 029: Project Inventory map + scope table (also applied and seeded automatically on startup)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS location_map_url VARCHAR(1024);
+CREATE TABLE IF NOT EXISTS project_inventory_items (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  scope VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_project_inventory_items_project_id ON project_inventory_items (project_id);

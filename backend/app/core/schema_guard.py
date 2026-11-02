@@ -2,7 +2,7 @@
 
 Production (Neon) is not always migrated with `alembic upgrade head` — see
 NEON_SQL_FIX.sql. A missing column makes every query on that table 500, which
-browsers report as a CORS error. These statements mirror alembic 023-028 and are
+browsers report as a CORS error. These statements mirror alembic 023-029 and are
 safe to run on every boot.
 """
 
@@ -10,7 +10,7 @@ import logging
 
 from sqlalchemy import text
 
-from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
+from app.catalog.packages import PACKAGE_IMAGES, PACKAGE_INVENTORY, PACKAGE_OVERVIEWS, PLACEHOLDER_PREFIX
 from app.core.database import engine
 
 log = logging.getLogger(__name__)
@@ -73,6 +73,31 @@ VENDOR_DOCUMENTS_BACKFILL = (
 )
 
 
+# alembic 029: Project Inventory scope rows, seeded once from PACKAGE_INVENTORY.
+INVENTORY_DDL = (
+    "CREATE TABLE IF NOT EXISTS project_inventory_items ("
+    " id SERIAL PRIMARY KEY,"
+    " project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,"
+    " sort_order INTEGER NOT NULL DEFAULT 0,"
+    " scope VARCHAR(255) NOT NULL,"
+    " description TEXT NOT NULL DEFAULT '')",
+    "CREATE INDEX IF NOT EXISTS ix_project_inventory_items_project_id ON project_inventory_items (project_id)",
+)
+
+
+async def seed_inventory(conn) -> None:
+    """Fill each package's table from the Project Location sheets."""
+    for name, rows in PACKAGE_INVENTORY.items():
+        for order, (scope, description) in enumerate(rows, start=1):
+            await conn.execute(
+                text(
+                    "INSERT INTO project_inventory_items (project_id, sort_order, scope, description) "
+                    "SELECT id, :o, :s, :d FROM projects WHERE name = :n"
+                ),
+                {"n": name, "o": order, "s": scope, "d": description},
+            )
+
+
 async def _table_exists(conn, table: str) -> bool:
     row = await conn.execute(
         text(
@@ -130,6 +155,12 @@ async def ensure_schema() -> None:
                     await conn.execute(text(stmt))
                 await conn.execute(text(VENDOR_DOCUMENTS_BACKFILL))
                 log.warning("schema_guard: created vendor_documents")
+            await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS location_map_url VARCHAR(1024)"))
+            if not await _table_exists(conn, "project_inventory_items"):
+                for stmt in INVENTORY_DDL:
+                    await conn.execute(text(stmt))
+                await seed_inventory(conn)
+                log.warning("schema_guard: created project_inventory_items")
             for name, image in PACKAGE_IMAGES.items():
                 await conn.execute(
                     text("UPDATE projects SET image_url = :i WHERE name = :n AND image_url IS NULL"),

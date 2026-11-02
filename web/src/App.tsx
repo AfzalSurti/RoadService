@@ -15,7 +15,6 @@ import { MprPage } from "./pages/MprPage";
 import {
   AttendancePage,
   BackupDrPage,
-  CivilAssetsPage,
   HighwayIncidentsPage,
   IntegrationsPage,
   ItsPage,
@@ -23,6 +22,7 @@ import {
   TollPage,
 } from "./pages/NhitPages";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { ProjectInventoryPage } from "./pages/ProjectInventoryPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { QueriesPage } from "./pages/QueriesPage";
 import { RatesPage } from "./pages/RatesPage";
@@ -181,7 +181,7 @@ export default function App() {
           path="/civil-assets"
           element={
             <StaffPortal>
-              <CivilAssetsPage />
+              <ProjectInventoryPage />
             </StaffPortal>
           }
         />

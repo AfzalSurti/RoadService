@@ -32,6 +32,8 @@ class Project(Base):
     short_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # Tile photo: a web asset path ("/packages/x.jpg"), Cloudinary URL or uploads/ filename.
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Project Inventory route map (Cloudinary URL or uploads/ filename).
+    location_map_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     location: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     chainage_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -46,3 +48,16 @@ class Project(Base):
     surveyors = relationship("User", secondary=project_surveyors, back_populates="projects_as_surveyor")
     issues = relationship("Issue", back_populates="project")
     rate_items = relationship("RateItem", back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectInventoryItem(Base):
+    """One row of a package's Project Inventory scope table (Sr. No = sort_order)."""
+
+    __tablename__ = "project_inventory_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scope: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+

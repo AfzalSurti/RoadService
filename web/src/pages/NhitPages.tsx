@@ -1246,56 +1246,6 @@ export function ItsPage() {
   );
 }
 
-export function CivilAssetsPage() {
-  const { token } = useAuth();
-  const [rows, setRows] = useState<Row[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  usePageTitle("Project Inventory");
-
-  useEffect(() => {
-    if (!token) return;
-    api
-      .nhitGet<Row[]>(token, "/assets")
-      .then(setRows)
-      .catch((e: Error) => setError(e.message));
-  }, [token]);
-
-  return (
-    <>
-      {error ? <div className="error">{error}</div> : null}
-      <section className="panel">
-        <h2>Project inventory (with map coordinates)</h2>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Type</th>
-              <th>Name</th>
-              <th>Chainage</th>
-              <th>Condition</th>
-              <th>Lat/Lng</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={String(r.id)}>
-                <td>{String(r.asset_code)}</td>
-                <td>{String(r.asset_type)}</td>
-                <td>{String(r.name)}</td>
-                <td>
-                  {String(r.chainage_from || "—")} → {String(r.chainage_to || "—")}
-                </td>
-                <td>{formatLabel(String(r.condition))}</td>
-                <td>{r.latitude != null ? `${r.latitude}, ${r.longitude}` : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </>
-  );
-}
-
 export function IntegrationsPage() {
   const { token, role } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);

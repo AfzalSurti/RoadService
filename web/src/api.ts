@@ -15,6 +15,7 @@ import type {
   StaffMeta,
   TokenResponse,
   User,
+  InventoryItem,
   Vendor,
   VendorDocument,
 } from "./types";
@@ -134,6 +135,23 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  projectInventory: (token: string, projectId: number) =>
+    request<InventoryItem[]>(`/api/v1/projects/${projectId}/inventory`, { token }),
+
+  /** Save the whole scope table in order (GMC Experts). */
+  saveProjectInventory: (token: string, projectId: number, rows: { scope: string; description: string }[]) =>
+    request<InventoryItem[]>(`/api/v1/projects/${projectId}/inventory`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify(rows),
+    }),
+
+  uploadLocationMap: (token: string, projectId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("photo", file);
+    return request<Project>(`/api/v1/projects/${projectId}/location-map`, { method: "POST", token, body: fd });
+  },
 
   uploadProjectImage: (token: string, id: number, file: File) => {
     const fd = new FormData();

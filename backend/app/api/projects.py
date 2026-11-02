@@ -8,9 +8,9 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.models.enums import UserRole
-from app.models.project import Project
+from app.models.project import Project, ProjectInventoryItem
 from app.models.user import User
-from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas import InventoryItemIn, InventoryItemOut, ProjectCreate, ProjectOut, ProjectUpdate
 from app.services.storage import save_upload
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -134,3 +134,67 @@ async def upload_project_image(
     project.image_url = await save_upload(photo, f"project_{project_id}")
     await db.commit()
     return await _load_project(db, project_id)
+
+
+async def _inventory(db: AsyncSession, project_id: int) -> list[ProjectInventoryItem]:
+    rows = await db.execute(
+        select(ProjectInventoryItem)
+        .where(ProjectInventoryItem.project_id == project_id)
+        .order_by(ProjectInventoryItem.sort_order, ProjectInventoryItem.id)
+    )
+    return list(rows.scalars().all())
+
+
+@router.get("/{project_id}/inventory", response_model=list[InventoryItemOut])
+async def get_inventory(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    """Project Inventory scope table (Sr. No / Scope / Description)."""
+    await _load_project(db, project_id)
+    return await _inventory(db, project_id)
+
+
+@router.put("/{project_id}/inventory", response_model=list[InventoryItemOut])
+async def replace_inventory(
+    project_id: int,
+    rows: list[InventoryItemIn],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Save the whole table in its new order; blank scope rows are dropped."""
+    await _load_project(db, project_id)
+    for old in await _inventory(db, project_id):
+        await db.delete(old)
+    await db.flush()
+    order = 0
+    for row in rows:
+        scope = row.scope.strip()
+        if not scope:
+            continue
+        order += 1
+        db.add(
+            ProjectInventoryItem(
+                project_id=project_id, sort_order=order, scope=scope[:255], description=row.description.strip()
+            )
+        )
+    await db.commit()
+    return await _inventory(db, project_id)
+
+
+@router.post("/{project_id}/location-map", response_model=ProjectOut)
+async def upload_location_map(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    photo: Annotated[UploadFile, File()],
+):
+    """Replace the Project Inventory route map image."""
+    if not (photo.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Upload an image file (JPG / PNG / WebP)")
+    project = await _load_project(db, project_id)
+    project.location_map_url = await save_upload(photo, f"project_map_{project_id}")
+    await db.commit()
+    return await _load_project(db, project_id)
+

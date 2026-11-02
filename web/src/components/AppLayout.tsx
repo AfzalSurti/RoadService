@@ -93,7 +93,7 @@ export function AppLayout() {
           ) : null}
 
           <div className="nav-group-label">Civil Dashboard</div>
-          {staff ? <NavLink to="/civil-assets">Project Inventory</NavLink> : null}
+          {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
           <NavLink to={scoped("/issues")}>Issues</NavLink>
           {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
           {staff ? <NavLink to="/mpr">MPR</NavLink> : null}

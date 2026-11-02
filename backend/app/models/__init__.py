@@ -46,7 +46,7 @@ from app.models.portal_ops import (
     TollDailyStat,
     TollPlaza,
 )
-from app.models.project import Project, project_contractors, project_surveyors
+from app.models.project import Project, project_contractors, project_surveyors, ProjectInventoryItem
 from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
 
@@ -54,6 +54,7 @@ __all__ = [
     "User",
     "UserRole",
     "Project",
+    "ProjectInventoryItem",
     "project_contractors",
     "project_surveyors",
     "Issue",

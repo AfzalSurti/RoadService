@@ -51,3 +51,56 @@ PACKAGE_OVERVIEWS = {
         "for the Asset."
     ),
 }
+
+
+# Project Inventory scope tables (Sr. No order), from the "Project Location" sheets.
+PACKAGE_INVENTORY = {
+    "Jabalpur - Lakhnadon": [
+        ("Name of the Project", "Tolling, Operation, Maintenance & Transfer of four lane section from Jabalpur to "
+         "Lakhnadon section of NH-30 (Km-880.600 to km. 891.780 and NH-34 (KM. 1358.000 to km. 1428.557) in the "
+         "State of Madhya Pradesh."),
+        ("Length of the Project", "81.737 kms (Four lane)"),
+        ("Authority", "National Highways Authority of India (NHAI)"),
+        ("Concessionaire", "NHIT Eastern Projects Private Limited (NEPPL)"),
+        ("Location of Toll Plaza", "1. Boharipar (Km 1362+780 on NH-34)"),
+        ("Pavement Type", "Flexible & Rigid (25% & 75%)"),
+        ("Major & Minor Bridge", "02 & 24 Nos"),
+        ("Flyover", "01 Nos"),
+        ("Major Junction", "19 Nos"),
+        ("Minor Junction", "98 Nos"),
+        ("Underpass", "10 Nos"),
+        ("Culverts", "165 Nos"),
+    ],
+    "Lakhnadon - Khawasa": [
+        ("Name of the Project", "Tolling, Operation, Maintenance & Transfer of Lakhnadon-Mohagaon-Khawasa Section of "
+         "NH-44 in the State of Madhya Pradesh (From Lakhnadon-Mohagaon-Khawasa Section existing Chainage starting "
+         "from. 624+480 km to 653+770 km)."),
+        ("Length of the Project", "107.350 km (29.29 kms Handover) Four lane"),
+        ("Authority", "National Highways Authority of India (NHAI)"),
+        ("Concessionaire", "NHIT Eastern Projects Private Limited (NEPPL)"),
+        ("Location of Toll Plaza", "1. Madai Toll Plaza (Km 549+200 on NH-44),\n"
+         "2. Khawasa Toll Plaza (Km 651+718 on NH-44)."),
+        ("Pavement Type", "Rigid & Flexible (86% & 14%)"),
+        ("Major & Minor Bridge", "01 & 10 Nos"),
+        ("Major Junction", "01 Nos"),
+        ("Minor Junction", "24 Nos"),
+        ("Viaducts", "14 Nos"),
+        ("Culverts", "39 Nos"),
+    ],
+    "Bokhedi - Kelapur": [
+        ("Name of the Project", "Tolling, Operation, Maintenance & Transfer of Borkhedi\u2013Wadner\u2013Kelapur from "
+         "km 36+600 to km 175+000 of NH-44 section in the state of Maharashtra."),
+        ("Length of the Project", "138.40 kms (Four lane)"),
+        ("Authority", "National Highways Authority of India (NHAI)"),
+        ("Concessionaire", "NHIT Western Projects Private Limited (NWPPL)"),
+        ("Location of Toll Plaza", "1. Daroda (Km 92+500 on NH-44),\n2. Kelapur (Km 150+000 on NH-44)."),
+        ("Pavement Type", "Flexible"),
+        ("Major & Minor Bridge", "08 & 59 Nos"),
+        ("Flyover", "07 Nos"),
+        ("Major Junction", "18 Nos"),
+        ("Minor Junction", "274 Nos"),
+        ("Underpass", "25 Nos"),
+        ("Culverts", "136 Nos"),
+    ],
+}
+

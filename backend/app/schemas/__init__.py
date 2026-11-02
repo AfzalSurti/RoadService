@@ -71,6 +71,20 @@ class ProjectUpdate(BaseModel):
     surveyor_ids: list[int] | None = None
 
 
+class InventoryItemIn(BaseModel):
+    scope: str
+    description: str = ""
+
+
+class InventoryItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    project_id: int
+    sort_order: int
+    scope: str
+    description: str
+
+
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -78,6 +92,7 @@ class ProjectOut(BaseModel):
     title: str | None = None
     short_name: str | None = None
     image_url: str | None = None
+    location_map_url: str | None = None
     location: str
     description: str | None
     chainage_from: str | None
