@@ -110,6 +110,12 @@ export const api = {
     }),
 
   me: (token: string) => request<User>("/api/v1/auth/me", { token }),
+  /** Report by month: defects, bills, work done, contractor-wise progress, attendance. */
+  monthlyReport: (token: string, month: string, projectId?: number) =>
+    request<Record<string, unknown>>(
+      `/api/v1/analytics/monthly?month=${month}${projectId ? `&project_id=${projectId}` : ""}`,
+      { token }
+    ),
   /** Any signed-in user: change their own password. */
   changePassword: (token: string, currentPassword: string, newPassword: string) =>
     request<{ ok: boolean }>("/api/v1/auth/change-password", {

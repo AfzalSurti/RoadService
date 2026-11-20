@@ -1,3 +1,4 @@
+import { MonthlyReport } from "../components/MonthlyReport";
 import { FormEvent, useEffect, useState, useMemo } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -153,6 +154,7 @@ export function ReportsPage() {
 
   return (
     <>
+      <MonthlyReport />
       <section className="panel">
         <h2>Daily &amp; Weekly reports</h2>
         <p className="muted">

@@ -17,7 +17,7 @@ from app.models.enums import UserRole
 from app.models.portal_ops import PortalQueryComment, PortalQueryTicket
 from app.models.project import Project
 from app.models.user import User
-from app.services.issue_service import notify, notify_many, user_ids_with_roles
+from app.services.issue_service import notify, notify_involved, notify_many, user_ids_with_roles
 from app.services.pdf_reports import build_record_pdf, fetch_images, label, pdf_response
 from app.services.storage import save_upload
 
@@ -340,15 +340,22 @@ async def raise_query(
         )
     )
 
-    # Notify GMC admins + NHIPMPL
-    oversight = await user_ids_with_roles(db, UserRole.ADMIN, UserRole.GOVERNMENT)
-    await notify_many(
+    # Notify GMC Experts, NHIPMPL and the package team; confirm to the person who raised it.
+    await notify_involved(
         db,
-        oversight,
-        "New portal query raised",
-        f"{ticket_no}: {row.subject} — raised by {user.full_name}",
+        f"New query raised · {ticket_no}",
+        f"{row.subject} ({prio} priority, {area.replace('_', ' ')}) — raised by {user.full_name}",
+        project_id=project_id,
         link=f"/queries?id={row.id}",
-        exclude=user.id,
+        actor=user,
+    )
+    await notify(
+        db,
+        user.id,
+        f"Query {ticket_no} raised",
+        f"Your query \"{row.subject}\" was sent to GMC Experts and NHIPMPL. You will be notified when it is answered.",
+        None,
+        link=f"/queries?id={row.id}",
     )
 
     await db.commit()

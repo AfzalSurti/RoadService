@@ -423,3 +423,191 @@ async def export_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="issues_{date.today()}.pdf"'},
     )
+
+
+@router.get("/monthly")
+async def monthly_report(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    month: str,
+    project_id: int | None = None,
+):
+    """Monthly report: defects (raised / closed / time to close, by contractor), bills and work
+    done (by vendor), contractor-wise summary and attendance by person, for one month (YYYY-MM)."""
+    from sqlalchemy import text as sql_text
+    from sqlalchemy.orm import selectinload
+
+    from app.models.enums import UserRole
+    from app.models.portal_ops import AttendanceRecord, Personnel
+
+    if user.role not in (UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    try:
+        start = datetime.strptime(month + "-01", "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM") from exc
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    names = {p.id: p.name for p in (await db.execute(select(Project))).scalars().all()}
+    users = {u.id: u.full_name for u in (await db.execute(select(User))).scalars().all()}
+
+    # ---- Defects ----
+    stmt = select(Issue).options(selectinload(Issue.status_history))
+    if project_id:
+        stmt = stmt.where(Issue.project_id == project_id)
+    if user.role == UserRole.CONTRACTOR:
+        stmt = stmt.where(Issue.assigned_contractor_id == user.id)
+    issues = (await db.execute(stmt)).scalars().all()
+    raised = closed = open_end = 0
+    close_hours: list[float] = []
+    by_contractor: dict[str, dict] = {}
+    for i in issues:
+        made = i.created_at.date()
+        closed_at = next((h.created_at for h in i.status_history if h.to_status == IssueStatus.CLOSED), None)
+        if closed_at is None and i.status == IssueStatus.CLOSED:
+            closed_at = i.verified_at or i.updated_at
+        name = users.get(i.assigned_contractor_id, f"User #{i.assigned_contractor_id}")
+        row = by_contractor.setdefault(name, {"contractor": name, "raised": 0, "closed": 0, "open_at_month_end": 0})
+        if start <= made < end:
+            raised += 1
+            row["raised"] += 1
+        if closed_at and start <= closed_at.date() < end:
+            closed += 1
+            row["closed"] += 1
+            close_hours.append((closed_at - i.created_at).total_seconds() / 3600)
+        if made < end and not (closed_at and closed_at.date() < end):
+            open_end += 1
+            row["open_at_month_end"] += 1
+    defects = {
+        "raised": raised,
+        "closed": closed,
+        "open_at_month_end": open_end,
+        "avg_days_to_close": round(sum(close_hours) / len(close_hours) / 24, 1) if close_hours else None,
+        "by_contractor": sorted(
+            [r for r in by_contractor.values() if r["raised"] or r["closed"] or r["open_at_month_end"]],
+            key=lambda r: r["contractor"],
+        ),
+    }
+
+    # ---- Bills and work done (BOQ quantity entries in the month) ----
+    vendors = {v.id: v for v in (await db.execute(select(Vendor))).scalars().all()}
+    day = func.coalesce(QuantityEntry.bill_date, func.date(QuantityEntry.created_at))
+    q = select(QuantityEntry).where(day >= start, day < end)
+    if project_id:
+        q = q.where(QuantityEntry.project_id == project_id)
+    entries = (await db.execute(q)).scalars().all()
+    if user.role == UserRole.CONTRACTOR:
+        mine = {v.id for v in vendors.values() if v.contractor_user_id == user.id}
+        entries = [e for e in entries if e.vendor_id in mine]
+    bills: dict[tuple, dict] = {}
+    by_vendor: dict[int | None, dict] = {}
+    for e in entries:
+        v = vendors.get(e.vendor_id)
+        vname = v.name if v else "No vendor"
+        vrow = by_vendor.setdefault(
+            e.vendor_id,
+            {"vendor": vname, "package": names.get(e.project_id, ""), "work_done": 0.0, "bills": 0, "entries": 0},
+        )
+        vrow["work_done"] += float(e.amount or 0)
+        vrow["entries"] += 1
+        if e.bill_no:
+            key = (e.vendor_id, e.bill_no)
+            if key not in bills:
+                bills[key] = {
+                    "bill_no": e.bill_no,
+                    "vendor": vname,
+                    "package": names.get(e.project_id, ""),
+                    "bill_date": e.bill_date.isoformat() if e.bill_date else None,
+                    "amount": 0.0,
+                    "items": 0,
+                }
+                vrow["bills"] += 1
+            bills[key]["amount"] += float(e.amount or 0)
+            bills[key]["items"] += 1
+    cancelled = 0
+    exists = (await db.execute(sql_text("SELECT to_regclass('public.vendor_bill_records')"))).scalar()
+    if exists:
+        cq = "SELECT count(*) FROM vendor_bill_records WHERE kind = 'cancelled' AND created_at >= :s AND created_at < :e"
+        params: dict = {"s": start, "e": end}
+        if project_id:
+            cq += " AND project_id = :p"
+            params["p"] = project_id
+        cancelled = int((await db.execute(sql_text(cq), params)).scalar() or 0)
+
+    # ---- Contractor-wise (vendor) progress to date ----
+    items_q = select(RateItem)
+    if project_id:
+        items_q = items_q.where(RateItem.project_id == project_id)
+    agg: dict[int, dict] = {}
+    for it in (await db.execute(items_q)).scalars().all():
+        if it.vendor_id is None:
+            continue
+        a = agg.setdefault(it.vendor_id, {"boq": 0.0, "done": 0.0})
+        a["boq"] += float(it.boq_amount or 0)
+        a["done"] += float(it.executed_amount or 0)
+    contractors = []
+    for vid, a in agg.items():
+        v = vendors.get(vid)
+        if not v or (user.role == UserRole.CONTRACTOR and v.contractor_user_id != user.id):
+            continue
+        contractors.append(
+            {
+                "vendor": v.name,
+                "package": names.get(v.project_id, ""),
+                "contract_value": round(a["boq"], 2),
+                "work_done_this_month": round(by_vendor.get(vid, {}).get("work_done", 0.0), 2),
+                "work_done_to_date": round(a["done"], 2),
+                "progress_pct": round(a["done"] / a["boq"] * 100, 1) if a["boq"] else None,
+            }
+        )
+    contractors.sort(key=lambda r: r["contract_value"], reverse=True)
+
+    # ---- Attendance by person ----
+    attendance: dict[int, dict] = {}
+    if user.role != UserRole.CONTRACTOR:
+        att_q = (
+            select(AttendanceRecord, Personnel)
+            .join(Personnel, Personnel.id == AttendanceRecord.personnel_id)
+            .where(AttendanceRecord.work_date >= start, AttendanceRecord.work_date < end)
+        )
+        if project_id:
+            att_q = att_q.where(Personnel.project_id == project_id)
+        for rec, person in (await db.execute(att_q)).all():
+            row = attendance.setdefault(
+                person.id,
+                {
+                    "person": person.full_name,
+                    "designation": person.designation,
+                    "employer": person.employer,
+                    "present": 0,
+                    "absent": 0,
+                    "leave": 0,
+                    "on_tour": 0,
+                    "hours": 0.0,
+                },
+            )
+            status = (rec.status or "present").lower()
+            row[status if status in ("present", "absent", "leave", "on_tour") else "present"] += 1
+            row["hours"] += float(rec.working_hours or 0)
+
+    return {
+        "month": start.strftime("%Y-%m"),
+        "package": names.get(project_id, "All packages") if project_id else "All packages",
+        "defects": defects,
+        "bills": {
+            "count": len(bills),
+            "amount": round(sum(b["amount"] for b in bills.values()), 2),
+            "cancelled": cancelled,
+            "rows": sorted(bills.values(), key=lambda b: (b["bill_date"] or "", b["bill_no"])),
+        },
+        "work": {
+            "amount": round(sum(r["work_done"] for r in by_vendor.values()), 2),
+            "rows": sorted(
+                [{**r, "work_done": round(r["work_done"], 2)} for r in by_vendor.values()],
+                key=lambda r: r["work_done"],
+                reverse=True,
+            ),
+        },
+        "contractors": contractors,
+        "attendance": sorted(attendance.values(), key=lambda r: r["person"]),
+    }
