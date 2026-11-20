@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { BoqBillModal } from "../components/BoqBillModal";
 import { ProjectSelect } from "../components/ProjectSelect";
@@ -548,7 +548,7 @@ export function RatesPage() {
           {shownBills.length ? (
             <div className="boq-bills">
               {shownBills.map((b) => {
-                const key = `${b.vendor_id}-${b.bill_no}`;
+                const key = `${b.vendor_id}-${b.bill_no}-${b.cancelled_at || ""}`;
                 const isOpen = openBill === key;
                 return (
                   <article key={key} className={`boq-bill${isOpen ? " open" : ""}`}>
@@ -556,11 +556,28 @@ export function RatesPage() {
                       <strong>{b.bill_no}</strong>
                       <span>{vendorName(b.vendor_id)}</span>
                       <span className="muted">{b.bill_date || new Date(b.created_at).toLocaleDateString()}</span>
-                      <span className="muted">{b.lines.length} item(s)</span>
-                      <strong className="boq-done">₹ {money(b.total_amount)}</strong>
+                      <span className="muted">
+                        {b.status === "cancelled" ? "Cancelled" : `${b.lines.length} item(s)`}
+                        {b.documents?.length ? ` · ${b.documents.length} doc(s)` : ""}
+                      </span>
+                      <strong className={b.status === "cancelled" ? "bill-cancelled" : "boq-done"}>
+                        ₹ {money(b.total_amount)}
+                      </strong>
                       <span aria-hidden="true">{isOpen ? "▴" : "▾"}</span>
                     </button>
-                    {isOpen ? (
+                    {isOpen && b.status === "cancelled" ? (
+                      <div className="bill-cancel-box">
+                        <p>
+                          <strong>Cancelled</strong> by {b.cancelled_by || "—"}
+                          {b.cancelled_at ? ` on ${new Date(b.cancelled_at).toLocaleString()}` : ""}
+                        </p>
+                        <p>
+                          <strong>Comments:</strong> {b.cancel_comments || "—"}
+                        </p>
+                        <p className="muted">Its quantities were returned to the BOQ items.</p>
+                      </div>
+                    ) : null}
+                    {isOpen && b.status !== "cancelled" ? (
                       <div className="table-scroll">
                         <table className="data">
                           <thead>
@@ -587,6 +604,91 @@ export function RatesPage() {
                           </tbody>
                         </table>
                         {b.note ? <p className="muted">Note: {b.note}</p> : null}
+                        <div className="bill-docs">
+                          <strong>Attached documents</strong>
+                          {b.documents?.length ? (
+                            <ul>
+                              {b.documents.map((d) => (
+                                <li key={d.id}>
+                                  <a href={mediaUrl(d.file_path)} target="_blank" rel="noreferrer">
+                                    {d.file_name || "Document"}
+                                  </a>
+                                  <span className="muted">
+                                    {" "}
+                                    · {d.uploaded_by || "—"} · {new Date(d.created_at).toLocaleDateString()}
+                                  </span>
+                                  {canManage ? (
+                                    <button
+                                      type="button"
+                                      className="linkish"
+                                      onClick={async () => {
+                                        if (!token || !window.confirm(`Remove ${d.file_name || "this document"}?`)) return;
+                                        await api.deleteBillDocument(token, d.id).catch(() => null);
+                                        void load();
+                                      }}
+                                    >
+                                      Remove
+                                    </button>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="muted">No documents attached.</p>
+                          )}
+                          {canManage && b.vendor_id != null ? (
+                            <div className="btn-row">
+                              <label className="btn ghost">
+                                + Attach documents
+                                <input
+                                  type="file"
+                                  multiple
+                                  hidden
+                                  onChange={async (e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    e.target.value = "";
+                                    if (!token || !files.length || b.vendor_id == null) return;
+                                    try {
+                                      await api.uploadBillDocuments(token, Number(projectId), b.vendor_id, b.bill_no, files);
+                                      void load();
+                                    } catch (err: unknown) {
+                                      window.alert(err instanceof Error ? err.message : "Upload failed");
+                                    }
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={async () => {
+                                  if (!token || b.vendor_id == null) return;
+                                  const comments = window.prompt(
+                                    `Cancel ${b.bill_no} (₹ ${money(b.total_amount)})?\n` +
+                                      "Its quantities go back to the BOQ items. Comments (why it is cancelled):"
+                                  );
+                                  if (comments == null) return;
+                                  if (comments.trim().length < 5) {
+                                    window.alert("Please write a comment (at least 5 characters).");
+                                    return;
+                                  }
+                                  try {
+                                    await api.cancelVendorBill(token, {
+                                      project_id: Number(projectId),
+                                      vendor_id: b.vendor_id,
+                                      bill_no: b.bill_no,
+                                      comments: comments.trim(),
+                                    });
+                                    void load();
+                                  } catch (err: unknown) {
+                                    window.alert(err instanceof Error ? err.message : "Cancel failed");
+                                  }
+                                }}
+                              >
+                                Cancel bill
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
                   </article>

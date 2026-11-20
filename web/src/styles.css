@@ -2266,3 +2266,12 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 .auto-filter-selects { display: contents; }
 .auto-filter select { max-width: 220px; padding: 0.42rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; font-size: 0.9rem; }
 .auto-filter-count { margin-left: auto; font-size: 0.85rem; opacity: 0.7; }
+
+/* Bill history: cancelled bills and attached documents */
+.bill-cancelled { color: var(--danger, #c0392b); text-decoration: line-through; }
+.bill-cancel-box { padding: 0.6rem 0.9rem; border-left: 3px solid var(--danger, #c0392b); margin: 0.5rem 0; }
+.bill-cancel-box p { margin: 0.25rem 0; }
+.bill-docs { margin-top: 0.75rem; }
+.bill-docs ul { margin: 0.4rem 0; padding-left: 1.1rem; }
+.bill-docs li { margin: 0.2rem 0; }
+.bill-docs .btn-row { margin-top: 0.5rem; }

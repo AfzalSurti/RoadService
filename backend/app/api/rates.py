@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,7 +19,9 @@ from app.models.rate import QuantityEntry, RateItem
 from app.models.user import User
 from app.services.boq_excel import read_boq_rows, template_bytes
 from app.services.issue_service import notify_involved
+from app.services.storage import save_upload
 from app.schemas import (
+    VendorBillCancel,
     ProjectRateSummary,
     QuantityEntryCreate,
     QuantityEntryOut,
@@ -384,7 +386,159 @@ async def list_vendor_bills(
             )
         )
         bill.total_amount = round(bill.total_amount + float(entry.amount), 2)
+    # Attached documents and cancelled bills (kept with their comments).
+    await db.execute(text(BILL_RECORDS_DDL))
+    q = "SELECT * FROM vendor_bill_records WHERE project_id = :p"
+    params: dict = {"p": project_id}
+    if vendor_id is not None:
+        q += " AND vendor_id = :v"
+        params["v"] = vendor_id
+    for r in (await db.execute(text(q + " AND kind = 'cancelled' ORDER BY id"), params)).mappings():
+        bills[(r["vendor_id"], f"{r['bill_no']}#cancelled{r['id']}")] = VendorBillOut(
+            vendor_id=r["vendor_id"],
+            bill_no=r["bill_no"],
+            bill_date=r["bill_date"],
+            note=None,
+            total_amount=float(r["amount"] or 0),
+            created_at=r["created_at"],
+            lines=[],
+            status="cancelled",
+            cancel_comments=r["comments"],
+            cancelled_by=r["user_name"],
+            cancelled_at=r["created_at"],
+        )
+    for r in (await db.execute(text(q + " AND kind = 'document' ORDER BY id"), params)).mappings():
+        bill = bills.get((r["vendor_id"], r["bill_no"]))
+        if bill and bill.status == "active":
+            bill.documents.append(
+                {
+                    "id": r["id"],
+                    "file_path": r["file_path"],
+                    "file_name": r["file_name"],
+                    "uploaded_by": r["user_name"],
+                    "created_at": r["created_at"].isoformat(),
+                }
+            )
     return sorted(bills.values(), key=lambda b: (b.bill_date or b.created_at.date(), b.created_at), reverse=True)
+
+
+BILL_RECORDS_DDL = (
+    "CREATE TABLE IF NOT EXISTS vendor_bill_records ("
+    "id SERIAL PRIMARY KEY, project_id INTEGER NOT NULL, vendor_id INTEGER, bill_no VARCHAR(64) NOT NULL, "
+    "kind VARCHAR(16) NOT NULL, file_path VARCHAR(1024), file_name VARCHAR(255), comments TEXT, "
+    "amount NUMERIC(18, 2), bill_date DATE, user_id INTEGER, user_name VARCHAR(255), "
+    "created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+)
+
+
+async def _bill_entries(db: AsyncSession, project_id: int, vendor_id: int, bill_no: str):
+    return (
+        await db.execute(
+            select(QuantityEntry, RateItem)
+            .join(RateItem, RateItem.id == QuantityEntry.rate_item_id)
+            .where(
+                QuantityEntry.project_id == project_id,
+                QuantityEntry.vendor_id == vendor_id,
+                QuantityEntry.bill_no == bill_no,
+            )
+        )
+    ).all()
+
+
+@router.post("/bills/documents")
+async def upload_bill_documents(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    project_id: Annotated[int, Form()],
+    vendor_id: Annotated[int, Form()],
+    bill_no: Annotated[str, Form()],
+    files: list[UploadFile] = File(...),
+):
+    """Attach supporting documents (measurement sheets, invoices, photos ...) to a bill."""
+    if not await _bill_entries(db, project_id, vendor_id, bill_no):
+        raise HTTPException(status_code=404, detail="Bill not found")
+    await db.execute(text(BILL_RECORDS_DDL))
+    for f in files:
+        path = await save_upload(f, f"bill_{vendor_id}")
+        await db.execute(
+            text(
+                "INSERT INTO vendor_bill_records (project_id, vendor_id, bill_no, kind, file_path, file_name, "
+                "user_id, user_name) VALUES (:p, :v, :b, 'document', :fp, :fn, :u, :un)"
+            ),
+            {
+                "p": project_id,
+                "v": vendor_id,
+                "b": bill_no,
+                "fp": path,
+                "fn": (f.filename or "document")[:255],
+                "u": user.id,
+                "un": user.full_name,
+            },
+        )
+    await db.commit()
+    return {"ok": True, "added": len(files)}
+
+
+@router.delete("/bills/documents/{doc_id}")
+async def delete_bill_document(
+    doc_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    await db.execute(text(BILL_RECORDS_DDL))
+    await db.execute(text("DELETE FROM vendor_bill_records WHERE id = :i AND kind = 'document'"), {"i": doc_id})
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/bills/cancel")
+async def cancel_vendor_bill(
+    body: VendorBillCancel,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """Cancel a bill with comments: its quantities go back to the BOQ items (work done and
+    balance are recalculated) and the bill stays in the history as cancelled."""
+    rows = await _bill_entries(db, body.project_id, body.vendor_id, body.bill_no)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    total = Decimal("0")
+    for entry, item in rows:
+        total += entry.amount or Decimal("0")
+        item.executed_quantity = max(Decimal("0"), (item.executed_quantity or Decimal("0")) - entry.quantity)
+        item.executed_amount = (item.executed_quantity * item.rate).quantize(Decimal("0.01"))
+        await db.delete(entry)
+    await db.execute(text(BILL_RECORDS_DDL))
+    await db.execute(
+        text(
+            "INSERT INTO vendor_bill_records (project_id, vendor_id, bill_no, kind, comments, amount, bill_date, "
+            "user_id, user_name) VALUES (:p, :v, :b, 'cancelled', :c, :a, :d, :u, :un)"
+        ),
+        {
+            "p": body.project_id,
+            "v": body.vendor_id,
+            "b": body.bill_no,
+            "c": body.comments.strip(),
+            "a": total,
+            "d": rows[0][0].bill_date,
+            "u": user.id,
+            "un": user.full_name,
+        },
+    )
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == body.vendor_id))).scalar_one_or_none()
+    await notify_involved(
+        db,
+        f"Bill {body.bill_no} cancelled",
+        f"{vendor.name if vendor else 'Vendor'}: {body.bill_no} (\u20b9 {total:,.2f}) cancelled by "
+        f"{user.full_name}. Comments: {body.comments.strip()}",
+        project_id=body.project_id,
+        extra_ids=[vendor.contractor_user_id] if vendor else [],
+        link=f"/rates?project={body.project_id}",
+        actor=user,
+        include_team=False,
+    )
+    await db.commit()
+    return {"ok": True, "returned_amount": float(total)}
 
 
 @router.post("/bills", response_model=VendorBillOut, status_code=201)

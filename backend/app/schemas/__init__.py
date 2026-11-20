@@ -368,6 +368,19 @@ class VendorBillOut(BaseModel):
     total_amount: float
     created_at: datetime
     lines: list[VendorBillLineOut]
+    # "active", or "cancelled" (lines removed, quantities returned to the BOQ items)
+    status: str = "active"
+    cancel_comments: str | None = None
+    cancelled_by: str | None = None
+    cancelled_at: datetime | None = None
+    documents: list[dict] = []
+
+
+class VendorBillCancel(BaseModel):
+    project_id: int
+    vendor_id: int
+    bill_no: str
+    comments: str = Field(min_length=5)
 
 
 class ProjectRateSummary(BaseModel):

@@ -456,6 +456,23 @@ export const api = {
     }
   ) => request<VendorBill>("/api/v1/rates/bills", { method: "POST", token, body: JSON.stringify(body) }),
 
+  /** GMC Experts: attach supporting documents to a vendor bill. */
+  uploadBillDocuments: (token: string, projectId: number, vendorId: number, billNo: string, files: File[]) => {
+    const fd = new FormData();
+    fd.append("project_id", String(projectId));
+    fd.append("vendor_id", String(vendorId));
+    fd.append("bill_no", billNo);
+    for (const f of files) fd.append("files", f);
+    return request<{ ok: boolean }>("/api/v1/rates/bills/documents", { method: "POST", token, body: fd });
+  },
+
+  deleteBillDocument: (token: string, docId: number) =>
+    request<{ ok: boolean }>(`/api/v1/rates/bills/documents/${docId}`, { method: "DELETE", token }),
+
+  /** GMC Experts: cancel a bill with comments; its quantities go back to the BOQ items. */
+  cancelVendorBill: (token: string, body: { project_id: number; vendor_id: number; bill_no: string; comments: string }) =>
+    request<{ ok: boolean }>("/api/v1/rates/bills/cancel", { method: "POST", token, body: JSON.stringify(body) }),
+
   /** Sample BOQ sheet (BOQ format with row formulas) to fill and import. */
   downloadBoqTemplate: async (token: string) => {
     const res = await fetch(`${API_URL}/api/v1/rates/template`, { headers: { Authorization: `Bearer ${token}` } });

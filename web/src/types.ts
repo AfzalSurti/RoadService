@@ -172,6 +172,11 @@ export type VendorBill = {
   total_amount: number;
   created_at: string;
   lines: VendorBillLine[];
+  status?: "active" | "cancelled";
+  cancel_comments?: string | null;
+  cancelled_by?: string | null;
+  cancelled_at?: string | null;
+  documents?: { id: number; file_path: string; file_name: string | null; uploaded_by: string | null; created_at: string }[];
 };
 
 export type RateItemSurveyor = {
