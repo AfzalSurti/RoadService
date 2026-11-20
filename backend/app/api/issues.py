@@ -334,6 +334,35 @@ async def issue_pdf(
     return pdf_response(content, f"defect_{issue.id}.pdf")
 
 
+@router.post("/{issue_id}/photos", response_model=IssueOut)
+async def replace_issue_photo(
+    issue_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    kind: Annotated[str, Form()],
+    photo: Annotated[UploadFile, File()],
+):
+    """GMC Experts replace a defect's before / completion / verification photo (e.g. a wrong upload)."""
+    fields = {"before": "before_photo_path", "completion": "completion_photo_path", "verification": "verification_photo_path"}
+    if kind not in fields:
+        raise HTTPException(status_code=400, detail="kind must be before, completion or verification")
+    if not (photo.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Upload an image file")
+    issue = await get_issue_or_404(db, issue_id)
+    setattr(issue, fields[kind], await save_upload(photo, f"issue_{kind}_{issue_id}"))
+    db.add(
+        IssueStatusHistory(
+            issue_id=issue.id,
+            from_status=issue.status,
+            to_status=issue.status,
+            actor_id=user.id,
+            note=f"{kind.capitalize()} photo replaced by {user.full_name}",
+        )
+    )
+    await db.commit()
+    return _to_out(await get_issue_or_404(db, issue_id))
+
+
 @router.post("/{issue_id}/start", response_model=IssueOut)
 async def start_work(
     issue_id: int,

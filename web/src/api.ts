@@ -469,6 +469,14 @@ export const api = {
     });
   },
 
+  /** GMC Experts: replace a defect's before / completion / verification photo. */
+  replaceIssuePhoto: (token: string, issueId: number, kind: "before" | "completion" | "verification", file: File) => {
+    const fd = new FormData();
+    fd.append("kind", kind);
+    fd.append("photo", file);
+    return request<Issue>(`/api/v1/issues/${issueId}/photos`, { method: "POST", token, body: fd });
+  },
+
   deleteRateItem: (token: string, id: number) =>
     request<void>(`/api/v1/rates/${id}`, { method: "DELETE", token }),
 

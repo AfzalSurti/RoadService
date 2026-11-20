@@ -117,6 +117,35 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
     );
   }
 
+  // GMC Experts can swap a wrong or unclear photo for the right one.
+  const canReplacePhoto = role === "admin" && !isReadonly;
+  const replacePicker = (kind: "before" | "completion" | "verification") =>
+    canReplacePhoto ? (
+      <label className="linkish photo-replace">
+        Replace photo
+        <input
+          type="file"
+          accept="image/*"
+          hidden
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!token || !file) return;
+            setBusy(true);
+            try {
+              setIssue(await api.replaceIssuePhoto(token, issue.id, kind, file));
+              onChanged?.();
+            } catch (err: unknown) {
+              setError(err instanceof Error ? err.message : "Photo upload failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </label>
+    ) : null;
+
   const latestRejection = [...(issue.rejection_history || [])].sort(
     (a, b) => b.id - a.id
   )[0];
@@ -197,6 +226,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
         <div className="photo-stage-grid">
           <article className="photo-stage">
             <h3>1 · GMC representative (before)</h3>
+            {replacePicker("before")}
             <p className="muted">Captured while surveying the defect</p>
             {issue.before_photo_path ? (
               <img src={mediaUrl(issue.before_photo_path)} alt="GMC representative before photo" />
@@ -206,6 +236,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
           </article>
           <article className="photo-stage">
             <h3>2 · Contractor (submit)</h3>
+            {issue.completion_photo_path ? replacePicker("completion") : null}
             <p className="muted">Proof photo after repair work</p>
             {issue.completion_photo_path ? (
               <>
@@ -222,6 +253,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
           </article>
           <article className="photo-stage">
             <h3>3 · Final (closed)</h3>
+            {issue.verification_photo_path ? replacePicker("verification") : null}
             <p className="muted">Verification photo when issue is closed</p>
             {issue.verification_photo_path ? (
               <img src={mediaUrl(issue.verification_photo_path)} alt="Final closed photo" />
