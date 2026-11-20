@@ -180,6 +180,7 @@ class StatusHistoryOut(BaseModel):
     from_status: IssueStatus | None
     to_status: IssueStatus
     actor_id: int | None
+    actor_name: str | None = None
     note: str | None
     created_at: datetime
 
@@ -232,6 +233,13 @@ class IssueOut(BaseModel):
     remaining_days: int | None = None
     reported_by_id: int
     assigned_contractor_id: int
+    reported_by_name: str | None = None
+    contractor_name: str | None = None
+    submitted_by_name: str | None = None
+    closed_by_name: str | None = None
+    closed_at: datetime | None = None
+    # Hours from the defect being issued (raised) to its final closure.
+    hours_to_close: float | None = None
     created_at: datetime
     updated_at: datetime
     status_history: list[StatusHistoryOut] = []

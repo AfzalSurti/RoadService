@@ -50,6 +50,7 @@ export type StatusHistory = {
   from_status: IssueStatus | null;
   to_status: IssueStatus;
   actor_id: number | null;
+  actor_name?: string | null;
   note: string | null;
   created_at: string;
 };
@@ -93,6 +94,12 @@ export type Issue = {
   remaining_days?: number | null;
   reported_by_id: number;
   assigned_contractor_id: number;
+  reported_by_name?: string | null;
+  contractor_name?: string | null;
+  submitted_by_name?: string | null;
+  closed_by_name?: string | null;
+  closed_at?: string | null;
+  hours_to_close?: number | null;
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];

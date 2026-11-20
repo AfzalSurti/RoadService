@@ -6,7 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import create_access_token, get_current_user, verify_password
+from pydantic import BaseModel
+
+from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.portal_ops import LoginHistory
 from app.models.user import User
 from app.schemas import LoginRequest, Token, UserOut
@@ -99,3 +101,25 @@ async def login_json(
 @router.get("/me", response_model=UserOut)
 async def me(user: Annotated[User, Depends(get_current_user)]):
     return user
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    body: PasswordChange,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Any signed-in user can change their own password (current password required)."""
+    if not verify_password(body.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(body.new_password.strip()) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    user.hashed_password = hash_password(body.new_password.strip())
+    db.add(user)
+    await db.commit()
+    return {"ok": True}

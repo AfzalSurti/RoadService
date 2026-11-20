@@ -124,13 +124,15 @@ export function IssuesPage() {
             <tr>
               <th>ID</th>
               <th>Work Category</th>
-              <th>Issue Type</th>
+              <th>Defect Type</th>
               <th>Chainage</th>
               <th>Priority</th>
               <th>Status</th>
-              <th>Reporter</th>
-              <th>Assignee</th>
-              <th>Created</th>
+              <th>Issued by</th>
+              <th>Contractor</th>
+              <th>Issued</th>
+              <th>Closed by</th>
+              <th>Issue → close</th>
               <th>PDF</th>
               {showContractorActions ? <th>Quick action</th> : null}
             </tr>
@@ -153,9 +155,11 @@ export function IssuesPage() {
                 <td>
                   <StatusBadge status={i.status} />
                 </td>
-                <td>{i.reported_by_id}</td>
-                <td>{i.assigned_contractor_id}</td>
+                <td>{i.reported_by_name || `#${i.reported_by_id}`}</td>
+                <td>{i.contractor_name || `#${i.assigned_contractor_id}`}</td>
                 <td>{i.created_at.slice(0, 10)}</td>
+                <td>{i.closed_by_name || "—"}</td>
+                <td>{i.hours_to_close != null ? `${(i.hours_to_close / 24).toFixed(1)} days` : "—"}</td>
                 <td>
                   <PdfDownloadButton
                     path={`/api/v1/issues/${i.id}/pdf`}
@@ -200,7 +204,7 @@ export function IssuesPage() {
             ))}
             {!shown.length ? (
               <tr>
-                <td colSpan={showContractorActions ? 11 : 10}>No defects found.</td>
+                <td colSpan={showContractorActions ? 13 : 12}>No defects found.</td>
               </tr>
             ) : null}
           </tbody>

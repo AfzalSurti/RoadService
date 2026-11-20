@@ -62,9 +62,11 @@ class Issue(Base):
     )
 
     project = relationship("Project", back_populates="issues")
-    reported_by = relationship("User", foreign_keys=[reported_by_id], back_populates="reported_issues")
+    reported_by = relationship(
+        "User", foreign_keys=[reported_by_id], back_populates="reported_issues", lazy="selectin"
+    )
     assigned_contractor = relationship(
-        "User", foreign_keys=[assigned_contractor_id], back_populates="assigned_issues"
+        "User", foreign_keys=[assigned_contractor_id], back_populates="assigned_issues", lazy="selectin"
     )
     status_history = relationship("IssueStatusHistory", back_populates="issue", order_by="IssueStatusHistory.created_at")
     rejection_history = relationship("IssueRejection", back_populates="issue", order_by="IssueRejection.created_at")
@@ -85,7 +87,7 @@ class IssueStatusHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     issue = relationship("Issue", back_populates="status_history")
-    actor = relationship("User")
+    actor = relationship("User", lazy="selectin")
 
 class IssueRejection(Base):
     __tablename__ = "issue_rejections"

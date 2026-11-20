@@ -160,6 +160,33 @@ export function AppLayout() {
           <button
             className="linkish"
             type="button"
+            onClick={async () => {
+              if (!token) return;
+              const current = window.prompt("Current password:");
+              if (current == null) return;
+              const next = window.prompt("New password (at least 8 characters):");
+              if (next == null) return;
+              if (next.trim().length < 8) {
+                window.alert("New password must be at least 8 characters.");
+                return;
+              }
+              if (window.prompt("Type the new password again:") !== next) {
+                window.alert("The two passwords do not match.");
+                return;
+              }
+              try {
+                await api.changePassword(token, current, next.trim());
+                window.alert("Password changed. Use the new password next time you sign in.");
+              } catch (e: unknown) {
+                window.alert(e instanceof Error ? e.message : "Password change failed");
+              }
+            }}
+          >
+            Change password
+          </button>
+          <button
+            className="linkish"
+            type="button"
             onClick={() => {
               logout();
               navigate("/");

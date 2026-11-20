@@ -8,7 +8,7 @@ import { useEffect } from "react";
  * to opt out.
  */
 const SKIP = "table.boq-bill-table, table[data-nofilter]";
-const MIN_ROWS = 3;
+const MIN_ROWS = 1;
 const MAX_CHOICES = 25;
 
 type Bar = {
@@ -36,6 +36,32 @@ function dataRows(table: HTMLTableElement) {
 function headers(table: HTMLTableElement) {
   const head = table.tHead?.rows[0];
   return head ? Array.from(head.cells).map((c) => cellText(c)) : [];
+}
+
+/** Download the visible rows (after filters) as CSV that Excel opens directly. */
+function exportCsv(table: HTMLTableElement) {
+  const heads = headers(table);
+  const keep = heads.map((h, i) => (h && !/^(actions?|pdf|quick action)$/i.test(h) ? i : -1)).filter((i) => i >= 0);
+  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const lines = [keep.map((i) => esc(heads[i])).join(",")];
+  for (const r of dataRows(table)) {
+    if (r.hidden) continue;
+    lines.push(keep.map((i) => esc(cellText(r.cells[i]))).join(","));
+  }
+  const title =
+    (table.closest("section, .panel, main")?.querySelector("h2, h3")?.textContent || document.title || "table")
+      .trim()
+      .replace(/[^\w\- ]+/g, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 60) || "table";
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${title}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 function apply(table: HTMLTableElement, bar: Bar) {
@@ -91,10 +117,16 @@ function build(table: HTMLTableElement, bar: Bar | undefined) {
     clear.type = "button";
     clear.className = "linkish";
     clear.textContent = "Clear";
+    const exp = document.createElement("button");
+    exp.type = "button";
+    exp.className = "btn ghost auto-filter-export";
+    exp.textContent = "Export to Excel";
+    exp.title = "Download the rows shown as a CSV file (opens in Excel)";
+    exp.addEventListener("click", () => exportCsv(table));
     el.append(search);
     const holder = document.createElement("span");
     holder.className = "auto-filter-selects";
-    el.append(holder, clear, count);
+    el.append(holder, clear, count, exp);
     bar = { el, search, selects: new Map(), count, signature: "" };
     const b = bar;
     search.addEventListener("input", () => apply(table, b));

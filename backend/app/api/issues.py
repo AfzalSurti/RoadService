@@ -98,7 +98,38 @@ def _to_out(issue: Issue) -> IssueOut:
     defect = DEFECT_BY_ID.get(issue.issue_type)
     data.issue_type_label = defect.label if defect else issue.issue_type
     data.work_category_label = _CATEGORY_NAMES.get(issue.work_category, issue.work_category)
+    _add_names(issue, data)
     return data
+
+
+def _user_name(u) -> str | None:
+    if u is None:
+        return None
+    return getattr(u, "full_name", None) or getattr(u, "email", None)
+
+
+def _add_names(issue: Issue, data: IssueOut) -> None:
+    """Show people by name (not id): who raised it, the contractor, who submitted and who closed it,
+    and how long it took from issue to closure. Only uses relationships that are already loaded."""
+    state = issue.__dict__
+    data.reported_by_name = _user_name(state.get("reported_by"))
+    data.contractor_name = _user_name(state.get("assigned_contractor"))
+    by_id = {h.id: h for h in (issue.__dict__.get("status_history") or [])}
+    for out in data.status_history:
+        h = by_id.get(out.id)
+        out.actor_name = _user_name(h.__dict__.get("actor")) if h is not None else None
+        if out.actor_name is None and out.actor_id is None:
+            out.actor_name = "System"
+    for out in data.status_history:
+        if out.to_status == IssueStatus.VERIFICATION_PENDING:
+            data.submitted_by_name = out.actor_name
+        if out.to_status == IssueStatus.CLOSED:
+            data.closed_by_name = out.actor_name
+            data.closed_at = out.created_at
+    if data.status == IssueStatus.CLOSED:
+        data.closed_at = data.closed_at or data.verified_at
+        if data.closed_at and data.created_at:
+            data.hours_to_close = round((data.closed_at - data.created_at).total_seconds() / 3600, 1)
 
 
 @router.get("", response_model=list[IssueOut])

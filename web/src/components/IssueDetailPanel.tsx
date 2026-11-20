@@ -17,6 +17,14 @@ type Props = {
 
 type CameraMode = "complete" | "approve" | "reject" | null;
 
+/** 30.5 hours -> "1 day 6 hrs". */
+function formatDuration(hours: number) {
+  const days = Math.floor(hours / 24);
+  const hrs = Math.round(hours - days * 24);
+  if (!days) return `${hrs} hrs`;
+  return `${days} day${days === 1 ? "" : "s"}${hrs ? ` ${hrs} hrs` : ""}`;
+}
+
 export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onChanged }: Props) {
   const { token, role, isReadonly } = useAuth();
   const [issue, setIssue] = useState<Issue | null>(fallback || null);
@@ -198,6 +206,40 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             <dt>Category</dt>
             <dd>{issue.work_category_label || issue.work_category}</dd>
           </div>
+          <div>
+            <dt>Issued by</dt>
+            <dd>
+              {issue.reported_by_name || "—"} · {new Date(issue.created_at).toLocaleString()}
+            </dd>
+          </div>
+          <div>
+            <dt>Contractor</dt>
+            <dd>{issue.contractor_name || "—"}</dd>
+          </div>
+          {issue.submitted_by_name ? (
+            <div>
+              <dt>Work closed by contractor</dt>
+              <dd>
+                {issue.submitted_by_name}
+                {issue.completed_at ? ` · ${new Date(issue.completed_at).toLocaleString()}` : ""}
+              </dd>
+            </div>
+          ) : null}
+          {issue.status === "closed" ? (
+            <div>
+              <dt>Closed by GMC</dt>
+              <dd>
+                {issue.closed_by_name || "—"}
+                {issue.closed_at ? ` · ${new Date(issue.closed_at).toLocaleString()}` : ""}
+              </dd>
+            </div>
+          ) : null}
+          {issue.hours_to_close != null ? (
+            <div>
+              <dt>Issuance to closure</dt>
+              <dd>{formatDuration(issue.hours_to_close)}</dd>
+            </div>
+          ) : null}
           {issue.completed_at ? (
             <div>
               <dt>Completed at</dt>
@@ -225,9 +267,9 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
 
         <div className="photo-stage-grid">
           <article className="photo-stage">
-            <h3>1 · GMC representative (before)</h3>
+            <h3>1 · Report</h3>
             {replacePicker("before")}
-            <p className="muted">Captured while surveying the defect</p>
+            <p className="muted">Photo when the defect was reported</p>
             {issue.before_photo_path ? (
               <img src={mediaUrl(issue.before_photo_path)} alt="GMC representative before photo" />
             ) : (
@@ -235,9 +277,9 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             )}
           </article>
           <article className="photo-stage">
-            <h3>2 · Contractor (submit)</h3>
+            <h3>2 · In progress</h3>
             {issue.completion_photo_path ? replacePicker("completion") : null}
-            <p className="muted">Proof photo after repair work</p>
+            <p className="muted">Contractor photo of the repair work</p>
             {issue.completion_photo_path ? (
               <>
                 <img src={mediaUrl(issue.completion_photo_path)} alt="Contractor after photo" />
@@ -252,9 +294,9 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             )}
           </article>
           <article className="photo-stage">
-            <h3>3 · Final (closed)</h3>
+            <h3>3 · Final closure</h3>
             {issue.verification_photo_path ? replacePicker("verification") : null}
-            <p className="muted">Verification photo when issue is closed</p>
+            <p className="muted">GMC photo when the defect is closed</p>
             {issue.verification_photo_path ? (
               <img src={mediaUrl(issue.verification_photo_path)} alt="Final closed photo" />
             ) : (
@@ -521,7 +563,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
                 {h.from_status || "—"} → {h.to_status}
               </strong>
               <span>
-                {h.created_at} · actor {h.actor_id ?? "system"}
+                {new Date(h.created_at).toLocaleString()} · {h.actor_name || (h.actor_id ? `User #${h.actor_id}` : "System")}
               </span>
               {h.note ? <p>{h.note}</p> : null}
             </li>

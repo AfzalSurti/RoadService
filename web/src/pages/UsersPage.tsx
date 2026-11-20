@@ -218,6 +218,29 @@ export function UsersPage() {
                       {u.is_active ? "Deactivate" : "Activate"}
                     </button>
                   ) : null}
+                  {!isReadonly ? (
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={async () => {
+                        if (!token) return;
+                        const pw = window.prompt(`New password for ${u.full_name} (${u.email}) — at least 8 characters:`);
+                        if (pw == null) return;
+                        if (pw.trim().length < 8) {
+                          window.alert("Password must be at least 8 characters.");
+                          return;
+                        }
+                        try {
+                          await api.updateUser(token, u.id, { password: pw.trim() });
+                          window.alert(`Password reset for ${u.email}. Share the new password with them securely.`);
+                        } catch (e: unknown) {
+                          window.alert(e instanceof Error ? e.message : "Password reset failed");
+                        }
+                      }}
+                    >
+                      Reset password
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))}
