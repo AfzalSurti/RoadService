@@ -159,7 +159,7 @@ export function IssuesPage() {
                 <td>
                   <PdfDownloadButton
                     path={`/api/v1/issues/${i.id}/pdf`}
-                    filename={`issue_${i.id}.pdf`}
+                    filename={`defect_${i.id}.pdf`}
                     label="PDF"
                   />
                 </td>

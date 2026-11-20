@@ -112,7 +112,7 @@ export function NotificationsPage() {
                 <span>{n.message}</span>
                 <small>
                   {new Date(n.created_at).toLocaleString()}
-                  {n.issue_id ? ` · Issue #${n.issue_id}` : ""}
+                  {n.issue_id ? ` · Defect #${n.issue_id}` : ""}
                 </small>
               </button>
             </li>

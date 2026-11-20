@@ -226,7 +226,7 @@ export function MapPage() {
               <Popup className="map-popup" minWidth={240} maxWidth={300}>
                 <div className="map-popup-body">
                   {i.before_photo_path ? (
-                    <img src={mediaUrl(i.before_photo_path)} alt={`Issue #${i.id}`} className="map-popup-photo" />
+                    <img src={mediaUrl(i.before_photo_path)} alt={`Defect #${i.id}`} className="map-popup-photo" />
                   ) : null}
                   <div className="map-popup-head">
                     <strong>

@@ -47,7 +47,7 @@ async def warn_approaching_verification_deadline() -> int:
                 db,
                 issue.reported_by_id,
                 "Verification due soon",
-                f"Issue #{issue.id} must be verified within {hours}h of completion — window closing.",
+                f"Defect #{issue.id} must be verified within {hours}h of completion — window closing.",
                 issue.id,
             )
             warned += 1
@@ -85,7 +85,7 @@ async def flip_stale_completed_to_verification_pending() -> int:
                 issue,
                 None,
                 "Verification overdue",
-                f"Issue #{issue.id} moved to Verification Pending.",
+                f"Defect #{issue.id} moved to Verification Pending.",
             )
             flipped += 1
         await db.commit()

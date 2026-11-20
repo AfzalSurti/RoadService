@@ -41,7 +41,7 @@ def _issue_label(issue: Issue) -> str:
     defect = DEFECT_BY_ID.get(issue.issue_type)
     label = defect.label if defect else issue.issue_type
     where = f" at {issue.chainage}" if issue.chainage else ""
-    return f"Issue #{issue.id} ({label}{where})"
+    return f"Defect #{issue.id} ({label}{where})"
 
 
 def _assert_verifier(user: User) -> None:
@@ -209,13 +209,13 @@ async def create_issue(
             from_status=None,
             to_status=IssueStatus.OPEN,
             actor_id=user.id,
-            note="Issue created",
+            note="Defect raised",
         )
     )
     await notify(
         db,
         contractor_id,
-        "New issue assigned",
+        "New defect assigned",
         f"{_issue_label(issue)} assigned to you by {user.full_name}. Deadline: {deadline_days} days.",
         issue.id,
     )
@@ -224,7 +224,7 @@ async def create_issue(
     await notify_many(
         db,
         [*oversight, *(t for t in team if t != contractor_id)],
-        "New issue raised",
+        "New defect raised",
         f"{_issue_label(issue)} raised by {user.full_name} on {project.name}. "
         f"Priority: {priority.value}. Deadline: {deadline_days} days.",
         issue.id,
@@ -284,7 +284,7 @@ async def issue_pdf(
 
     project_title = (project.title or project.name) if project else None
     fields = [
-        ("Issue", f"#{issue.id}"),
+        ("Defect", f"#{issue.id}"),
         ("Project", project_title or issue.project_id),
         ("Package", project.name if project else None),
         ("Defect type", out.issue_type_label),
@@ -320,7 +320,7 @@ async def issue_pdf(
         ("Verification", issue.verification_photo_path, gps(issue.verification_lat, issue.verification_lng)),
     ]
     content = build_record_pdf(
-        title=f"Issue #{issue.id} — {out.issue_type_label}",
+        title=f"Defect #{issue.id} — {out.issue_type_label}",
         subtitle=project_title,
         fields=fields,
         notes=[("Description", issue.description), ("Completion remarks", issue.completion_remarks)],
@@ -331,7 +331,7 @@ async def issue_pdf(
         photos=photos,
         images=await fetch_images([p for _, p, _ in photos]),
     )
-    return pdf_response(content, f"issue_{issue.id}.pdf")
+    return pdf_response(content, f"defect_{issue.id}.pdf")
 
 
 @router.post("/{issue_id}/start", response_model=IssueOut)
@@ -379,7 +379,7 @@ async def complete_work(
         db,
         issue,
         user,
-        "Issue ready for verification",
+        "Defect ready for verification",
         f"{_issue_label(issue)} completed by {user.full_name}. Please verify within 24 hours.",
     )
     await db.commit()
@@ -398,7 +398,7 @@ async def verify_approve(
     _assert_verifier(user)
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
-        raise HTTPException(status_code=400, detail="Issue is not awaiting verification")
+        raise HTTPException(status_code=400, detail="Defect is not awaiting verification")
     path = await save_upload(photo, f"issue_verify_{issue_id}")
     issue.verification_photo_path = path
     issue.verification_lat = verification_lat
@@ -409,7 +409,7 @@ async def verify_approve(
         db,
         issue,
         user,
-        "Issue closed",
+        "Defect closed",
         f"{_issue_label(issue)} verified and closed by {user.full_name}.",
     )
     await db.commit()
@@ -430,7 +430,7 @@ async def verify_reject(
     _assert_verifier(user)
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
-        raise HTTPException(status_code=400, detail="Issue is not awaiting verification")
+        raise HTTPException(status_code=400, detail="Defect is not awaiting verification")
     path = await save_upload(photo, f"issue_reject_{issue_id}")
     issue.verification_photo_path = path
     issue.verification_lat = verification_lat
@@ -492,8 +492,8 @@ async def admin_update_issue(
         await notify(
             db,
             body.assigned_contractor_id,
-            "Issue reassigned",
-            f"Issue #{issue.id} was reassigned to you.",
+            "Defect reassigned",
+            f"Defect #{issue.id} was reassigned to you.",
             issue.id,
         )
     if body.deadline_days is not None:
@@ -507,7 +507,7 @@ async def admin_update_issue(
             db,
             issue,
             user,
-            "Issue status changed",
+            "Defect status changed",
             f"{_issue_label(issue)} set to {body.status.value.replace('_', ' ')} by {user.full_name}.",
         )
     elif body.deadline_days is not None or body.priority is not None:
@@ -515,7 +515,7 @@ async def admin_update_issue(
             db,
             issue,
             user,
-            "Issue updated",
+            "Defect updated",
             f"{_issue_label(issue)} priority/deadline updated by {user.full_name}.",
         )
     await db.commit()

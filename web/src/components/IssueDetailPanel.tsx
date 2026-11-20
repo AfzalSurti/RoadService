@@ -130,7 +130,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             {issue.issue_type_label ? ` · ${issue.issue_type_label}` : ""}
           </h2>
           <div className="btn-row">
-            <PdfDownloadButton path={`/api/v1/issues/${issue.id}/pdf`} filename={`issue_${issue.id}.pdf`} />
+            <PdfDownloadButton path={`/api/v1/issues/${issue.id}/pdf`} filename={`defect_${issue.id}.pdf`} />
             <button className="btn ghost" type="button" onClick={onClose}>
               Close
             </button>

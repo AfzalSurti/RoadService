@@ -182,7 +182,7 @@ async def get_issue_or_404(db: AsyncSession, issue_id: int) -> Issue:
     )
     issue = result.scalar_one_or_none()
     if not issue:
-        raise HTTPException(status_code=404, detail="Issue not found")
+        raise HTTPException(status_code=404, detail="Defect not found")
     return issue
 
 
