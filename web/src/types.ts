@@ -334,6 +334,10 @@ export type Vendor = {
   /** Extension of time granted, in days. */
   extension_of_time?: string | null;
   remarks?: string | null;
+  contact_person?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  contact_address?: string | null;
   created_at: string;
   updated_at: string;
 };

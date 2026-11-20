@@ -172,6 +172,18 @@ MSR_FOLDER_RENAME = (
 )
 
 
+VENDOR_CONTACT_COLUMNS = (
+    ("contact_person", "VARCHAR(255)"),
+    ("contact_phone", "VARCHAR(64)"),
+    ("contact_email", "VARCHAR(255)"),
+    ("contact_address", "TEXT"),
+)
+VENDOR_CONTACT_BACKFILL = (
+    "UPDATE vendors SET contact_person = LEFT(TRIM(substring(remarks from 'Contact: ([^\n]+)')), 255) "
+    "WHERE contact_person IS NULL AND remarks LIKE '%Contact: %'"
+)
+
+
 async def insert_tracker(execute, project_id: int, orders: list[dict], items: list[dict]) -> tuple[int, int]:
     """Add tracker orders as vendors (with their BOQ items) to a package, skipping WO numbers
     already present. `execute` is an AsyncConnection / AsyncSession `execute`."""
@@ -197,8 +209,8 @@ async def insert_tracker(execute, project_id: int, orders: list[dict], items: li
             await execute(
                 text(
                     "INSERT INTO vendors (project_id, name, brief, type_of_work, work_order_date, commencement_date, "
-                    "time_limit_completion, progress_notes, remarks) "
-                    "VALUES (:p, :name, :brief, :tw, :wod, :cd, :tl, :pn, :rm) RETURNING id"
+                    "time_limit_completion, progress_notes, remarks, contact_person) "
+                    "VALUES (:p, :name, :brief, :tw, :wod, :cd, :tl, :pn, :rm, :cp) RETURNING id"
                 ),
                 {
                     "p": project_id,
@@ -210,6 +222,7 @@ async def insert_tracker(execute, project_id: int, orders: list[dict], items: li
                     "tl": o["days"],
                     "pn": o["status"] or None,
                     "rm": remarks,
+                    "cp": (o["contact"] or None) and o["contact"][:255],
                 },
             )
         ).scalar()
@@ -318,6 +331,10 @@ async def ensure_schema() -> None:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024)"))
             await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128)"))
+            for col, typ in VENDOR_CONTACT_COLUMNS:
+                await conn.execute(text(f"ALTER TABLE vendors ADD COLUMN IF NOT EXISTS {col} {typ}"))
+            # Vendors imported from the WO/PO trackers carry "Contact: ..." in remarks.
+            await conn.execute(text(VENDOR_CONTACT_BACKFILL))
             if not await _table_exists(conn, "vendor_documents"):
                 for stmt in VENDOR_DOCUMENTS_DDL:
                     await conn.execute(text(stmt))

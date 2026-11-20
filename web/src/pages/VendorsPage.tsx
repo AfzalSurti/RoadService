@@ -28,6 +28,10 @@ const empty = {
   defects_liability_period: "",
   extension_of_time: "",
   remarks: "",
+  contact_person: "",
+  contact_phone: "",
+  contact_email: "",
+  contact_address: "",
 };
 
 type Filter = "all" | (typeof WORK_CATEGORIES)[number]["key"] | "other";
@@ -48,6 +52,10 @@ function vendorToForm(v: Vendor) {
     defects_liability_period: daysInputValue(v.defects_liability_period),
     extension_of_time: daysInputValue(v.extension_of_time),
     remarks: v.remarks || "",
+    contact_person: v.contact_person || "",
+    contact_phone: v.contact_phone || "",
+    contact_email: v.contact_email || "",
+    contact_address: v.contact_address || "",
   };
 }
 
@@ -182,6 +190,12 @@ export function VendorsPage() {
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !canManage) return;
+    const contacts = () => ({
+      contact_person: form.contact_person.trim() || null,
+      contact_phone: form.contact_phone.trim() || null,
+      contact_email: form.contact_email.trim() || null,
+      contact_address: form.contact_address.trim() || null,
+    });
     setBusy(true);
     setError(null);
     try {
@@ -199,6 +213,7 @@ export function VendorsPage() {
           extension_of_time: opt(form.extension_of_time),
           brief: opt(form.brief),
           remarks: opt(form.remarks),
+          ...contacts(),
           progress_notes: opt(form.progress_notes),
           delay_notes: opt(form.delay_notes),
           escalation_matrix: opt(form.escalation_matrix),
@@ -228,6 +243,7 @@ export function VendorsPage() {
       if (form.extension_of_time.trim()) fd.append("extension_of_time", form.extension_of_time.trim());
       if (form.remarks.trim()) fd.append("remarks", form.remarks.trim());
       const created = await api.createVendor(token, fd);
+      if (Object.values(contacts()).some(Boolean)) await api.updateVendor(token, created.id, contacts());
       await uploadPicked(created.id);
       setForm(empty);
       setShowForm(false);
@@ -330,6 +346,12 @@ export function VendorsPage() {
               {v.brief ? (
                 <p>
                   <strong>Brief:</strong> {v.brief}
+                </p>
+              ) : null}
+              {v.contact_person || v.contact_phone || v.contact_email || v.contact_address ? (
+                <p>
+                  <strong>Contact:</strong>{" "}
+                  {[v.contact_person, v.contact_phone, v.contact_email, v.contact_address].filter(Boolean).join(" · ")}
                 </p>
               ) : null}
               {v.remarks ? (
@@ -509,6 +531,36 @@ export function VendorsPage() {
                 <textarea
                   value={form.brief}
                   onChange={(e) => setForm({ ...form, brief: e.target.value })}
+                />
+              </label>
+              <label>
+                Contact person
+                <input
+                  value={form.contact_person}
+                  onChange={(e) => setForm({ ...form, contact_person: e.target.value })}
+                />
+              </label>
+              <label>
+                Contact phone
+                <input
+                  type="tel"
+                  value={form.contact_phone}
+                  onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+                />
+              </label>
+              <label>
+                Contact email
+                <input
+                  type="email"
+                  value={form.contact_email}
+                  onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                />
+              </label>
+              <label>
+                Address
+                <input
+                  value={form.contact_address}
+                  onChange={(e) => setForm({ ...form, contact_address: e.target.value })}
                 />
               </label>
               <label className="span-2">

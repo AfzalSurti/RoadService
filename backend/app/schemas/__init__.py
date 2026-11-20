@@ -539,6 +539,10 @@ class VendorCreate(BaseModel):
     remarks: str | None = None
     work_order_path: str | None = None
     loa_path: str | None = None
+    contact_person: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    contact_address: str | None = None
 
 
 class VendorDocumentOut(BaseModel):
@@ -571,6 +575,10 @@ class VendorOut(BaseModel):
     defects_liability_period: str | None = None
     extension_of_time: str | None = None
     remarks: str | None = None
+    contact_person: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    contact_address: str | None = None
     created_at: datetime
     updated_at: datetime
 
