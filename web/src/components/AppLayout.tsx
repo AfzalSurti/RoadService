@@ -8,6 +8,7 @@ import { GlobalSearch } from "./GlobalSearch";
 import { IntroSplash } from "./IntroSplash";
 import { NavGroup } from "./NavGroup";
 import { PackageScopePicker } from "./PackageScopePicker";
+import { TableFilters } from "./TableFilters";
 import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
 import type { Project } from "../types";
@@ -188,6 +189,7 @@ export function AppLayout() {
         </div>
         <div className="main-scroll">
           <Outlet />
+          <TableFilters />
         </div>
       </main>
     </div>

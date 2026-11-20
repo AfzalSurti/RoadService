@@ -2259,3 +2259,10 @@ table.data tr.clickable:hover { background: color-mix(in srgb, var(--accent) 8%,
 }
 .cm-leaflet .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55); }
 .photo-replace { display: inline-block; margin: -0.2rem 0 0.4rem; font-size: 0.82rem; font-weight: 600; color: var(--accent); cursor: pointer; }
+
+/* Filter bar added above every data table (components/TableFilters.tsx). */
+.auto-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0.6rem; }
+.auto-filter input[type="search"] { flex: 1 1 200px; max-width: 320px; padding: 0.45rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.auto-filter-selects { display: contents; }
+.auto-filter select { max-width: 220px; padding: 0.42rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; font-size: 0.9rem; }
+.auto-filter-count { margin-left: auto; font-size: 0.85rem; opacity: 0.7; }
