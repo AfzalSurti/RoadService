@@ -985,3 +985,52 @@ async def update_vendor(
     await db.commit()
     await db.refresh(vendor)
     return vendor
+
+
+@vendors_router.post("/import-tracker")
+async def import_vendor_tracker(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    project_id: Annotated[int, Form()],
+    file: UploadFile = File(...),
+):
+    """Import a WO / PO register + BOQ quantity tracker workbook (sheets "WO_PO_Register" and
+    "Quantity_Monitoring"): each order becomes a vendor with its BOQ items. Orders whose WO
+    number is already on the package are skipped, so the same file can be uploaded again."""
+    import asyncio
+
+    from app.core.schema_guard import insert_tracker
+    from app.services.rkjl_tracker import read_tracker
+
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload the tracker Excel file (.xlsx)")
+    content = await file.read()
+    try:
+        orders, items = await asyncio.to_thread(read_tracker, content)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Sheet {exc} not found — use the WO/PO register & BOQ tracker") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read the workbook: {exc}") from exc
+    if not orders:
+        raise HTTPException(status_code=400, detail="No work orders found in the WO_PO_Register sheet")
+    added_orders, added_items = await insert_tracker(db.execute, project_id, orders, items)
+    await notify_involved(
+        db,
+        "Vendors imported",
+        f"{added_orders} work order(s) with {added_items} BOQ item(s) imported into {project.name} by {user.full_name}",
+        project_id=project_id,
+        link="/vendors",
+        actor=user,
+        include_team=False,
+    )
+    await db.commit()
+    return {
+        "orders": len(orders),
+        "added_orders": added_orders,
+        "skipped_orders": len(orders) - added_orders,
+        "added_items": added_items,
+    }
+

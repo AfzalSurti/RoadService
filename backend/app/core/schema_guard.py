@@ -172,43 +172,36 @@ MSR_FOLDER_RENAME = (
 )
 
 
-async def seed_rkjl_tracker(conn) -> None:
-    """Load the RKJL WO / PO register (vendors) and BOQ tracker (items with executed qty)
-    into Jabalpur - Lakhnadon once; each WO is added only if not already there."""
-    from app.services.rkjl_tracker import PACKAGE, WORKBOOK, read_tracker
-
-    if not WORKBOOK.is_file():
-        return
-    pid = (await conn.execute(text("SELECT id FROM projects WHERE name = :n"), {"n": PACKAGE})).scalar()
-    if not pid:
-        return
+async def insert_tracker(execute, project_id: int, orders: list[dict], items: list[dict]) -> tuple[int, int]:
+    """Add tracker orders as vendors (with their BOQ items) to a package, skipping WO numbers
+    already present. `execute` is an AsyncConnection / AsyncSession `execute`."""
     have = {
         (r or "").split("\n", 1)[0].removeprefix("WO No: ").strip()
         for r in (
-            await conn.execute(
-                text("SELECT remarks FROM vendors WHERE project_id = :p AND remarks LIKE 'WO No: %'"), {"p": pid}
+            await execute(
+                text("SELECT remarks FROM vendors WHERE project_id = :p AND remarks LIKE 'WO No: %'"), {"p": project_id}
             )
         ).scalars()
     }
-    orders, items = await asyncio.to_thread(read_tracker)
-    names: dict[str, int] = {}
-    added = 0
+    added_orders = added_items = 0
     for o in orders:
         if o["wo"] in have:
             continue
-        names[o["supplier"]] = names.get(o["supplier"], 0) + 1
-        remarks = f"WO No: {o['wo']}\n{o['type']} · {o['location']}\nContact: {o['contact']}"
+        have.add(o["wo"])
+        remarks = f"WO No: {o['wo']}\n{o['type']} · {o['location']}"
+        if o["contact"]:
+            remarks += f"\nContact: {o['contact']}"
         if o["net"]:
             remarks += f"\nNet order value: Rs {float(o['net']):,.2f} (excl. GST)"
         vid = (
-            await conn.execute(
+            await execute(
                 text(
                     "INSERT INTO vendors (project_id, name, brief, type_of_work, work_order_date, commencement_date, "
                     "time_limit_completion, progress_notes, remarks) "
                     "VALUES (:p, :name, :brief, :tw, :wod, :cd, :tl, :pn, :rm) RETURNING id"
                 ),
                 {
-                    "p": pid,
+                    "p": project_id,
                     "name": o["supplier"][:255] or o["wo"][:255],
                     "brief": o["scope"],
                     "tw": o["category"],
@@ -220,16 +213,16 @@ async def seed_rkjl_tracker(conn) -> None:
                 },
             )
         ).scalar()
-        added += 1
+        added_orders += 1
         for it in (i for i in items if i["wo"] == o["wo"]):
-            await conn.execute(
+            await execute(
                 text(
                     "INSERT INTO rate_items (project_id, vendor_id, item_no, description, unit, boq_quantity, rate, "
                     "boq_amount, executed_quantity, executed_amount) "
                     "VALUES (:p, :v, :no, :d, :u, :q, :r, :a, :eq, :ea)"
                 ),
                 {
-                    "p": pid,
+                    "p": project_id,
                     "v": vid,
                     "no": it["item_no"],
                     "d": it["description"],
@@ -241,6 +234,21 @@ async def seed_rkjl_tracker(conn) -> None:
                     "ea": round(it["done"] * it["rate"], 2),
                 },
             )
+            added_items += 1
+    return added_orders, added_items
+
+
+async def seed_rkjl_tracker(conn) -> None:
+    """If the RKJL tracker workbook is bundled, load it into Jabalpur - Lakhnadon (once per WO)."""
+    from app.services.rkjl_tracker import PACKAGE, WORKBOOK, read_tracker
+
+    if not WORKBOOK.is_file():
+        return
+    pid = (await conn.execute(text("SELECT id FROM projects WHERE name = :n"), {"n": PACKAGE})).scalar()
+    if not pid:
+        return
+    orders, items = await asyncio.to_thread(read_tracker)
+    added, _ = await insert_tracker(conn.execute, pid, orders, items)
     if added:
         log.warning("schema_guard: loaded %s RKJL work orders into %s", added, PACKAGE)
 

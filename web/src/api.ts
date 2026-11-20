@@ -681,6 +681,17 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** Import a WO/PO register + BOQ quantity tracker workbook into a package. */
+  importVendorTracker: (token: string, projectId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("project_id", String(projectId));
+    fd.append("file", file);
+    return request<{ orders: number; added_orders: number; skipped_orders: number; added_items: number }>(
+      "/api/v1/vendors/import-tracker",
+      { method: "POST", token, body: fd }
+    );
+  },
+
   createVendor: (token: string, form: FormData) =>
     request<Vendor>("/api/v1/vendors", {
       method: "POST",

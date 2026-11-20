@@ -1,6 +1,7 @@
 """RKJL WO / PO register + BOQ quantity tracker -> vendors and BOQ items (Jabalpur - Lakhnadon)."""
 
 from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -26,8 +27,8 @@ def _category(scope: str) -> str:
     return "Particular Item Wise Civil Works"
 
 
-def read_tracker(path: Path = WORKBOOK):
-    wb = load_workbook(path, data_only=True)
+def read_tracker(source: Path | bytes = WORKBOOK):
+    wb = load_workbook(BytesIO(source) if isinstance(source, bytes) else source, data_only=True)
     reg = wb["WO_PO_Register"]
     orders = []
     for r in range(5, reg.max_row + 1):

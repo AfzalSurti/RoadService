@@ -100,6 +100,29 @@ export function VendorsPage() {
     );
   }, [linkVendor, vendors.length]);
 
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const importTracker = async (file: File | undefined) => {
+    if (!token || !file) return;
+    // The tracker belongs to one package: the one picked in the sidebar, else the first.
+    const target = projects.length === 1 ? projects[0] : [...projects].sort((a, b) => a.id - b.id)[0];
+    if (!target) return setError("No package available to import into");
+    if (!window.confirm(`Import vendors and BOQ items from \u201c${file.name}\u201d into ${projectShortName(target)}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.importVendorTracker(token, target.id, file);
+      setImportMsg(
+        `${r.added_orders} vendor(s) and ${r.added_items} BOQ item(s) added to ${projectShortName(target)}` +
+          (r.skipped_orders ? ` \u2014 ${r.skipped_orders} order(s) were already there and skipped.` : ".")
+      );
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openCreate = () => {
     setEditingId(null);
     setForm(empty);
@@ -219,14 +242,30 @@ export function VendorsPage() {
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      {importMsg ? <div className="success">{importMsg}</div> : null}
 
       <section className="panel">
         <div className="panel-head-row">
           <h2>Vendor profiles</h2>
           {canManage ? (
-            <button className="btn" type="button" onClick={openCreate}>
-              Add vendor
-            </button>
+            <div className="btn-row">
+              <label className="btn secondary inventory-photo-pick" title="WO/PO register + BOQ quantity tracker (.xlsx)">
+                {busy ? "Importing\u2026" : "Import tracker (Excel)"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xlsm"
+                  hidden
+                  disabled={busy}
+                  onChange={(e) => {
+                    void importTracker(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <button className="btn" type="button" onClick={openCreate}>
+                Add vendor
+              </button>
+            </div>
           ) : null}
         </div>
 
