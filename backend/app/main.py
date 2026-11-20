@@ -6,7 +6,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     analytics,
@@ -40,6 +39,9 @@ scheduler = AsyncIOScheduler()
 async def lifespan(_app: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     await ensure_schema()
+    from app.services.storage import ensure_file_table
+
+    await ensure_file_table()
     if settings.scheduler_enabled:
         scheduler.add_job(
             flip_stale_completed_to_verification_pending,
@@ -110,7 +112,33 @@ app.include_router(nhit.router, prefix="/api/v1")
 app.include_router(toll_perf.router, prefix="/api/v1/nhit")
 uploads = Path(settings.upload_dir)
 uploads.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
+
+
+@app.get("/uploads/{name}")
+async def serve_upload(name: str):
+    """Uploaded files: from disk when present, else from the database copy (Render's disk is
+    wiped on each deploy). The database copy is written back to disk as a cache."""
+    import mimetypes
+
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse, Response
+
+    from app.services.storage import load_file
+
+    if "/" in name or "\\" in name or name.startswith("."):
+        raise HTTPException(status_code=404, detail="Not found")
+    path = uploads / name
+    if path.is_file():
+        return FileResponse(path)
+    content = await load_file(name)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        path.write_bytes(content)
+    except OSError:
+        pass
+    media = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    return Response(content, media_type=media, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/health")

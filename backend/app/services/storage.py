@@ -54,7 +54,61 @@ async def save_upload(file: UploadFile, prefix: str) -> str:
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty photo upload")
-    return _upload_bytes(content, prefix, file.filename or "photo.jpg")
+    name = _upload_bytes(content, prefix, file.filename or "photo.jpg")
+    if not name.startswith(("http://", "https://")):
+        # Render's disk is wiped on every deploy: keep a copy in the database so the file
+        # can still be shown later (served by GET /uploads/{name}).
+        await persist_file(name, content)
+    return name
+
+
+_STORED_FILES_DDL = (
+    "CREATE TABLE IF NOT EXISTS stored_files ("
+    "name VARCHAR(512) PRIMARY KEY, content BYTEA NOT NULL, "
+    "created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+)
+
+
+async def ensure_file_table() -> None:
+    from sqlalchemy import text
+
+    from app.core.database import engine
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(_STORED_FILES_DDL))
+    except Exception as exc:  # noqa: BLE001
+        print(f"stored_files table check failed: {exc}")
+
+
+async def persist_file(name: str, content: bytes) -> None:
+    from sqlalchemy import text
+
+    from app.core.database import engine
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(_STORED_FILES_DDL))
+            await conn.execute(
+                text("INSERT INTO stored_files (name, content) VALUES (:n, :c) ON CONFLICT (name) DO NOTHING"),
+                {"n": name, "c": content},
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Could not keep a database copy of {name}: {exc}")
+
+
+async def load_file(name: str) -> bytes | None:
+    from sqlalchemy import text
+
+    from app.core.database import engine
+
+    try:
+        async with engine.connect() as conn:
+            return (
+                await conn.execute(text("SELECT content FROM stored_files WHERE name = :n"), {"n": name})
+            ).scalar()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def upload_from_url(url: str, prefix: str) -> str:
