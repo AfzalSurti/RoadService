@@ -58,3 +58,7 @@ logs/
 
 # Alembic
 # keep migrations, ignore local versions if any
+
+# Tracker workbooks hold contact numbers: never commit them
+*.xlsx
+!web/public/**/*.xlsx
