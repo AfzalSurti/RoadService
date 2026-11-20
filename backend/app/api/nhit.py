@@ -1117,15 +1117,57 @@ async def delete_executive(
 
 
 @router.get("/executive/overview")
-async def executive_overview(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(get_current_user)]):
-    snaps = (await db.execute(select(ExecutiveSnapshot))).scalars().all()
+async def executive_overview(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+    project_ids: str | None = None,
+):
+    """Project Overview figures from the live vendor / BOQ data for the chosen packages
+    (comma-separated project ids; all active packages when omitted)."""
+    from app.models.billing import Vendor
+    from app.models.rate import RateItem
+
+    ids = [int(x) for x in (project_ids or "").split(",") if x.strip().isdigit()]
+    pq = select(Project).where(Project.is_active.is_(True))
+    if ids:
+        pq = pq.where(Project.id.in_(ids))
+    projects = (await db.execute(pq.order_by(Project.id))).scalars().all()
+    pids = [p.id for p in projects] or [-1]
+
+    items = (await db.execute(select(RateItem).where(RateItem.project_id.in_(pids)))).scalars().all()
+    vendors = (await db.execute(select(Vendor).where(Vendor.project_id.in_(pids)))).scalars().all()
+    total = sum(float(i.boq_amount or 0) for i in items)
+    done = sum(float(i.executed_amount or 0) for i in items)
+
+    by_vendor: dict[int | None, dict[str, float]] = {}
+    for i in items:
+        row = by_vendor.setdefault(i.vendor_id, {"boq": 0.0, "done": 0.0, "items": 0})
+        row["boq"] += float(i.boq_amount or 0)
+        row["done"] += float(i.executed_amount or 0)
+        row["items"] += 1
+    names = {p.id: (p.short_name or p.name) for p in projects}
+    vendor_rows = []
+    for v in vendors:
+        agg = by_vendor.get(v.id, {"boq": 0.0, "done": 0.0, "items": 0})
+        vendor_rows.append({
+            "id": v.id, "name": v.name, "package": names.get(v.project_id, ""), "type_of_work": v.type_of_work,
+            "work_order_date": v.work_order_date, "boq_items": int(agg["items"]), "contract_value": round(agg["boq"], 2),
+            "work_done": round(agg["done"], 2), "balance": round(agg["boq"] - agg["done"], 2),
+            "progress": round(agg["done"] / agg["boq"] * 100, 1) if agg["boq"] else None, "status": v.progress_notes,
+        })
+    vendor_rows.sort(key=lambda r: r["contract_value"], reverse=True)
+
     active_inc = (await db.execute(select(func.count(HighwayIncident.id)).where(HighwayIncident.status == "active"))).scalar_one()
     its_offline = (await db.execute(select(func.count(ItsDevice.id)).where(ItsDevice.status != "online"))).scalar_one()
     return {
-        "stretches": len(snaps),
-        "avg_physical_progress": (sum(float(s.physical_progress_pct or 0) for s in snaps) / len(snaps)) if snaps else 0,
-        "planned_expenditure": sum(float(s.planned_expenditure or 0) for s in snaps),
-        "actual_expenditure": sum(float(s.actual_expenditure or 0) for s in snaps),
+        "packages": len(projects),
+        "vendors": len(vendors),
+        "boq_items": len(items),
+        "contract_value": round(total, 2),
+        "work_done": round(done, 2),
+        "balance": round(total - done, 2),
+        "physical_progress": round(done / total * 100, 2) if total else 0,
+        "vendor_rows": vendor_rows,
         "active_incidents": active_inc,
         "its_not_online": its_offline,
         "toll": {
@@ -1134,7 +1176,6 @@ async def executive_overview(db: Annotated[AsyncSession, Depends(get_db)], _: An
             "total_revenue": float((await db.execute(select(func.coalesce(func.sum(TollDailyStat.revenue), 0)))).scalar_one() or 0),
         },
     }
-
 
 DRAWING_KEYS = [
     "pnp",

@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { projectIdFromUrl } from "../lib/projectScope";
+import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
 
 type Row = Record<string, unknown>;
 
@@ -26,6 +26,9 @@ export function ExecutivePage() {
   const { token, role } = useAuth();
   const [searchParams] = useSearchParams();
   const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
+  // Figures follow the sidebar package picker (or the ?project= link).
+  const { scopeIds } = usePackageScope();
+  const scopeKey = scopedProjectId ? String(scopedProjectId) : (scopeIds || []).join(",");
   const canEdit = role === "admin" || role === "government";
 
   const [overview, setOverview] = useState<Row | null>(null);
@@ -49,7 +52,7 @@ export function ExecutivePage() {
     if (!token) return;
     try {
       const [o, s] = await Promise.all([
-        api.nhitGet<Row>(token, "/executive/overview").catch(() => null),
+        api.nhitGet<Row>(token, `/executive/overview${scopeKey ? `?project_ids=${scopeKey}` : ""}`).catch(() => null),
         api.nhitGet<Row[]>(token, "/executive").catch(() => [] as Row[]),
       ]);
       setOverview(o);
@@ -62,7 +65,7 @@ export function ExecutivePage() {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, scopeKey]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -148,34 +151,88 @@ export function ExecutivePage() {
       <h2 style={{ marginTop: 0 }}>Project Overview</h2>
 
       {overview ? (
-        <section className="stat-grid">
-          <article className="stat">
-            <span>Stretches</span>
-            <strong>{String(overview.stretches)}</strong>
-          </article>
-          <article className="stat">
-            <span>Avg physical progress</span>
-            <strong>{Number(overview.avg_physical_progress || 0).toFixed(1)}%</strong>
-          </article>
-          <article className="stat">
-            <span>Planned ₹</span>
-            <strong>{money(Number(overview.planned_expenditure || 0))}</strong>
-          </article>
-          <article className="stat">
-            <span>Actual ₹</span>
-            <strong>{money(Number(overview.actual_expenditure || 0))}</strong>
-          </article>
-          <Link className="stat" to="/highway-incidents">
-            <span>Active incidents</span>
-            <strong>{String(overview.active_incidents)}</strong>
-          </Link>
-          <Link className="stat" to="/its">
-            <span>ITS not online</span>
-            <strong>{String(overview.its_not_online)}</strong>
-          </Link>
-        </section>
-      ) : null}
+        <>
+          <section className="stat-grid">
+            <article className="stat">
+              <span>Contract value (BOQ) ₹</span>
+              <strong>{money(Number(overview.contract_value || 0))}</strong>
+            </article>
+            <article className="stat">
+              <span>Work done ₹</span>
+              <strong>{money(Number(overview.work_done || 0))}</strong>
+            </article>
+            <article className="stat">
+              <span>Balance ₹</span>
+              <strong>{money(Number(overview.balance || 0))}</strong>
+            </article>
+            <article className="stat">
+              <span>Physical progress</span>
+              <strong>{Number(overview.physical_progress || 0).toFixed(2)}%</strong>
+            </article>
+            <Link className="stat" to="/vendors">
+              <span>Vendors / work orders</span>
+              <strong>{String(overview.vendors ?? 0)}</strong>
+            </Link>
+            <Link className="stat" to="/rates">
+              <span>BOQ items</span>
+              <strong>{String(overview.boq_items ?? 0)}</strong>
+            </Link>
+            <Link className="stat" to="/highway-incidents">
+              <span>Active incidents</span>
+              <strong>{String(overview.active_incidents ?? 0)}</strong>
+            </Link>
+            <Link className="stat" to="/its">
+              <span>ITS not online</span>
+              <strong>{String(overview.its_not_online ?? 0)}</strong>
+            </Link>
+          </section>
 
+          <section className="panel">
+            <h2>Vendor-wise contract value and progress</h2>
+            <div className="table-scroll">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Vendor</th>
+                    <th>Package</th>
+                    <th>Work tab</th>
+                    <th>BOQ items</th>
+                    <th>Contract value ₹</th>
+                    <th>Work done ₹</th>
+                    <th>Balance ₹</th>
+                    <th>Progress</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {((overview.vendor_rows as Row[] | undefined) || []).map((v) => (
+                    <tr key={String(v.id)}>
+                      <td>
+                        <Link to={`/vendors?id=${v.id}`}>{String(v.name)}</Link>
+                      </td>
+                      <td>{String(v.package || "—")}</td>
+                      <td>{String(v.type_of_work || "—")}</td>
+                      <td>{String(v.boq_items)}</td>
+                      <td>{money(Number(v.contract_value || 0))}</td>
+                      <td className="boq-done">{money(Number(v.work_done || 0))}</td>
+                      <td className="boq-remaining">{money(Number(v.balance || 0))}</td>
+                      <td>{v.progress == null ? "—" : `${Number(v.progress).toFixed(1)}%`}</td>
+                      <td>{String(v.status || "—")}</td>
+                    </tr>
+                  ))}
+                  {!((overview.vendor_rows as Row[] | undefined) || []).length ? (
+                    <tr>
+                      <td colSpan={9} className="muted">
+                        No vendors for the chosen package(s) yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
     </>
   );
 }

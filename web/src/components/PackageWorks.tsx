@@ -25,6 +25,25 @@ export function PackageWorks({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<WorkCategoryKey>(WORK_CATEGORIES[0].key);
   const [docsVendor, setDocsVendor] = useState<Vendor | null>(null);
+  // Contract value / work done per vendor, from the package's BOQ items.
+  const [amounts, setAmounts] = useState<Record<number, { boq: number; done: number }>>({});
+  useEffect(() => {
+    if (!token) return;
+    api
+      .rateItems(token, projectId)
+      .then((items) => {
+        const m: Record<number, { boq: number; done: number }> = {};
+        for (const it of items) {
+          if (!it.vendor_id) continue;
+          const a = (m[it.vendor_id] ||= { boq: 0, done: 0 });
+          a.boq += Number(it.boq_amount || 0);
+          a.done += Number(it.executed_amount || 0);
+        }
+        setAmounts(m);
+      })
+      .catch(() => setAmounts({}));
+  }, [token, projectId]);
+  const inr = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
   const canManage = role === "admin";
   const canOpenVendors = role === "admin" || role === "government";
 
@@ -99,6 +118,8 @@ export function PackageWorks({
                 <th>Vendor</th>
                 <th>Work order date</th>
                 <th>Commencement</th>
+                <th>Contract value ₹</th>
+                <th>Work done ₹</th>
                 <th>Time limit (days)</th>
                 <th>DLP (days)</th>
                 <th>EOT (days)</th>
@@ -134,6 +155,8 @@ export function PackageWorks({
                   </td>
                   <td>{v.work_order_date || "—"}</td>
                   <td>{v.commencement_date || "—"}</td>
+                  <td>{amounts[v.id] ? inr(amounts[v.id].boq) : "—"}</td>
+                  <td className="boq-done">{amounts[v.id] ? inr(amounts[v.id].done) : "—"}</td>
                   <td>{formatDays(v.time_limit_completion)}</td>
                   <td>{formatDays(v.defects_liability_period)}</td>
                   <td>{formatDays(v.extension_of_time)}</td>
