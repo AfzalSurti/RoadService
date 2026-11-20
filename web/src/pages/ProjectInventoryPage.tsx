@@ -4,6 +4,7 @@ import { api } from "../api";
 import { CorridorMap } from "../components/CorridorMap";
 import { useAuth } from "../auth";
 import { getSelectedProjectId, projectShortName, setSelectedProjectId, usePackageScope } from "../lib/projectScope";
+import { TmsInventory } from "../components/TmsInventory";
 import { InventorySheets } from "../components/InventorySheets";
 import type { InventoryItem, Project } from "../types";
 
@@ -238,6 +239,7 @@ export function ProjectInventoryPage() {
       )}
 
       {project ? <InventorySheets key={project.id} projectId={project.id} /> : null}
+      {project ? <TmsInventory key={`tms-${project.id}`} projectId={project.id} /> : null}
     </>
   );
 }

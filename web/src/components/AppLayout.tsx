@@ -104,9 +104,9 @@ export function AppLayout() {
 
           {staff ? (
             <NavGroup id="tms" title="TMS Dashboard" paths={["/toll", "/highway-incidents", "/its"]}>
-              <NavLink to="/toll">Toll Ops</NavLink>
+              <NavLink to="/toll">Toll Operations</NavLink>
               <NavLink to="/highway-incidents">Incidents</NavLink>
-              <NavLink to="/its">ATMS/TMS/ITS</NavLink>
+              <NavLink to="/its">ATMS / TMS Reports</NavLink>
             </NavGroup>
           ) : null}
 

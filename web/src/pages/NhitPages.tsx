@@ -726,32 +726,162 @@ export function SecurityPage() {
   );
 }
 
+/** NHAI fee-plaza vehicle classes, in the order used on tariff boards (naming convention). */
+export const TOLL_CLASSES = [
+  "Car/Jeep/Van",
+  "LCV",
+  "Bus/Truck",
+  "Upto 3 Axle",
+  "4 to 6 Axle",
+  "HCM/EME",
+  "7 or more Axle",
+];
+
+/** "Car/Jeep/Van: 90 | LCV: 145" -> { "Car/Jeep/Van": "90", LCV: "145" } (null if free text). */
+export function parseTariff(text: unknown): Record<string, string> | null {
+  const raw = String(text ?? "").trim();
+  if (!raw) return {};
+  const out: Record<string, string> = {};
+  for (const part of raw.split("|")) {
+    const m = part.match(/^\s*([^:]+):\s*(.+?)\s*$/);
+    if (!m || !TOLL_CLASSES.includes(m[1].trim())) return null;
+    out[m[1].trim()] = m[2].replace(/^₹\s*/, "");
+  }
+  return out;
+}
+
+function tariffText(rates: Record<string, string>) {
+  return TOLL_CLASSES.filter((c) => (rates[c] || "").trim())
+    .map((c) => `${c}: ${rates[c].trim()}`)
+    .join(" | ");
+}
+
+const emptyStat = {
+  plaza_id: "",
+  stat_date: new Date().toISOString().slice(0, 10),
+  total_traffic: "",
+  fastag_pct: "",
+  cash_pct: "",
+  revenue: "",
+  avg_lane_availability: "100",
+  notes: "",
+};
+
+const emptyPlaza = { name: "", project_id: "", chainage: "", lanes: "4", has_etc: true, has_wim: false };
+
 export function TollPage() {
-  const { token } = useAuth();
+  const { token, role, isReadonly } = useAuth();
+  // Data entry is for GMC Experts; NHIPMPL sees the same page read-only.
+  const canEdit = role === "admin" && !isReadonly;
   const [dash, setDash] = useState<Row | null>(null);
   const [plazas, setPlazas] = useState<Row[]>([]);
   const [stats, setStats] = useState<Row[]>([]);
+  const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [stat, setStat] = useState(emptyStat);
+  const [plazaForm, setPlazaForm] = useState(emptyPlaza);
+  const [tariffFor, setTariffFor] = useState<Row | null>(null);
+  const [tariff, setTariff] = useState<Record<string, string>>({});
+  const [revision, setRevision] = useState("");
   usePageTitle("Toll Operations");
 
-  useEffect(() => {
+  const load = async () => {
     if (!token) return;
-    Promise.all([
-      api.nhitGet<Row>(token, "/toll/dashboard"),
-      api.nhitGet<Row[]>(token, "/toll/plazas"),
-      api.nhitGet<Row[]>(token, "/toll/stats"),
-    ])
-      .then(([d, p, s]) => {
-        setDash(d);
-        setPlazas(p);
-        setStats(s);
-      })
-      .catch((e: Error) => setError(e.message));
+    try {
+      const [d, p, st] = await Promise.all([
+        api.nhitGet<Row>(token, "/toll/dashboard"),
+        api.nhitGet<Row[]>(token, "/toll/plazas"),
+        api.nhitGet<Row[]>(token, "/toll/stats"),
+      ]);
+      setDash(d);
+      setPlazas(p);
+      setStats(st);
+      setError(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load toll data");
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    if (token) api.projects(token).then(setProjects).catch(() => setProjects([]));
   }, [token]);
+
+  const plazaName = (id: unknown) => {
+    const pl = plazas.find((x) => String(x.id) === String(id));
+    return pl ? String(pl.name) : `Plaza #${String(id)}`;
+  };
+  const packageName = (id: unknown) => projects.find((x) => String(x.id) === String(id))?.name || "—";
+
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await fn();
+      setMsg(done);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveStat = (e: FormEvent) => {
+    e.preventDefault();
+    if (!token || !stat.plaza_id) {
+      setError("Choose a toll plaza");
+      return;
+    }
+    void run(
+      () =>
+        api.nhitPost(token, "/toll/stats", {
+          plaza_id: Number(stat.plaza_id),
+          stat_date: stat.stat_date,
+          total_traffic: Number(stat.total_traffic || 0),
+          fastag_pct: Number(stat.fastag_pct || 0),
+          cash_pct: Number(stat.cash_pct || 0),
+          revenue: Number(stat.revenue || 0),
+          avg_lane_availability: Number(stat.avg_lane_availability || 100),
+          notes: stat.notes.trim() || null,
+        }),
+      "Daily entry saved."
+    ).then(() => setStat({ ...emptyStat, plaza_id: stat.plaza_id }));
+  };
+
+  const savePlaza = (e: FormEvent) => {
+    e.preventDefault();
+    if (!token || plazaForm.name.trim().length < 3) {
+      setError("Plaza name is required");
+      return;
+    }
+    void run(
+      () =>
+        api.nhitPost(token, "/toll/plazas", {
+          name: plazaForm.name.trim(),
+          project_id: plazaForm.project_id ? Number(plazaForm.project_id) : null,
+          chainage: plazaForm.chainage.trim() || null,
+          lanes: Number(plazaForm.lanes || 4),
+          has_etc: plazaForm.has_etc,
+          has_wim: plazaForm.has_wim,
+        }),
+      "Toll plaza added."
+    ).then(() => setPlazaForm(emptyPlaza));
+  };
+
+  const openTariff = (pl: Row) => {
+    setTariffFor(pl);
+    setTariff(parseTariff(pl.tariff_notes) || {});
+    setRevision(String(pl.revision_date || new Date().toISOString().slice(0, 10)));
+  };
 
   return (
     <>
       {error ? <div className="error">{error}</div> : null}
+      {msg ? <div className="ok">{msg}</div> : null}
       {dash ? (
         <section className="stat-grid">
           <article className="stat">
@@ -772,58 +902,249 @@ export function TollPage() {
           </article>
         </section>
       ) : null}
+
       <section className="panel">
-        <h2>Toll plazas</h2>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Chainage</th>
-              <th>Lanes</th>
-              <th>ETC</th>
-              <th>Tariff</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plazas.map((p) => (
-              <tr key={String(p.id)}>
-                <td>{String(p.name)}</td>
-                <td>{String(p.chainage || "—")}</td>
-                <td>{String(p.lanes)}</td>
-                <td>{p.has_etc ? "Yes" : "No"}</td>
-                <td>{String(p.tariff_notes || "—")}</td>
+        <h2>Toll plazas and tariff</h2>
+        <p className="muted">Tariff per single journey (₹), by NHAI vehicle class.</p>
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Plaza</th>
+                <th>Package</th>
+                <th>Chainage</th>
+                <th>Lanes</th>
+                <th>ETC</th>
+                {TOLL_CLASSES.map((c) => (
+                  <th key={c}>{c} ₹</th>
+                ))}
+                <th>Tariff revised</th>
+                {canEdit ? <th>Actions</th> : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {plazas.map((pl) => {
+                const t = parseTariff(pl.tariff_notes);
+                return (
+                  <tr key={String(pl.id)}>
+                    <td>{String(pl.name)}</td>
+                    <td>{packageName(pl.project_id)}</td>
+                    <td>{String(pl.chainage || "—")}</td>
+                    <td>{String(pl.lanes)}</td>
+                    <td>{pl.has_etc ? "Yes" : "No"}</td>
+                    {t
+                      ? TOLL_CLASSES.map((c) => <td key={c}>{t[c] || "—"}</td>)
+                      : (
+                        <td colSpan={TOLL_CLASSES.length}>{String(pl.tariff_notes || "—")}</td>
+                      )}
+                    <td>{String(pl.revision_date || "—")}</td>
+                    {canEdit ? (
+                      <td>
+                        <button type="button" className="btn ghost" onClick={() => openTariff(pl)}>
+                          Update tariff
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
+
+      {tariffFor && canEdit ? (
+        <section className="panel">
+          <h2>Update tariff · {String(tariffFor.name)}</h2>
+          <form
+            className="form-grid"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!token) return;
+              void run(
+                () =>
+                  api.nhitPatch(token, `/toll/plazas/${String(tariffFor.id)}`, {
+                    tariff_notes: tariffText(tariff) || null,
+                    revision_date: revision || null,
+                  }),
+                `Tariff updated for ${String(tariffFor.name)}.`
+              ).then(() => setTariffFor(null));
+            }}
+          >
+            {TOLL_CLASSES.map((c) => (
+              <label key={c}>
+                {c} (₹)
+                <input
+                  inputMode="decimal"
+                  value={tariff[c] || ""}
+                  onChange={(e) => setTariff({ ...tariff, [c]: e.target.value })}
+                />
+              </label>
+            ))}
+            <label>
+              Revised on
+              <input type="date" value={revision} onChange={(e) => setRevision(e.target.value)} />
+            </label>
+            <div className="btn-row span-2">
+              <button className="btn" type="submit" disabled={busy}>
+                Save tariff
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setTariffFor(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
+      {canEdit ? (
+        <section className="panel">
+          <h2>Manual entry · daily traffic and revenue</h2>
+          <p className="muted">For days when the TMS feed is not available, enter the plaza's figures by hand.</p>
+          <form className="form-grid" onSubmit={saveStat}>
+            <label>
+              Toll plaza
+              <select value={stat.plaza_id} onChange={(e) => setStat({ ...stat, plaza_id: e.target.value })}>
+                <option value="">Choose…</option>
+                {plazas.map((pl) => (
+                  <option key={String(pl.id)} value={String(pl.id)}>
+                    {String(pl.name)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Date
+              <input type="date" value={stat.stat_date} onChange={(e) => setStat({ ...stat, stat_date: e.target.value })} />
+            </label>
+            <label>
+              Total traffic (vehicles)
+              <input inputMode="numeric" value={stat.total_traffic} onChange={(e) => setStat({ ...stat, total_traffic: e.target.value })} />
+            </label>
+            <label>
+              Revenue ₹
+              <input inputMode="decimal" value={stat.revenue} onChange={(e) => setStat({ ...stat, revenue: e.target.value })} />
+            </label>
+            <label>
+              FASTag %
+              <input inputMode="decimal" value={stat.fastag_pct} onChange={(e) => setStat({ ...stat, fastag_pct: e.target.value })} />
+            </label>
+            <label>
+              Cash %
+              <input inputMode="decimal" value={stat.cash_pct} onChange={(e) => setStat({ ...stat, cash_pct: e.target.value })} />
+            </label>
+            <label>
+              Lane availability %
+              <input
+                inputMode="decimal"
+                value={stat.avg_lane_availability}
+                onChange={(e) => setStat({ ...stat, avg_lane_availability: e.target.value })}
+              />
+            </label>
+            <label>
+              Notes
+              <input value={stat.notes} onChange={(e) => setStat({ ...stat, notes: e.target.value })} />
+            </label>
+            <div className="btn-row span-2">
+              <button className="btn" type="submit" disabled={busy}>
+                Save daily entry
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
       <section className="panel">
         <h2>Daily traffic & revenue</h2>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Plaza</th>
-              <th>Traffic</th>
-              <th>FASTag %</th>
-              <th>Revenue</th>
-              <th>Lane avail.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((s) => (
-              <tr key={String(s.id)}>
-                <td>{String(s.stat_date)}</td>
-                <td>#{String(s.plaza_id)}</td>
-                <td>{Number(s.total_traffic || 0).toLocaleString("en-IN")}</td>
-                <td>{Number(s.fastag_pct || 0)}</td>
-                <td>₹ {money(Number(s.revenue || 0))}</td>
-                <td>{Number(s.avg_lane_availability || 0)}%</td>
+        <div className="table-scroll">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Plaza</th>
+                <th>Traffic</th>
+                <th>FASTag %</th>
+                <th>Revenue ₹</th>
+                <th>Lane avail.</th>
+                <th>Notes</th>
+                {canEdit ? <th>Actions</th> : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {stats.map((st) => (
+                <tr key={String(st.id)}>
+                  <td>{String(st.stat_date)}</td>
+                  <td>{plazaName(st.plaza_id)}</td>
+                  <td>{Number(st.total_traffic || 0).toLocaleString("en-IN")}</td>
+                  <td>{Number(st.fastag_pct || 0)}</td>
+                  <td>{money(Number(st.revenue || 0))}</td>
+                  <td>{Number(st.avg_lane_availability || 0)}%</td>
+                  <td>{String(st.notes || "—")}</td>
+                  {canEdit ? (
+                    <td>
+                      <button
+                        type="button"
+                        className="linkish"
+                        disabled={busy}
+                        onClick={() => {
+                          if (!token || !window.confirm("Delete this daily entry?")) return;
+                          void run(() => api.nhitDelete(token, `/toll/stats/${String(st.id)}`), "Entry deleted.");
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
+
+      {canEdit ? (
+        <section className="panel">
+          <h2>Add toll plaza</h2>
+          <form className="form-grid" onSubmit={savePlaza}>
+            <label>
+              Plaza name
+              <input value={plazaForm.name} onChange={(e) => setPlazaForm({ ...plazaForm, name: e.target.value })} />
+            </label>
+            <label>
+              Package
+              <select value={plazaForm.project_id} onChange={(e) => setPlazaForm({ ...plazaForm, project_id: e.target.value })}>
+                <option value="">—</option>
+                {projects.map((pr) => (
+                  <option key={pr.id} value={String(pr.id)}>
+                    {pr.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Chainage
+              <input value={plazaForm.chainage} onChange={(e) => setPlazaForm({ ...plazaForm, chainage: e.target.value })} />
+            </label>
+            <label>
+              Lanes
+              <input inputMode="numeric" value={plazaForm.lanes} onChange={(e) => setPlazaForm({ ...plazaForm, lanes: e.target.value })} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={plazaForm.has_etc} onChange={(e) => setPlazaForm({ ...plazaForm, has_etc: e.target.checked })} />
+              ETC (FASTag) lanes
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={plazaForm.has_wim} onChange={(e) => setPlazaForm({ ...plazaForm, has_wim: e.target.checked })} />
+              Weigh-in-motion
+            </label>
+            <div className="btn-row span-2">
+              <button className="btn" type="submit" disabled={busy}>
+                Add plaza
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
     </>
   );
 }

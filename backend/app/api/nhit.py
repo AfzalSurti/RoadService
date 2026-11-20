@@ -799,6 +799,48 @@ async def create_plaza(
     return _orm_dict(row)
 
 
+class TollPlazaPatch(BaseModel):
+    name: str | None = None
+    project_id: int | None = None
+    chainage: str | None = None
+    lanes: int | None = None
+    has_etc: bool | None = None
+    has_wim: bool | None = None
+    tariff_notes: str | None = None
+    revision_date: date | None = None
+
+
+@router.patch("/toll/plazas/{plaza_id}")
+async def update_plaza(
+    plaza_id: int,
+    body: TollPlazaPatch,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: update a plaza, e.g. its tariff after a revision."""
+    row = (await db.execute(select(TollPlaza).where(TollPlaza.id == plaza_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Toll plaza not found")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    await db.commit()
+    await db.refresh(row)
+    return _orm_dict(row)
+
+
+@router.delete("/toll/stats/{stat_id}")
+async def delete_toll_stat(
+    stat_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    row = (await db.execute(select(TollDailyStat).where(TollDailyStat.id == stat_id))).scalar_one_or_none()
+    if row:
+        await db.delete(row)
+        await db.commit()
+    return {"ok": True}
+
+
 @router.get("/toll/stats")
 async def list_toll_stats(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(get_current_user)]):
     return [_orm_dict(r) for r in (await db.execute(select(TollDailyStat).order_by(TollDailyStat.id.desc()).limit(200))).scalars().all()]
