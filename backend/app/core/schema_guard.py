@@ -172,6 +172,79 @@ MSR_FOLDER_RENAME = (
 )
 
 
+async def seed_rkjl_tracker(conn) -> None:
+    """Load the RKJL WO / PO register (vendors) and BOQ tracker (items with executed qty)
+    into Jabalpur - Lakhnadon once; each WO is added only if not already there."""
+    from app.services.rkjl_tracker import PACKAGE, WORKBOOK, read_tracker
+
+    if not WORKBOOK.is_file():
+        return
+    pid = (await conn.execute(text("SELECT id FROM projects WHERE name = :n"), {"n": PACKAGE})).scalar()
+    if not pid:
+        return
+    have = {
+        (r or "").split("\n", 1)[0].removeprefix("WO No: ").strip()
+        for r in (
+            await conn.execute(
+                text("SELECT remarks FROM vendors WHERE project_id = :p AND remarks LIKE 'WO No: %'"), {"p": pid}
+            )
+        ).scalars()
+    }
+    orders, items = await asyncio.to_thread(read_tracker)
+    names: dict[str, int] = {}
+    added = 0
+    for o in orders:
+        if o["wo"] in have:
+            continue
+        names[o["supplier"]] = names.get(o["supplier"], 0) + 1
+        remarks = f"WO No: {o['wo']}\n{o['type']} · {o['location']}\nContact: {o['contact']}"
+        if o["net"]:
+            remarks += f"\nNet order value: Rs {float(o['net']):,.2f} (excl. GST)"
+        vid = (
+            await conn.execute(
+                text(
+                    "INSERT INTO vendors (project_id, name, brief, type_of_work, work_order_date, commencement_date, "
+                    "time_limit_completion, progress_notes, remarks) "
+                    "VALUES (:p, :name, :brief, :tw, :wod, :cd, :tl, :pn, :rm) RETURNING id"
+                ),
+                {
+                    "p": pid,
+                    "name": o["supplier"][:255] or o["wo"][:255],
+                    "brief": o["scope"],
+                    "tw": o["category"],
+                    "wod": o["order_date"],
+                    "cd": o["commencement"],
+                    "tl": o["days"],
+                    "pn": o["status"] or None,
+                    "rm": remarks,
+                },
+            )
+        ).scalar()
+        added += 1
+        for it in (i for i in items if i["wo"] == o["wo"]):
+            await conn.execute(
+                text(
+                    "INSERT INTO rate_items (project_id, vendor_id, item_no, description, unit, boq_quantity, rate, "
+                    "boq_amount, executed_quantity, executed_amount) "
+                    "VALUES (:p, :v, :no, :d, :u, :q, :r, :a, :eq, :ea)"
+                ),
+                {
+                    "p": pid,
+                    "v": vid,
+                    "no": it["item_no"],
+                    "d": it["description"],
+                    "u": it["unit"],
+                    "q": it["qty"],
+                    "r": it["rate"],
+                    "a": round(it["qty"] * it["rate"], 2),
+                    "eq": it["done"],
+                    "ea": round(it["done"] * it["rate"], 2),
+                },
+            )
+    if added:
+        log.warning("schema_guard: loaded %s RKJL work orders into %s", added, PACKAGE)
+
+
 async def seed_inventory(conn) -> None:
     """Fill each package's table from the Project Location sheets."""
     for name, rows in PACKAGE_INVENTORY.items():
@@ -256,6 +329,7 @@ async def ensure_schema() -> None:
                 await conn.execute(text(stmt), params)
             # MPR is now MSR (Monthly Status Report): rename the package folders in place.
             await conn.execute(text(MSR_FOLDER_RENAME))
+            await seed_rkjl_tracker(conn)
             if not await _table_exists(conn, "project_inventory_sheets"):
                 for stmt in INVENTORY_SHEETS_DDL:
                     await conn.execute(text(stmt))

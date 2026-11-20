@@ -46,8 +46,23 @@ export type TaskItem = {
   urgent: boolean;
 };
 
+// Road / highway photos bundled with the portal; stand in for old demo stock images.
+const ROAD_PHOTOS = [
+  "/packages/mahagaon-khawasa.jpg",
+  "/packages/borkhedi-kelapur.jpg",
+  "/packages/jabalpur-lakhnadon.jpg",
+  "/dash-hero.jpg",
+  "/landing-road.jpg",
+];
+
 export function mediaUrl(path?: string | null) {
   if (!path) return "";
+  // Seeded demo defects point at stock photos (some show flowers): use a road photo instead.
+  if (path.includes("images.unsplash.com")) {
+    let h = 0;
+    for (const ch of path) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return ROAD_PHOTOS[h % ROAD_PHOTOS.length];
+  }
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   const name = path.split(/[/\\]/).pop() || path;
   return `${API_URL}/uploads/${name}`;

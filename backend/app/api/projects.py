@@ -53,7 +53,13 @@ async def list_projects(
         .order_by(Project.id.desc())
     )
     if user.role == UserRole.CONTRACTOR:
-        stmt = stmt.where(Project.contractors.any(User.id == user.id))
+        # Contractors see their packages; one not yet assigned anywhere sees all active
+        # packages so forms (RFI, MSR, billing) still offer a project.
+        assigned = (
+            await db.execute(select(Project.id).where(Project.contractors.any(User.id == user.id)))
+        ).first()
+        if assigned:
+            stmt = stmt.where(Project.contractors.any(User.id == user.id))
     elif user.role == UserRole.SURVEYOR:
         stmt = stmt.where(Project.surveyors.any(User.id == user.id))
     result = await db.execute(stmt)
