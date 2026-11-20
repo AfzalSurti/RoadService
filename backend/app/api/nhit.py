@@ -1150,7 +1150,7 @@ async def executive_overview(
     for v in vendors:
         agg = by_vendor.get(v.id, {"boq": 0.0, "done": 0.0, "items": 0})
         vendor_rows.append({
-            "id": v.id, "name": v.name, "package": names.get(v.project_id, ""), "type_of_work": v.type_of_work,
+            "id": v.id, "project_id": v.project_id, "name": v.name, "package": names.get(v.project_id, ""), "type_of_work": v.type_of_work,
             "work_order_date": v.work_order_date, "boq_items": int(agg["items"]), "contract_value": round(agg["boq"], 2),
             "work_done": round(agg["done"], 2), "balance": round(agg["boq"] - agg["done"], 2),
             "progress": round(agg["done"] / agg["boq"] * 100, 1) if agg["boq"] else None, "status": v.progress_notes,

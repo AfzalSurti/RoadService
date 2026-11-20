@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
+import type { Project, RateItem } from "../types";
 
 type Row = Record<string, unknown>;
 
@@ -28,7 +29,12 @@ export function ExecutivePage() {
   const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
   // Figures follow the sidebar package picker (or the ?project= link).
   const { scopeIds } = usePackageScope();
-  const scopeKey = scopedProjectId ? String(scopedProjectId) : (scopeIds || []).join(",");
+  // Package drop-down on the page; defaults to the sidebar picker (or the ?project= link).
+  const [pkg, setPkg] = useState<string>("");
+  const scopeKey = pkg || (scopedProjectId ? String(scopedProjectId) : (scopeIds || []).join(","));
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [vendorId, setVendorId] = useState<string>("");
+  const [vendorItems, setVendorItems] = useState<RateItem[]>([]);
   const canEdit = role === "admin" || role === "government";
 
   const [overview, setOverview] = useState<Row | null>(null);
@@ -66,6 +72,24 @@ export function ExecutivePage() {
   useEffect(() => {
     void load();
   }, [token, scopeKey]);
+
+  useEffect(() => {
+    if (token) api.projects(token).then(setProjects).catch(() => setProjects([]));
+  }, [token]);
+
+  const vendorRows = useMemo(() => ((overview?.vendor_rows as Row[] | undefined) || []), [overview]);
+  const chosenVendor = vendorRows.find((v) => String(v.id) === vendorId) || null;
+  useEffect(() => {
+    setVendorItems([]);
+    if (!token || !chosenVendor?.project_id) return;
+    api
+      .rateItems(token, Number(chosenVendor.project_id))
+      .then((items) => setVendorItems(items.filter((i) => i.vendor_id === Number(chosenVendor.id))))
+      .catch(() => setVendorItems([]));
+  }, [token, chosenVendor?.id]);
+  useEffect(() => {
+    if (vendorId && !vendorRows.some((v) => String(v.id) === vendorId)) setVendorId("");
+  }, [vendorRows]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -148,7 +172,33 @@ export function ExecutivePage() {
       {error ? <div className="error">{error}</div> : null}
       {msg ? <div className="ok">{msg}</div> : null}
 
-      <h2 style={{ marginTop: 0 }}>Project Overview</h2>
+      <div className="overview-head">
+        <h2 style={{ marginTop: 0 }}>Project Overview</h2>
+        <label>
+          Package
+          <select value={pkg} onChange={(e) => setPkg(e.target.value)}>
+            <option value="">{scopeIds?.length || scopedProjectId ? "As chosen in the sidebar" : "All packages"}</option>
+            {projects.length > 1 ? <option value={projects.map((p) => p.id).join(",")}>All packages</option> : null}
+            {projects.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Contractor / vendor
+          <select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+            <option value="">All vendors</option>
+            {vendorRows.map((v) => (
+              <option key={String(v.id)} value={String(v.id)}>
+                {String(v.name)}
+                {v.package ? ` (${String(v.package)})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {overview ? (
         <>
@@ -188,6 +238,66 @@ export function ExecutivePage() {
           </section>
 
           <section className="panel">
+            {chosenVendor ? (
+              <>
+                <h2>{String(chosenVendor.name)} · BOQ progress</h2>
+                <p className="muted">
+                  Contract ₹ {money(Number(chosenVendor.contract_value || 0))} · Work done ₹{" "}
+                  {money(Number(chosenVendor.work_done || 0))} · Balance ₹ {money(Number(chosenVendor.balance || 0))}
+                  {chosenVendor.progress != null ? ` · ${Number(chosenVendor.progress).toFixed(1)}% done` : ""}
+                </p>
+                <div className="bar-chart">
+                  {vendorItems.map((i) => {
+                    const total = Number(i.boq_amount || 0);
+                    const done = Number(i.executed_amount || 0);
+                    const pct = total ? Math.min(100, (done / total) * 100) : 0;
+                    return (
+                      <div className="bar-row" key={i.id} title={`${i.description}\nDone ₹ ${money(done)} of ₹ ${money(total)}`}>
+                        <span className="bar-label">
+                          {i.item_no} · {i.description}
+                        </span>
+                        <span className="bar-track">
+                          <span className="bar-fill" style={{ width: `${pct}%` }} />
+                        </span>
+                        <span className="bar-value">{pct.toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                  {!vendorItems.length ? <p className="muted">No BOQ items for this vendor yet.</p> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Contractor-wise progress</h2>
+                <div className="bar-chart">
+                  {vendorRows
+                    .filter((v) => Number(v.contract_value || 0) > 0)
+                    .slice(0, 25)
+                    .map((v) => {
+                      const pct = Math.min(100, Number(v.progress || 0));
+                      return (
+                        <button
+                          type="button"
+                          className="bar-row"
+                          key={String(v.id)}
+                          onClick={() => setVendorId(String(v.id))}
+                          title={`Contract ₹ ${money(Number(v.contract_value || 0))} · done ₹ ${money(Number(v.work_done || 0))}`}
+                        >
+                          <span className="bar-label">{String(v.name)}</span>
+                          <span className="bar-track">
+                            <span className="bar-fill" style={{ width: `${pct}%` }} />
+                          </span>
+                          <span className="bar-value">{pct.toFixed(1)}%</span>
+                        </button>
+                      );
+                    })}
+                </div>
+                <p className="muted">Pick a contractor (or click a bar) to see each of its BOQ items.</p>
+              </>
+            )}
+          </section>
+
+          <section className="panel">
             <h2>Vendor-wise contract value and progress</h2>
             <div className="table-scroll">
               <table className="data">
@@ -205,7 +315,7 @@ export function ExecutivePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {((overview.vendor_rows as Row[] | undefined) || []).map((v) => (
+                  {vendorRows.filter((v) => !vendorId || String(v.id) === vendorId).map((v) => (
                     <tr key={String(v.id)}>
                       <td>
                         <Link to={`/vendors?id=${v.id}`}>{String(v.name)}</Link>
