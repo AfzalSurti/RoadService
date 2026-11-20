@@ -2294,3 +2294,7 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 /* Monthly report */
 .monthly-report h3 { margin: 1.25rem 0 0.5rem; }
 .overview-head input[type="month"] { padding: 0.42rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+
+/* Documents: "Upload documents into" folder picker */
+.docs-upload-target { display: flex; flex-direction: column; gap: 0.25rem; max-width: 520px; margin-bottom: 0.9rem; font-size: 0.9rem; }
+.docs-upload-target select { padding: 0.45rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }

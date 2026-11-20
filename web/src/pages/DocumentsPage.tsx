@@ -103,6 +103,19 @@ export function DocumentsPage() {
     [folders, selectedFolderId]
   );
   const canUploadHere = selectedFolder?.folder_type === "doctype";
+  // Every folder that takes uploads, with its path, for the "Upload into" picker.
+  const uploadTargets = useMemo(() => {
+    const out: { id: number; label: string }[] = [];
+    const walk = (nodes: DocumentFolder[], trail: string[]) => {
+      for (const n of nodes) {
+        const next = [...trail, n.name];
+        if (n.folder_type === "doctype") out.push({ id: n.id, label: next.join(" / ") });
+        walk(n.children || [], next);
+      }
+    };
+    walk(folders, []);
+    return out;
+  }, [folders]);
   const canManageFolders = role === "admin" && !isReadonly;
 
   const breadcrumb = useMemo(() => {
@@ -364,6 +377,22 @@ export function DocumentsPage() {
               </div>
             </div>
 
+            {!isReadonly && role !== "surveyor" && uploadTargets.length ? (
+              <label className="docs-upload-target">
+                Upload documents into
+                <select
+                  value={canUploadHere && selectedFolder ? String(selectedFolder.id) : ""}
+                  onChange={(e) => e.target.value && setSelectedFolderId(Number(e.target.value))}
+                >
+                  <option value="">Choose a folder…</option>
+                  {uploadTargets.map((t) => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {canUploadHere && !isReadonly ? (
               <form className="form-grid" onSubmit={onUpload} style={{ marginBottom: "1rem" }}>
                 <label>
