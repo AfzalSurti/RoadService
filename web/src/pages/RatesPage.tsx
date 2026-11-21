@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { BoqBillModal } from "../components/BoqBillModal";
+import { RaBillModal } from "../components/RaBillModal";
 import { ProjectSelect } from "../components/ProjectSelect";
 import type { RateItem, Vendor, VendorBill } from "../types";
 import * as v from "../lib/validation";
@@ -192,6 +193,7 @@ export function RatesPage() {
       .sort((a, b) => (a.id == null ? 1 : b.id == null ? -1 : a.name.localeCompare(b.name)));
   }, [items, vendors]);
 
+  const [raBill, setRaBill] = useState<{ vendorId: number; billNo: string } | null>(null);
   const billsOf = (vendorId: number | null) => bills.filter((b) => b.vendor_id === vendorId);
   const startBill = (vendorId: number | null | undefined, focusItemId: number | null = null) => {
     const vendor = vendorId ? vendors.find((x) => x.id === vendorId) : null;
@@ -636,6 +638,17 @@ export function RatesPage() {
                           ) : (
                             <p className="muted">No documents attached.</p>
                           )}
+                          <div className="btn-row">
+                            {b.vendor_id != null ? (
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setRaBill({ vendorId: b.vendor_id as number, billNo: b.bill_no })}
+                              >
+                                View RA bill (invoice)
+                              </button>
+                            ) : null}
+                          </div>
                           {canManage && b.vendor_id != null ? (
                             <div className="btn-row">
                               <label className="btn ghost">
@@ -702,6 +715,15 @@ export function RatesPage() {
             </p>
           )}
         </section>
+      ) : null}
+
+      {raBill && projectId ? (
+        <RaBillModal
+          projectId={Number(projectId)}
+          vendorId={raBill.vendorId}
+          billNo={raBill.billNo}
+          onClose={() => setRaBill(null)}
+        />
       ) : null}
 
       {billFor && projectId ? (

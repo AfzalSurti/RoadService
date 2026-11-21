@@ -347,6 +347,7 @@ export type Vendor = {
   contact_phone?: string | null;
   contact_email?: string | null;
   contact_address?: string | null;
+  gst_no?: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -541,6 +541,105 @@ async def cancel_vendor_bill(
     return {"ok": True, "returned_amount": float(total)}
 
 
+
+
+@router.get("/bills/ra")
+async def ra_bill(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    project_id: int = Query(),
+    vendor_id: int = Query(),
+    bill_no: str = Query(),
+):
+    """RA bill in the proforma-invoice layout: vendor / work order header, and the abstract sheet
+    (work-order qty, rate, amount; quantity and amount up to date / previous / this bill)."""
+    from datetime import timedelta
+
+    project = await _get_project(db, project_id)
+    if not _can_view_project(user, project) or user.role == UserRole.SURVEYOR:
+        raise HTTPException(status_code=403, detail="Not allowed to view bills")
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    items = (
+        await db.execute(select(RateItem).where(RateItem.vendor_id == vendor_id).order_by(RateItem.id))
+    ).scalars().all()
+    entries = (
+        await db.execute(
+            select(QuantityEntry).where(QuantityEntry.vendor_id == vendor_id).order_by(QuantityEntry.id)
+        )
+    ).scalars().all()
+
+    # The vendor's bills in order (by bill date, then entry order).
+    first: dict[str, QuantityEntry] = {}
+    for e in entries:
+        if e.bill_no and e.bill_no not in first:
+            first[e.bill_no] = e
+    order = sorted(first, key=lambda b: (first[b].bill_date or first[b].created_at.date(), first[b].id))
+    if bill_no not in order:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    idx = order.index(bill_no)
+    later = set(order[idx + 1:])
+    this_ids = [e.id for e in entries if e.bill_no == bill_no]
+    last_this_id = max(this_ids)
+    bill_date = first[bill_no].bill_date
+    if idx > 0 and first[order[idx - 1]].bill_date:
+        period_from = first[order[idx - 1]].bill_date + timedelta(days=1)
+    else:
+        period_from = vendor.commencement_date or vendor.work_order_date
+
+    lines = []
+    for it in items:
+        mine = [e for e in entries if e.rate_item_id == it.id]
+        this_q = sum((e.quantity for e in mine if e.bill_no == bill_no), Decimal("0"))
+        # Quantities recorded after this bill (later bills, or entries without a bill made later).
+        after = sum(
+            (e.quantity for e in mine if (e.bill_no in later) or (not e.bill_no and e.id > last_this_id)),
+            Decimal("0"),
+        )
+        upto = max(Decimal("0"), (it.executed_quantity or Decimal("0")) - after)
+        prev = max(Decimal("0"), upto - this_q)
+        rate = it.rate or Decimal("0")
+        lines.append(
+            {
+                "item_no": it.item_no,
+                "description": it.description,
+                "unit": it.unit,
+                "wo_qty": float(it.boq_quantity or 0),
+                "rate": float(rate),
+                "wo_amount": float(it.boq_amount or 0),
+                "qty_upto": float(upto),
+                "qty_prev": float(prev),
+                "qty_this": float(this_q),
+                "amt_upto": float((upto * rate).quantize(Decimal("0.01"))),
+                "amt_prev": float((prev * rate).quantize(Decimal("0.01"))),
+                "amt_this": float((this_q * rate).quantize(Decimal("0.01"))),
+            }
+        )
+    wo_no = ""
+    if vendor.remarks and vendor.remarks.startswith("WO No: "):
+        wo_no = vendor.remarks.split("\n", 1)[0].removeprefix("WO No: ").strip()
+    digits = "".join(ch for ch in bill_no if ch.isdigit())
+    return {
+        "project": {"id": project.id, "name": project.name, "title": getattr(project, "title", None)},
+        "vendor": {
+            "id": vendor.id,
+            "name": vendor.name,
+            "work_order_no": wo_no,
+            "work_description": vendor.brief or vendor.type_of_work or "",
+            "address": vendor.contact_address,
+            "gst_no": vendor.gst_no,
+        },
+        "bill_no": bill_no,
+        "invoice_no": digits or str(idx + 1),
+        "bill_index": idx + 1,
+        "bill_date": bill_date.isoformat() if bill_date else None,
+        "period_from": period_from.isoformat() if period_from else None,
+        "period_to": bill_date.isoformat() if bill_date else None,
+        "lines": lines,
+    }
+
+
 @router.post("/bills", response_model=VendorBillOut, status_code=201)
 async def create_vendor_bill(
     body: VendorBillIn,

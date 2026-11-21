@@ -474,6 +474,13 @@ export const api = {
     }
   ) => request<VendorBill>("/api/v1/rates/bills", { method: "POST", token, body: JSON.stringify(body) }),
 
+  /** RA bill in the proforma-invoice layout (header + abstract sheet lines). */
+  raBill: (token: string, projectId: number, vendorId: number, billNo: string) =>
+    request<Record<string, unknown>>(
+      `/api/v1/rates/bills/ra?project_id=${projectId}&vendor_id=${vendorId}&bill_no=${encodeURIComponent(billNo)}`,
+      { token }
+    ),
+
   /** GMC Experts: attach supporting documents to a vendor bill. */
   uploadBillDocuments: (token: string, projectId: number, vendorId: number, billNo: string, files: File[]) => {
     const fd = new FormData();

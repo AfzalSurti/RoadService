@@ -561,6 +561,7 @@ class VendorCreate(BaseModel):
     contact_phone: str | None = None
     contact_email: str | None = None
     contact_address: str | None = None
+    gst_no: str | None = None
 
 
 class VendorDocumentOut(BaseModel):
@@ -597,6 +598,7 @@ class VendorOut(BaseModel):
     contact_phone: str | None = None
     contact_email: str | None = None
     contact_address: str | None = None
+    gst_no: str | None = None
     created_at: datetime
     updated_at: datetime
 

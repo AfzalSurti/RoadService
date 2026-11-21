@@ -1,3 +1,4 @@
+import { VendorRaBills } from "../components/VendorRaBills";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
@@ -269,6 +270,7 @@ export function ContractorBillingPage() {
     <>
       {error ? <div className="error">{error}</div> : null}
       {msg ? <div className="ok">{msg}</div> : null}
+      <VendorRaBills />
 
       <div className="billing-toolbar">
         <div>

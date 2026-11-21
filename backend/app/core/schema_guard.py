@@ -177,6 +177,7 @@ VENDOR_CONTACT_COLUMNS = (
     ("contact_phone", "VARCHAR(64)"),
     ("contact_email", "VARCHAR(255)"),
     ("contact_address", "TEXT"),
+    ("gst_no", "VARCHAR(32)"),
 )
 VENDOR_CONTACT_BACKFILL = (
     "UPDATE vendors SET contact_person = LEFT(TRIM(substring(remarks from 'Contact: ([^\n]+)')), 255) "

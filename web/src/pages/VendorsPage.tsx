@@ -32,6 +32,7 @@ const empty = {
   contact_phone: "",
   contact_email: "",
   contact_address: "",
+  gst_no: "",
 };
 
 type Filter = "all" | (typeof WORK_CATEGORIES)[number]["key"] | "other";
@@ -56,6 +57,7 @@ function vendorToForm(v: Vendor) {
     contact_phone: v.contact_phone || "",
     contact_email: v.contact_email || "",
     contact_address: v.contact_address || "",
+    gst_no: v.gst_no || "",
   };
 }
 
@@ -204,6 +206,7 @@ export function VendorsPage() {
       contact_phone: form.contact_phone.trim() || null,
       contact_email: form.contact_email.trim() || null,
       contact_address: form.contact_address.trim() || null,
+      gst_no: form.gst_no.trim() || null,
     });
     setBusy(true);
     setError(null);
@@ -591,6 +594,10 @@ export function VendorsPage() {
                   value={form.contact_email}
                   onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
                 />
+              </label>
+              <label>
+                GST No.
+                <input value={form.gst_no} onChange={(e) => setForm({ ...form, gst_no: e.target.value })} />
               </label>
               <label>
                 Address
