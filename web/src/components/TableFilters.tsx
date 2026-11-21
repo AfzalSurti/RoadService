@@ -98,6 +98,10 @@ function build(table: HTMLTableElement, bar: Bar | undefined) {
       if (t && t !== "—") vals.add(t);
       if (vals.size > MAX_CHOICES) return;
     }
+    // Plain number / amount columns (BOQ items, Work done ₹ ...) make poor drop-downs; skip them.
+    // Percentages (Progress) stay.
+    const allNumbers = Array.from(vals).every((v) => /^[₹\s\d.,-]+$/.test(v));
+    if (allNumbers) return;
     if (vals.size >= 2 && vals.size < rows.length && vals.size <= MAX_CHOICES) {
       choices.set(col, Array.from(vals).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
     }
