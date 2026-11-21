@@ -2303,3 +2303,7 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .stage-text { font-size: 0.8rem; opacity: 0.8; }
 .nhipmpl-verify { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: 10px; }
 .nhipmpl-verify textarea { width: 100%; }
+
+/* Project Overview: quantity / remarks editing */
+.qty-input { width: 7rem; padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
+.remark-input { width: 14rem; padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }

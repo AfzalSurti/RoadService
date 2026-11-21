@@ -404,6 +404,22 @@ async def issue_pdf(
     return pdf_response(content, f"defect_{issue.id}.pdf")
 
 
+@router.delete("/{issue_id}")
+async def delete_issue(
+    issue_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: delete a defect raised by mistake (or old demo data). History goes with it."""
+    from sqlalchemy import text
+
+    if not (await db.execute(select(Issue.id).where(Issue.id == issue_id))).first():
+        raise HTTPException(status_code=404, detail="Defect not found")
+    await db.execute(text("DELETE FROM issues WHERE id = :i"), {"i": issue_id})
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/{issue_id}/photos", response_model=IssueOut)
 async def replace_issue_photo(
     issue_id: int,

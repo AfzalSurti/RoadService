@@ -192,6 +192,27 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
           </h2>
           <div className="btn-row">
             <PdfDownloadButton path={`/api/v1/issues/${issue.id}/pdf`} filename={`defect_${issue.id}.pdf`} />
+            {role === "admin" && !isReadonly ? (
+              <button
+                className="btn danger"
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!token || !window.confirm(`Delete defect #${issue.id}? This cannot be undone.`)) return;
+                  setBusy(true);
+                  try {
+                    await api.deleteIssue(token, issue.id);
+                    onChanged?.();
+                    onClose();
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : "Delete failed");
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete
+              </button>
+            ) : null}
             <button className="btn ghost" type="button" onClick={onClose}>
               Close
             </button>

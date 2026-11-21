@@ -299,6 +299,10 @@ export const api = {
     return request<Issue>(`/api/v1/issues/${id}/verify/nhipmpl`, { method: "POST", token, body: fd });
   },
 
+  /** GMC Experts: delete a defect raised by mistake. */
+  deleteIssue: (token: string, id: number) =>
+    request<{ ok: boolean }>(`/api/v1/issues/${id}`, { method: "DELETE", token }),
+
   approveIssue: (token: string, id: number, form: FormData) =>
     request<Issue>(`/api/v1/issues/${id}/verify/approve`, { method: "POST", token, body: form }),
 

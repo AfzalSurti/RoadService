@@ -132,7 +132,18 @@ async def serve_upload(name: str):
         return FileResponse(path)
     content = await load_file(name)
     if content is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        from fastapi.responses import HTMLResponse
+
+        return HTMLResponse(
+            "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
+            "<title>File not available</title>"
+            "<body style='font-family:system-ui,sans-serif;max-width:560px;margin:3rem auto;padding:0 1rem;"
+            "line-height:1.5'><h2>This file is no longer on the server</h2>"
+            "<p>It was uploaded before files were kept permanently and was removed when the server "
+            "restarted. Please open the record in RoadService and upload the file again &mdash; new "
+            "uploads are kept safely.</p></body>",
+            status_code=404,
+        )
     try:
         path.write_bytes(content)
     except OSError:

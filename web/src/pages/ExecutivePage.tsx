@@ -24,7 +24,11 @@ function money(n: number) {
 }
 
 export function ExecutivePage() {
-  const { token, role } = useAuth();
+  const { token, role, isReadonly } = useAuth();
+  // GMC Experts update completed quantities / remarks; NHIPMPL sees the same page read-only.
+  const canEditQty = role === "admin" && !isReadonly;
+  const [drafts, setDrafts] = useState<Record<number, { qty: string; remarks: string }>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
   const [searchParams] = useSearchParams();
   const scopedProjectId = projectIdFromUrl(searchParams.get("project"));
   // Figures follow the sidebar package picker (or the ?project= link).
@@ -84,7 +88,10 @@ export function ExecutivePage() {
     if (!token || !chosenVendor?.project_id) return;
     api
       .rateItems(token, Number(chosenVendor.project_id))
-      .then((items) => setVendorItems(items.filter((i) => i.vendor_id === Number(chosenVendor.id))))
+      .then((items) => {
+        setVendorItems(items.filter((i) => i.vendor_id === Number(chosenVendor.id)));
+        setDrafts({});
+      })
       .catch(() => setVendorItems([]));
   }, [token, chosenVendor?.id]);
   useEffect(() => {
@@ -265,6 +272,114 @@ export function ExecutivePage() {
                   })}
                   {!vendorItems.length ? <p className="muted">No BOQ items for this vendor yet.</p> : null}
                 </div>
+                {vendorItems.length ? (
+                  <>
+                    <h3>Quantities and remarks</h3>
+                    <div className="table-scroll">
+                      <table className="data" data-nofilter>
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Description</th>
+                            <th>Unit</th>
+                            <th>BOQ qty</th>
+                            <th>Completed qty</th>
+                            <th>Progress</th>
+                            <th>Work done ₹</th>
+                            <th>Remarks</th>
+                            {canEditQty ? <th></th> : null}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vendorItems.map((i) => {
+                            const d = drafts[i.id] || {
+                              qty: String(Number(i.executed_quantity || 0)),
+                              remarks: i.remarks || "",
+                            };
+                            const qty = Number(d.qty || 0);
+                            const pct = i.boq_quantity ? Math.min(100, (qty / Number(i.boq_quantity)) * 100) : 0;
+                            const changed =
+                              qty !== Number(i.executed_quantity || 0) || d.remarks !== (i.remarks || "");
+                            const setD = (next: Partial<{ qty: string; remarks: string }>) =>
+                              setDrafts((m) => ({ ...m, [i.id]: { ...d, ...next } }));
+                            return (
+                              <tr key={i.id}>
+                                <td>{i.item_no}</td>
+                                <td>{i.description}</td>
+                                <td>{i.unit}</td>
+                                <td>{Number(i.boq_quantity).toLocaleString("en-IN")}</td>
+                                <td>
+                                  {canEditQty ? (
+                                    <input
+                                      className="qty-input"
+                                      inputMode="decimal"
+                                      value={d.qty}
+                                      onChange={(e) => setD({ qty: e.target.value })}
+                                    />
+                                  ) : (
+                                    Number(i.executed_quantity || 0).toLocaleString("en-IN")
+                                  )}
+                                </td>
+                                <td>{pct.toFixed(1)}%</td>
+                                <td className="boq-done">{money(qty * Number(i.rate || 0))}</td>
+                                <td>
+                                  {canEditQty ? (
+                                    <input
+                                      className="remark-input"
+                                      value={d.remarks}
+                                      placeholder="Add a remark"
+                                      onChange={(e) => setD({ remarks: e.target.value })}
+                                    />
+                                  ) : (
+                                    i.remarks || "—"
+                                  )}
+                                </td>
+                                {canEditQty ? (
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      disabled={!changed || savingId === i.id}
+                                      onClick={async () => {
+                                        if (!token) return;
+                                        if (!(qty >= 0) || qty > Number(i.boq_quantity)) {
+                                          setError(`Completed quantity must be between 0 and ${i.boq_quantity}`);
+                                          return;
+                                        }
+                                        setSavingId(i.id);
+                                        setError(null);
+                                        try {
+                                          const saved = await api.updateRateItem(token, i.id, {
+                                            completed_quantity: qty,
+                                            remarks: d.remarks.trim() || null,
+                                          });
+                                          setVendorItems((list) => list.map((x) => (x.id === i.id ? saved : x)));
+                                          setDrafts((m) => {
+                                            const next = { ...m };
+                                            delete next[i.id];
+                                            return next;
+                                          });
+                                          setMsg(`${i.item_no}: saved.`);
+                                          await load();
+                                        } catch (e: unknown) {
+                                          setError(e instanceof Error ? e.message : "Save failed");
+                                        } finally {
+                                          setSavingId(null);
+                                        }
+                                      }}
+                                    >
+                                      {savingId === i.id ? "Saving…" : "Save"}
+                                    </button>
+                                  </td>
+                                ) : null}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : null}
               </>
             ) : (
               <>
@@ -312,6 +427,7 @@ export function ExecutivePage() {
                     <th>Balance ₹</th>
                     <th>Progress</th>
                     <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -328,11 +444,23 @@ export function ExecutivePage() {
                       <td className="boq-remaining">{money(Number(v.balance || 0))}</td>
                       <td>{v.progress == null ? "—" : `${Number(v.progress).toFixed(1)}%`}</td>
                       <td>{String(v.status || "—")}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => {
+                            setVendorId(String(v.id));
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                        >
+                          {canEditQty ? "Update qty" : "View items"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {!((overview.vendor_rows as Row[] | undefined) || []).length ? (
                     <tr>
-                      <td colSpan={9} className="muted">
+                      <td colSpan={10} className="muted">
                         No vendors for the chosen package(s) yet.
                       </td>
                     </tr>
