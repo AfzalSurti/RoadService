@@ -90,8 +90,17 @@ function build(table: HTMLTableElement, bar: Bar | undefined) {
   const heads = headers(table);
   // Columns worth a drop-down: few distinct values, repeated across rows.
   const choices = new Map<number, string[]>();
+  // Two-row / grouped headers (e.g. "BOQ as per CA" over Unit, Qty, Rate) don't line up with
+  // the cells, so such tables get the search box only.
+  const head = table.tHead;
+  // With a grouped header only the columns before the first group still line up with the cells.
+  const firstGroup = Array.from(head?.rows[0]?.cells || []).findIndex((c) => c.colSpan > 1);
+  const usable = firstGroup >= 0 ? firstGroup : head && head.rows.length > 1 ? 0 : Infinity;
   heads.forEach((h, col) => {
-    if (!h || /actions?$/i.test(h)) return;
+    if (col >= usable || !h || /actions?$/i.test(h)) return;
+    // Number, amount and percentage columns (BOQ items, amounts, progress, item no.) are not
+    // useful as drop-downs; only text columns such as Vendor, Work tab, Status get one.
+    if (/(^|\s)(no\.?|item no|boq items|qty|quantity|amount|value|done|balance|remaining|progress|rate|%|₹)/i.test(h)) return;
     const vals = new Set<string>();
     for (const r of rows) {
       const t = cellText(r.cells[col]);
@@ -100,7 +109,7 @@ function build(table: HTMLTableElement, bar: Bar | undefined) {
     }
     // Plain number / amount columns (BOQ items, Work done ₹ ...) make poor drop-downs; skip them.
     // Percentages (Progress) stay.
-    const allNumbers = Array.from(vals).every((v) => /^[₹\s\d.,-]+$/.test(v));
+    const allNumbers = Array.from(vals).every((v) => /^[₹\s\d.,%-]+$/.test(v));
     if (allNumbers) return;
     if (vals.size >= 2 && vals.size < rows.length && vals.size <= MAX_CHOICES) {
       choices.set(col, Array.from(vals).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
