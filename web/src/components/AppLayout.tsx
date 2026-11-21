@@ -9,6 +9,7 @@ import { IntroSplash } from "./IntroSplash";
 import { NavGroup } from "./NavGroup";
 import { PackageScopePicker } from "./PackageScopePicker";
 import { TableFilters } from "./TableFilters";
+import { UpdateBanner } from "./UpdateBanner";
 import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
 import type { Project } from "../types";
@@ -216,6 +217,7 @@ export function AppLayout() {
         <div className="main-scroll">
           <Outlet />
           <TableFilters />
+          <UpdateBanner />
         </div>
       </main>
     </div>

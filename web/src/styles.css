@@ -2325,3 +2325,6 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .defect-flow-step.done { opacity: 1; border-color: #1f8a4c; color: #1f8a4c; }
 .defect-flow-step.current { opacity: 1; border-color: var(--accent, #2563eb); background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent); font-weight: 600; }
 .defect-flow-dot { display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid currentColor; font-size: 0.7rem; }
+
+/* "New version available" banner */
+.update-banner { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 0.9rem; padding: 0.7rem 1rem; border-radius: 12px; background: #0b2a43; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.25); font-size: 0.92rem; max-width: calc(100vw - 32px); }

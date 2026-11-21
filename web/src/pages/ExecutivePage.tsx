@@ -82,7 +82,28 @@ export function ExecutivePage() {
   }, [token]);
 
   const vendorRows = useMemo(() => ((overview?.vendor_rows as Row[] | undefined) || []), [overview]);
-  const chosenVendor = vendorRows.find((v) => String(v.id) === vendorId) || null;
+  const chosenRows = useMemo(() => vendorRows.filter((v) => String(v.name) === vendorId), [vendorRows, vendorId]);
+  const chosenVendor = useMemo(() => {
+    if (!chosenRows.length) return null;
+    const contract = chosenRows.reduce((a, v) => a + Number(v.contract_value || 0), 0);
+    const done = chosenRows.reduce((a, v) => a + Number(v.work_done || 0), 0);
+    return {
+      id: chosenRows.map((v) => String(v.id)).join(","),
+      name: String(chosenRows[0].name),
+      orders: chosenRows.length,
+      ids: chosenRows.map((v) => Number(v.id)),
+      projectIds: [...new Set(chosenRows.map((v) => Number(v.project_id)).filter(Boolean))],
+      contract_value: contract,
+      work_done: done,
+      balance: contract - done,
+      progress: contract ? (done / contract) * 100 : null,
+    };
+  }, [chosenRows]);
+  const vendorNames = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const v of vendorRows) m.set(String(v.name), (m.get(String(v.name)) || 0) + 1);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [vendorRows]);
   // Filters on the vendor table; the cards at the top follow them.
   const [q, setQ] = useState("");
   const [workTab, setWorkTab] = useState("");
@@ -91,7 +112,7 @@ export function ExecutivePage() {
     const term = q.trim().toLowerCase();
     return vendorRows.filter(
       (v) =>
-        (!vendorId || String(v.id) === vendorId) &&
+        (!vendorId || String(v.name) === vendorId) &&
         (!workTab || String(v.type_of_work || "") === workTab) &&
         (!statusF || String(v.status || "") === statusF) &&
         (!term ||
@@ -132,17 +153,18 @@ export function ExecutivePage() {
   );
   useEffect(() => {
     setVendorItems([]);
-    if (!token || !chosenVendor?.project_id) return;
-    api
-      .rateItems(token, Number(chosenVendor.project_id))
+    if (!token || !chosenVendor?.projectIds.length) return;
+    const ids = chosenVendor.ids;
+    Promise.all(chosenVendor.projectIds.map((pid) => api.rateItems(token, pid)))
+      .then((lists) => lists.flat())
       .then((items) => {
-        setVendorItems(items.filter((i) => i.vendor_id === Number(chosenVendor.id)));
+        setVendorItems(items.filter((i) => i.vendor_id != null && ids.includes(i.vendor_id)));
         setDrafts({});
       })
       .catch(() => setVendorItems([]));
   }, [token, chosenVendor?.id]);
   useEffect(() => {
-    if (vendorId && !vendorRows.some((v) => String(v.id) === vendorId)) setVendorId("");
+    if (vendorId && !vendorRows.some((v) => String(v.name) === vendorId)) setVendorId("");
   }, [vendorRows]);
 
   const resetForm = () => {
@@ -244,10 +266,10 @@ export function ExecutivePage() {
           Contractor / vendor
           <select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
             <option value="">All vendors</option>
-            {vendorRows.map((v) => (
-              <option key={String(v.id)} value={String(v.id)}>
-                {String(v.name)}
-                {v.package ? ` (${String(v.package)})` : ""}
+            {vendorNames.map(([name, n]) => (
+              <option key={name} value={name}>
+                {name}
+                {n > 1 ? ` (${n} work orders)` : ""}
               </option>
             ))}
           </select>
@@ -294,7 +316,10 @@ export function ExecutivePage() {
           <section className="panel">
             {chosenVendor ? (
               <>
-                <h2>{String(chosenVendor.name)} · BOQ progress</h2>
+                <h2>
+                  {chosenVendor.name} · BOQ progress
+                  {chosenVendor.orders > 1 ? ` (${chosenVendor.orders} work orders)` : ""}
+                </h2>
                 <p className="muted">
                   Contract ₹ {money(Number(chosenVendor.contract_value || 0))} · Work done ₹{" "}
                   {money(Number(chosenVendor.work_done || 0))} · Balance ₹ {money(Number(chosenVendor.balance || 0))}
@@ -442,7 +467,7 @@ export function ExecutivePage() {
                           type="button"
                           className="bar-row"
                           key={String(v.id)}
-                          onClick={() => setVendorId(String(v.id))}
+                          onClick={() => setVendorId(String(v.name))}
                           title={`Contract ₹ ${money(Number(v.contract_value || 0))} · done ₹ ${money(Number(v.work_done || 0))}`}
                         >
                           <span className="bar-label">{String(v.name)}</span>
@@ -548,7 +573,7 @@ export function ExecutivePage() {
                           type="button"
                           className="linkish"
                           onClick={() => {
-                            setVendorId(String(v.id));
+                            setVendorId(String(v.name));
                             window.scrollTo({ top: 0, behavior: "smooth" });
                           }}
                         >
