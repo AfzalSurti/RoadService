@@ -1,4 +1,4 @@
-import { defectStage, historyStage } from "../lib/defectStage";
+import { WORKFLOW_STEPS, defectStage, historyStage, workflowIndex } from "../lib/defectStage";
 import { useEffect, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
@@ -219,6 +219,18 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
           </div>
         </div>
         {error ? <div className="error">{error}</div> : null}
+        <ol className="defect-flow" aria-label="Defect workflow">
+          {WORKFLOW_STEPS.map((label, idx) => {
+            const at = workflowIndex(issue);
+            const state = idx < at ? "done" : idx === at ? "current" : "todo";
+            return (
+              <li key={label} className={`defect-flow-step ${state}`}>
+                <span className="defect-flow-dot">{state === "done" ? "✓" : idx + 1}</span>
+                <span className="defect-flow-label">{label}</span>
+              </li>
+            );
+          })}
+        </ol>
         <p className="muted">{issue.description}</p>
         <dl className="meta">
           <div>

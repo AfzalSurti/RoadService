@@ -83,6 +83,53 @@ export function ExecutivePage() {
 
   const vendorRows = useMemo(() => ((overview?.vendor_rows as Row[] | undefined) || []), [overview]);
   const chosenVendor = vendorRows.find((v) => String(v.id) === vendorId) || null;
+  // Filters on the vendor table; the cards at the top follow them.
+  const [q, setQ] = useState("");
+  const [workTab, setWorkTab] = useState("");
+  const [statusF, setStatusF] = useState("");
+  const filteredRows = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return vendorRows.filter(
+      (v) =>
+        (!vendorId || String(v.id) === vendorId) &&
+        (!workTab || String(v.type_of_work || "") === workTab) &&
+        (!statusF || String(v.status || "") === statusF) &&
+        (!term ||
+          [v.name, v.package, v.type_of_work, v.status].some((x) => String(x || "").toLowerCase().includes(term)))
+    );
+  }, [vendorRows, vendorId, workTab, statusF, q]);
+  const filtering = Boolean(vendorId || workTab || statusF || q.trim());
+  const cards = useMemo(() => {
+    if (!overview) return null;
+    if (!filtering) {
+      return {
+        contract: Number(overview.contract_value || 0),
+        done: Number(overview.work_done || 0),
+        balance: Number(overview.balance || 0),
+        progress: Number(overview.physical_progress || 0),
+        vendors: Number(overview.vendors || 0),
+        items: Number(overview.boq_items || 0),
+      };
+    }
+    const contract = filteredRows.reduce((a, v) => a + Number(v.contract_value || 0), 0);
+    const done = filteredRows.reduce((a, v) => a + Number(v.work_done || 0), 0);
+    return {
+      contract,
+      done,
+      balance: contract - done,
+      progress: contract ? (done / contract) * 100 : 0,
+      vendors: filteredRows.length,
+      items: filteredRows.reduce((a, v) => a + Number(v.boq_items || 0), 0),
+    };
+  }, [overview, filtering, filteredRows]);
+  const workTabs = useMemo(
+    () => [...new Set(vendorRows.map((v) => String(v.type_of_work || "")).filter(Boolean))].sort(),
+    [vendorRows]
+  );
+  const statuses = useMemo(
+    () => [...new Set(vendorRows.map((v) => String(v.status || "")).filter(Boolean))].sort(),
+    [vendorRows]
+  );
   useEffect(() => {
     setVendorItems([]);
     if (!token || !chosenVendor?.project_id) return;
@@ -212,27 +259,27 @@ export function ExecutivePage() {
           <section className="stat-grid">
             <article className="stat">
               <span>Contract value (BOQ) ₹</span>
-              <strong>{money(Number(overview.contract_value || 0))}</strong>
+              <strong>{money(cards?.contract || 0)}</strong>
             </article>
             <article className="stat">
               <span>Work done ₹</span>
-              <strong>{money(Number(overview.work_done || 0))}</strong>
+              <strong>{money(cards?.done || 0)}</strong>
             </article>
             <article className="stat">
               <span>Balance ₹</span>
-              <strong>{money(Number(overview.balance || 0))}</strong>
+              <strong>{money(cards?.balance || 0)}</strong>
             </article>
             <article className="stat">
               <span>Physical progress</span>
-              <strong>{Number(overview.physical_progress || 0).toFixed(2)}%</strong>
+              <strong>{(cards?.progress || 0).toFixed(2)}%</strong>
             </article>
             <Link className="stat" to="/vendors">
               <span>Vendors / work orders</span>
-              <strong>{String(overview.vendors ?? 0)}</strong>
+              <strong>{String(cards?.vendors ?? 0)}</strong>
             </Link>
             <Link className="stat" to="/rates">
               <span>BOQ items</span>
-              <strong>{String(overview.boq_items ?? 0)}</strong>
+              <strong>{String(cards?.items ?? 0)}</strong>
             </Link>
             <Link className="stat" to="/highway-incidents">
               <span>Active incidents</span>
@@ -385,7 +432,7 @@ export function ExecutivePage() {
               <>
                 <h2>Contractor-wise progress</h2>
                 <div className="bar-chart">
-                  {vendorRows
+                  {filteredRows
                     .filter((v) => Number(v.contract_value || 0) > 0)
                     .slice(0, 25)
                     .map((v) => {
@@ -414,8 +461,60 @@ export function ExecutivePage() {
 
           <section className="panel">
             <h2>Vendor-wise contract value and progress</h2>
+            <div className="auto-filter">
+              <input type="search" placeholder="Filter vendors…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <select value={workTab} onChange={(e) => setWorkTab(e.target.value)} aria-label="Filter by work tab">
+                <option value="">All work tabs</option>
+                {workTabs.map((w) => (
+                  <option key={w}>{w}</option>
+                ))}
+              </select>
+              <select value={statusF} onChange={(e) => setStatusF(e.target.value)} aria-label="Filter by status">
+                <option value="">All status</option>
+                {statuses.map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setQ("");
+                  setWorkTab("");
+                  setStatusF("");
+                  setVendorId("");
+                }}
+              >
+                Clear
+              </button>
+              <span className="auto-filter-count">
+                {filtering ? `Showing ${filteredRows.length} of ${vendorRows.length} · cards above show these vendors` : `${vendorRows.length} vendors`}
+              </span>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  const head = ["Vendor", "Package", "Work tab", "BOQ items", "Contract value", "Work done", "Balance", "Progress %", "Status"];
+                  const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                  const lines = [
+                    head.map(cell).join(","),
+                    ...filteredRows.map((v) =>
+                      [v.name, v.package, v.type_of_work, v.boq_items, v.contract_value, v.work_done, v.balance, v.progress, v.status]
+                        .map(cell)
+                        .join(",")
+                    ),
+                  ];
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+                  a.download = `vendor_progress_${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                }}
+              >
+                Export to Excel
+              </button>
+            </div>
             <div className="table-scroll">
-              <table className="data">
+              <table className="data" data-nofilter>
                 <thead>
                   <tr>
                     <th>Vendor</th>
@@ -431,7 +530,7 @@ export function ExecutivePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vendorRows.filter((v) => !vendorId || String(v.id) === vendorId).map((v) => (
+                  {filteredRows.map((v) => (
                     <tr key={String(v.id)}>
                       <td>
                         <Link to={`/vendors?id=${v.id}`}>{String(v.name)}</Link>
@@ -458,7 +557,7 @@ export function ExecutivePage() {
                       </td>
                     </tr>
                   ))}
-                  {!((overview.vendor_rows as Row[] | undefined) || []).length ? (
+                  {!filteredRows.length ? (
                     <tr>
                       <td colSpan={10} className="muted">
                         No vendors for the chosen package(s) yet.

@@ -2318,3 +2318,10 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .cm-edit-table td { padding: 0.25rem 0.3rem; }
 .cm-edit-table input, .cm-edit-table select { width: 100%; padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font: inherit; }
 .cm-edit-error { color: #fca5a5; margin: 0.25rem 0; }
+
+/* Defect workflow stepper: Completed -> GMC -> NHIPMPL -> Closed */
+.defect-flow { display: flex; flex-wrap: wrap; gap: 0.35rem; list-style: none; padding: 0; margin: 0.75rem 0; }
+.defect-flow-step { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.6rem; border-radius: 999px; border: 1px solid var(--line); font-size: 0.8rem; opacity: 0.6; }
+.defect-flow-step.done { opacity: 1; border-color: #1f8a4c; color: #1f8a4c; }
+.defect-flow-step.current { opacity: 1; border-color: var(--accent, #2563eb); background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent); font-weight: 600; }
+.defect-flow-dot { display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid currentColor; font-size: 0.7rem; }
