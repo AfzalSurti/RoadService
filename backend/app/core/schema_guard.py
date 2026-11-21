@@ -251,6 +251,127 @@ async def insert_tracker(execute, project_id: int, orders: list[dict], items: li
     return added_orders, added_items
 
 
+async def delete_vendors(execute, vendor_ids: list[int]) -> None:
+    """Remove vendors with their BOQ items (and those items' quantity entries / bills)."""
+    if not vendor_ids:
+        return
+    ids = {"ids": list(vendor_ids)}
+    await execute(
+        text(
+            "DELETE FROM quantity_entries WHERE vendor_id = ANY(:ids) OR rate_item_id IN "
+            "(SELECT id FROM rate_items WHERE vendor_id = ANY(:ids))"
+        ),
+        ids,
+    )
+    await execute(text("DELETE FROM rate_items WHERE vendor_id = ANY(:ids)"), ids)
+    await execute(text("DELETE FROM vendors WHERE id = ANY(:ids)"), ids)
+
+
+async def sync_tracker(execute, project_id: int, orders: list[dict], items: list[dict]) -> dict:
+    """Make a package match an updated tracker workbook: update existing orders (details and
+    BOQ quantities / work done), add new orders and items, and remove orders and items that are
+    no longer in the workbook. Vendors added by hand (not from a tracker) are left alone."""
+    rows = (
+        await execute(
+            text("SELECT id, remarks FROM vendors WHERE project_id = :p AND remarks LIKE 'WO No: %'"),
+            {"p": project_id},
+        )
+    ).all()
+    by_wo: dict[str, int] = {}
+    for vid, remarks in rows:
+        by_wo.setdefault((remarks or "").split("\n", 1)[0].removeprefix("WO No: ").strip(), vid)
+    wanted = {o["wo"] for o in orders}
+    removed = [vid for wo, vid in by_wo.items() if wo not in wanted]
+    await delete_vendors(execute, removed)
+
+    updated_orders = updated_items = removed_items = 0
+    for o in orders:
+        vid = by_wo.get(o["wo"])
+        if vid is None:
+            continue
+        remarks = f"WO No: {o['wo']}\n{o['type']} · {o['location']}"
+        if o["contact"]:
+            remarks += f"\nContact: {o['contact']}"
+        if o["net"]:
+            remarks += f"\nNet order value: Rs {float(o['net']):,.2f} (excl. GST)"
+        await execute(
+            text(
+                "UPDATE vendors SET name = :name, brief = :brief, type_of_work = :tw, work_order_date = :wod, "
+                "commencement_date = :cd, time_limit_completion = :tl, progress_notes = :pn, remarks = :rm, "
+                "contact_person = COALESCE(contact_person, :cp), updated_at = now() WHERE id = :id"
+            ),
+            {
+                "id": vid,
+                "name": o["supplier"][:255] or o["wo"][:255],
+                "brief": o["scope"],
+                "tw": o["category"],
+                "wod": o["order_date"],
+                "cd": o["commencement"],
+                "tl": o["days"],
+                "pn": o["status"] or None,
+                "rm": remarks,
+                "cp": (o["contact"] or None) and o["contact"][:255],
+            },
+        )
+        updated_orders += 1
+        have = {
+            no: iid
+            for iid, no in (
+                await execute(text("SELECT id, item_no FROM rate_items WHERE vendor_id = :v"), {"v": vid})
+            ).all()
+        }
+        seen = set()
+        for it in (i for i in items if i["wo"] == o["wo"]):
+            seen.add(it["item_no"])
+            params = {
+                "p": project_id,
+                "v": vid,
+                "no": it["item_no"],
+                "d": it["description"],
+                "u": it["unit"],
+                "q": it["qty"],
+                "r": it["rate"],
+                "a": round(it["qty"] * it["rate"], 2),
+                "eq": it["done"],
+                "ea": round(it["done"] * it["rate"], 2),
+            }
+            if it["item_no"] in have:
+                params["id"] = have[it["item_no"]]
+                await execute(
+                    text(
+                        "UPDATE rate_items SET description = :d, unit = :u, boq_quantity = :q, rate = :r, "
+                        "boq_amount = :a, executed_quantity = :eq, executed_amount = :ea WHERE id = :id"
+                    ),
+                    params,
+                )
+            else:
+                await execute(
+                    text(
+                        "INSERT INTO rate_items (project_id, vendor_id, item_no, description, unit, boq_quantity, "
+                        "rate, boq_amount, executed_quantity, executed_amount) "
+                        "VALUES (:p, :v, :no, :d, :u, :q, :r, :a, :eq, :ea)"
+                    ),
+                    params,
+                )
+            updated_items += 1
+        gone = [iid for no, iid in have.items() if no not in seen]
+        if gone:
+            await execute(text("DELETE FROM quantity_entries WHERE rate_item_id = ANY(:ids)"), {"ids": gone})
+            await execute(text("DELETE FROM rate_items WHERE id = ANY(:ids)"), {"ids": gone})
+            removed_items += len(gone)
+
+    new_orders = [o for o in orders if o["wo"] not in by_wo]
+    added_orders, added_items = await insert_tracker(execute, project_id, new_orders, items)
+    return {
+        "updated_orders": updated_orders,
+        "added_orders": added_orders,
+        "removed_orders": len(removed),
+        "items_updated": updated_items,
+        "items_added": added_items,
+        "items_removed": removed_items,
+    }
+
+
 async def seed_rkjl_tracker(conn) -> None:
     """If the RKJL tracker workbook is bundled, load it into Jabalpur - Lakhnadon (once per WO)."""
     from app.services.rkjl_tracker import PACKAGE, WORKBOOK, read_tracker

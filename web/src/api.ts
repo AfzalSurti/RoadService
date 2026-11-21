@@ -291,6 +291,14 @@ export const api = {
   completeIssue: (token: string, id: number, form: FormData) =>
     request<Issue>(`/api/v1/issues/${id}/complete`, { method: "POST", token, body: form }),
 
+  /** NHIPMPL's check after GMC verification: approve (closed) or send back for rework. */
+  nhipmplVerify: (token: string, id: number, action: "approve" | "reject", comments?: string) => {
+    const fd = new FormData();
+    fd.append("action", action);
+    if (comments) fd.append("comments", comments);
+    return request<Issue>(`/api/v1/issues/${id}/verify/nhipmpl`, { method: "POST", token, body: fd });
+  },
+
   approveIssue: (token: string, id: number, form: FormData) =>
     request<Issue>(`/api/v1/issues/${id}/verify/approve`, { method: "POST", token, body: form }),
 
@@ -720,15 +728,30 @@ export const api = {
     }),
 
   /** Import a WO/PO register + BOQ quantity tracker workbook into a package. */
-  importVendorTracker: (token: string, projectId: number, file: File) => {
+  importVendorTracker: (token: string, projectId: number, file: File, sync = false) => {
     const fd = new FormData();
     fd.append("project_id", String(projectId));
     fd.append("file", file);
-    return request<{ orders: number; added_orders: number; skipped_orders: number; added_items: number }>(
+    if (sync) fd.append("sync", "true");
+    return request<{
+      orders: number;
+      added_orders: number;
+      skipped_orders?: number;
+      added_items?: number;
+      updated_orders?: number;
+      removed_orders?: number;
+      items_updated?: number;
+      items_added?: number;
+      items_removed?: number;
+    }>(
       "/api/v1/vendors/import-tracker",
       { method: "POST", token, body: fd }
     );
   },
+
+  /** GMC Experts: delete a vendor with its BOQ items. */
+  deleteVendor: (token: string, id: number) =>
+    request<{ ok: boolean }>(`/api/v1/vendors/${id}`, { method: "DELETE", token }),
 
   createVendor: (token: string, form: FormData) =>
     request<Vendor>("/api/v1/vendors", {

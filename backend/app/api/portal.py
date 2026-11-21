@@ -987,12 +987,40 @@ async def update_vendor(
     return vendor
 
 
+@vendors_router.delete("/{vendor_id}")
+async def delete_vendor(
+    vendor_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: delete a vendor together with its BOQ items and their quantity entries."""
+    from app.core.schema_guard import delete_vendors
+
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one_or_none()
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    name, project_id = vendor.name, vendor.project_id
+    await delete_vendors(db.execute, [vendor_id])
+    await notify_involved(
+        db,
+        "Vendor deleted",
+        f"{name} was deleted by {user.full_name}",
+        project_id=project_id,
+        link="/vendors",
+        actor=user,
+        include_team=False,
+    )
+    await db.commit()
+    return {"ok": True}
+
+
 @vendors_router.post("/import-tracker")
 async def import_vendor_tracker(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
     project_id: Annotated[int, Form()],
     file: UploadFile = File(...),
+    sync: Annotated[bool, Form()] = False,
 ):
     """Import a WO / PO register + BOQ quantity tracker workbook (sheets "WO_PO_Register" and
     "Quantity_Monitoring"): each order becomes a vendor with its BOQ items. Orders whose WO
@@ -1016,6 +1044,23 @@ async def import_vendor_tracker(
         raise HTTPException(status_code=400, detail=f"Could not read the workbook: {exc}") from exc
     if not orders:
         raise HTTPException(status_code=400, detail="No work orders found in the WO_PO_Register sheet")
+    if sync:
+        # Updated workbook: make the package match it (update, add and remove orders / items).
+        from app.core.schema_guard import sync_tracker
+
+        result = await sync_tracker(db.execute, project_id, orders, items)
+        await notify_involved(
+            db,
+            "Vendors updated from tracker",
+            f"{project.name}: {result['updated_orders']} orders updated, {result['added_orders']} added, "
+            f"{result['removed_orders']} removed (by {user.full_name})",
+            project_id=project_id,
+            link="/vendors",
+            actor=user,
+            include_team=False,
+        )
+        await db.commit()
+        return {"orders": len(orders), **result}
     added_orders, added_items = await insert_tracker(db.execute, project_id, orders, items)
     await notify_involved(
         db,

@@ -179,6 +179,8 @@ async def get_issue_or_404(db: AsyncSession, issue_id: int) -> Issue:
             selectinload(Issue.status_history),
             selectinload(Issue.rejection_history),
         )
+        # Reload history after a commit in the same request (expire_on_commit is off).
+        .execution_options(populate_existing=True)
     )
     issue = result.scalar_one_or_none()
     if not issue:

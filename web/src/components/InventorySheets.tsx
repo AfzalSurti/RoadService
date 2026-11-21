@@ -317,6 +317,26 @@ export function InventorySheets({ projectId }: { projectId: number }) {
                 <span className="muted">
                   {grid.length} rows × {width} columns
                 </span>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  title="Download this sheet (rows matching the search, if any) as a CSV file that opens in Excel"
+                  onClick={() => {
+                    const rows = matchRows ? matchRows.map((i) => grid[i]) : grid;
+                    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+                    const csv = rows.map((r) => r.map((c) => esc(c ?? "")).join(",")).join("\r\n");
+                    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${sheet.name.replace(/[^\w\- ]+/g, "").trim() || "sheet"}.csv`;
+                    document.body.append(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                  }}
+                >
+                  Export to Excel
+                </button>
                 {!draft ? (
                   <>
                     {canManage ? (

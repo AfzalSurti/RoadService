@@ -1,3 +1,4 @@
+import { defectStage } from "../lib/defectStage";
 import { useEffect, useState, type MouseEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -154,6 +155,7 @@ export function IssuesPage() {
                 <td>{i.priority}</td>
                 <td>
                   <StatusBadge status={i.status} />
+                  <div className="stage-text">{defectStage(i)}</div>
                 </td>
                 <td>{i.reported_by_name || `#${i.reported_by_id}`}</td>
                 <td>{i.contractor_name || `#${i.assigned_contractor_id}`}</td>

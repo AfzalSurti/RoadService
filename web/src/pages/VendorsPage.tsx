@@ -115,13 +115,22 @@ export function VendorsPage() {
     const target = projects.length === 1 ? projects[0] : [...projects].sort((a, b) => a.id - b.id)[0];
     if (!target) return setError("No package available to import into");
     if (!window.confirm(`Import vendors and BOQ items from \u201c${file.name}\u201d into ${projectShortName(target)}?`)) return;
+    // Updated workbook: OK = make the package match the file (update, add and remove orders);
+    // Cancel = only add orders that are not there yet.
+    const sync = window.confirm(
+      "Is this an UPDATED tracker?\n\nOK: update vendors and quantities from the file, add new orders and REMOVE orders that are no longer in the file.\nCancel: only add new orders."
+    );
     setBusy(true);
     setError(null);
     try {
-      const r = await api.importVendorTracker(token, target.id, file);
+      const r = await api.importVendorTracker(token, target.id, file, sync);
       setImportMsg(
-        `${r.added_orders} vendor(s) and ${r.added_items} BOQ item(s) added to ${projectShortName(target)}` +
-          (r.skipped_orders ? ` \u2014 ${r.skipped_orders} order(s) were already there and skipped.` : ".")
+        sync
+          ? `${projectShortName(target)}: ${r.updated_orders ?? 0} vendor(s) updated, ${r.added_orders} added, ` +
+              `${r.removed_orders ?? 0} removed; ${r.items_updated ?? 0} BOQ item(s) updated, ` +
+              `${r.items_added ?? 0} added, ${r.items_removed ?? 0} removed.`
+          : `${r.added_orders} vendor(s) and ${r.added_items ?? 0} BOQ item(s) added to ${projectShortName(target)}` +
+              (r.skipped_orders ? ` \u2014 ${r.skipped_orders} order(s) were already there and skipped.` : ".")
       );
       await load();
     } catch (e: unknown) {
@@ -313,9 +322,36 @@ export function VendorsPage() {
               <div className="panel-head-row">
                 <h3>{v.name}</h3>
                 {canManage ? (
-                  <button type="button" className="btn ghost" onClick={() => openEdit(v)}>
-                    Edit
-                  </button>
+                  <div className="btn-row">
+                    <button type="button" className="btn ghost" onClick={() => openEdit(v)}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn danger"
+                      disabled={busy}
+                      onClick={async () => {
+                        if (!token) return;
+                        if (
+                          !window.confirm(
+                            `Delete ${v.name}?\n\nIts BOQ items, quantities and bills are deleted too. This cannot be undone.`
+                          )
+                        )
+                          return;
+                        setBusy(true);
+                        try {
+                          await api.deleteVendor(token, v.id);
+                          await load();
+                        } catch (e: unknown) {
+                          setError(e instanceof Error ? e.message : "Delete failed");
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 ) : null}
               </div>
               <p className="muted">

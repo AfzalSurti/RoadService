@@ -1,3 +1,4 @@
+import { defectStage, historyStage } from "../lib/defectStage";
 import { useEffect, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
@@ -65,11 +66,34 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
     }
   }, [focusAction, issue?.id, issue?.status]);
 
+  // Step 1: GMC verifies (photo + GPS). Step 2: NHIPMPL verifies and the defect closes.
   const canVerify =
     !isReadonly &&
     (role === "surveyor" || role === "admin") &&
     issue &&
+    !issue.gmc_verified &&
     (issue.status === "completed" || issue.status === "verification_pending");
+  const canNhipmplVerify =
+    role === "government" && issue && issue.status === "verification_pending" && Boolean(issue.gmc_verified);
+  const [nhipmplNote, setNhipmplNote] = useState("");
+  const nhipmplAct = async (action: "approve" | "reject") => {
+    if (!token || !issue) return;
+    if (action === "reject" && nhipmplNote.trim().length < 5) {
+      setError("Write why rework is needed (at least 5 characters)");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      setIssue(await api.nhipmplVerify(token, issue.id, action, nhipmplNote.trim() || undefined));
+      setNhipmplNote("");
+      onChanged?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onShot = async (shot: CapturedShot) => {
     if (!token || !issue || !cameraMode) return;
@@ -179,7 +203,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
           <div>
             <dt>Status</dt>
             <dd>
-              <StatusBadge status={issue.status} />
+              <StatusBadge status={issue.status} /> <span className="stage-text">{defectStage(issue)}</span>
             </dd>
           </div>
           <div>
@@ -225,9 +249,18 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
               </dd>
             </div>
           ) : null}
+          {issue.gmc_verified_by_name ? (
+            <div>
+              <dt>Verified by GMC</dt>
+              <dd>
+                {issue.gmc_verified_by_name}
+                {issue.gmc_verified_at ? ` · ${new Date(issue.gmc_verified_at).toLocaleString()}` : ""}
+              </dd>
+            </div>
+          ) : null}
           {issue.status === "closed" ? (
             <div>
-              <dt>Closed by GMC</dt>
+              <dt>Verified and closed by</dt>
               <dd>
                 {issue.closed_by_name || "—"}
                 {issue.closed_at ? ` · ${new Date(issue.closed_at).toLocaleString()}` : ""}
@@ -413,8 +446,8 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
             {canVerify ? (
               <>
                 <p className="muted">
-                  Verify within 24 hours of completion. Approve to close, or reject with comments for
-                  contractor rework.
+                  Step 1 of 2 · GMC verification. Verify within 24 hours of completion. Approve to send it to
+                  NHIPMPL for final verification, or reject with comments for contractor rework.
                 </p>
                 <button
                   className="btn"
@@ -422,7 +455,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
                   disabled={busy}
                   onClick={() => setCameraMode("approve")}
                 >
-                  Approve & close (camera + GPS)
+                  Verify (GMC) · camera + GPS
                 </button>
                 <label>
                   Rejection reason
@@ -549,8 +582,29 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
               </div>
             ) : null}
 
-            {isReadonly ? (
-              <p className="muted">NHIPMPL representative account is view-only.</p>
+            {canNhipmplVerify ? (
+              <div className="nhipmpl-verify">
+                <p className="muted">
+                  Step 2 of 2 · Verified by GMC{issue.gmc_verified_by_name ? ` (${issue.gmc_verified_by_name})` : ""}.
+                  Pending verification by NHIPMPL.
+                </p>
+                <label>
+                  Comments (required to send back)
+                  <textarea rows={2} value={nhipmplNote} onChange={(e) => setNhipmplNote(e.target.value)} />
+                </label>
+                <div className="btn-row">
+                  <button className="btn" type="button" disabled={busy} onClick={() => void nhipmplAct("approve")}>
+                    Verify &amp; close (NHIPMPL)
+                  </button>
+                  <button className="btn secondary" type="button" disabled={busy} onClick={() => void nhipmplAct("reject")}>
+                    Send back for rework
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {isReadonly && !canNhipmplVerify ? (
+              <p className="muted">NHIPMPL can verify a defect once GMC has verified it; otherwise this view is read-only.</p>
             ) : null}
           </div>
         )}
@@ -559,9 +613,7 @@ export function IssueDetailPanel({ issueId, fallback, focusAction, onClose, onCh
         <ul className="timeline">
           {issue.status_history.map((h) => (
             <li key={h.id}>
-              <strong>
-                {h.from_status || "—"} → {h.to_status}
-              </strong>
+              <strong>{historyStage(h)}</strong>
               <span>
                 {new Date(h.created_at).toLocaleString()} · {h.actor_name || (h.actor_id ? `User #${h.actor_id}` : "System")}
               </span>

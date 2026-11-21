@@ -100,6 +100,10 @@ export type Issue = {
   closed_by_name?: string | null;
   closed_at?: string | null;
   hours_to_close?: number | null;
+  stage?: string | null;
+  gmc_verified?: boolean;
+  gmc_verified_by_name?: string | null;
+  gmc_verified_at?: string | null;
   created_at: string;
   updated_at: string;
   status_history: StatusHistory[];

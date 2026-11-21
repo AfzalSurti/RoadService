@@ -238,6 +238,11 @@ class IssueOut(BaseModel):
     submitted_by_name: str | None = None
     closed_by_name: str | None = None
     closed_at: datetime | None = None
+    # Workflow stage in words, e.g. "Verified by GMC - pending verification by NHIPMPL".
+    stage: str | None = None
+    gmc_verified: bool = False
+    gmc_verified_by_name: str | None = None
+    gmc_verified_at: datetime | None = None
     # Hours from the defect being issued (raised) to its final closure.
     hours_to_close: float | None = None
     created_at: datetime

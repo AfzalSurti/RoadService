@@ -44,6 +44,36 @@ def _issue_label(issue: Issue) -> str:
     return f"Defect #{issue.id} ({label}{where})"
 
 
+GMC_VERIFIED_NOTE = "Verified by GMC"
+
+
+def stage_label(status: IssueStatus, gmc_verified: bool) -> str:
+    """Workflow in words: completed - pending verification by GMC - verified by GMC -
+    pending verification by NHIPMPL - verified - closed."""
+    if status == IssueStatus.OPEN:
+        return "Open"
+    if status == IssueStatus.IN_PROGRESS:
+        return "In progress"
+    if status == IssueStatus.UNDER_REVIEW:
+        return "Rework required"
+    if status == IssueStatus.COMPLETED:
+        return "Completed - pending verification by GMC"
+    if status == IssueStatus.VERIFICATION_PENDING:
+        return "Verified by GMC - pending verification by NHIPMPL" if gmc_verified else "Pending verification by GMC"
+    return "Verified - closed"
+
+
+def _gmc_verified(issue: Issue) -> bool:
+    """True while the latest GMC verification has not been undone by a rework."""
+    ok = False
+    for h in issue.status_history or []:
+        if (h.note or "").startswith(GMC_VERIFIED_NOTE):
+            ok = True
+        elif h.to_status in (IssueStatus.UNDER_REVIEW, IssueStatus.IN_PROGRESS):
+            ok = False
+    return ok and issue.status == IssueStatus.VERIFICATION_PENDING
+
+
 def _assert_verifier(user: User) -> None:
     """Surveyor verifies on site; admin may also approve/reject."""
     if user.role not in (UserRole.SURVEYOR, UserRole.ADMIN):
@@ -121,11 +151,20 @@ def _add_names(issue: Issue, data: IssueOut) -> None:
         if out.actor_name is None and out.actor_id is None:
             out.actor_name = "System"
     for out in data.status_history:
-        if out.to_status == IssueStatus.VERIFICATION_PENDING:
+        if (out.note or "").startswith(GMC_VERIFIED_NOTE):
+            data.gmc_verified = True
+            data.gmc_verified_by_name = out.actor_name
+            data.gmc_verified_at = out.created_at
+        elif out.to_status in (IssueStatus.UNDER_REVIEW, IssueStatus.IN_PROGRESS):
+            data.gmc_verified = False  # sent back for rework: GMC verifies again
+        if out.to_status == IssueStatus.COMPLETED:
             data.submitted_by_name = out.actor_name
         if out.to_status == IssueStatus.CLOSED:
             data.closed_by_name = out.actor_name
             data.closed_at = out.created_at
+    if data.status != IssueStatus.VERIFICATION_PENDING:
+        data.gmc_verified = data.gmc_verified and data.status == IssueStatus.CLOSED
+    data.stage = stage_label(data.status, data.gmc_verified)
     if data.status == IssueStatus.CLOSED:
         data.closed_at = data.closed_at or data.verified_at
         if data.closed_at and data.created_at:
@@ -459,19 +498,61 @@ async def verify_approve(
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
         raise HTTPException(status_code=400, detail="Defect is not awaiting verification")
+    if _gmc_verified(issue):
+        raise HTTPException(status_code=400, detail="Already verified by GMC - pending verification by NHIPMPL")
     path = await save_upload(photo, f"issue_verify_{issue_id}")
     issue.verification_photo_path = path
     issue.verification_lat = verification_lat
     issue.verification_lng = verification_lng
     issue.verified_at = datetime.now(timezone.utc)
-    await record_status(db, issue, IssueStatus.CLOSED, user, note="Verification approved")
+    await record_status(
+        db,
+        issue,
+        IssueStatus.VERIFICATION_PENDING,
+        user,
+        note=f"{GMC_VERIFIED_NOTE} - pending verification by NHIPMPL",
+    )
     await notify_issue_event(
         db,
         issue,
         user,
-        "Defect closed",
-        f"{_issue_label(issue)} verified and closed by {user.full_name}.",
+        "Defect verified by GMC",
+        f"{_issue_label(issue)} verified by {user.full_name} (GMC). Pending verification by NHIPMPL.",
     )
+    await db.commit()
+    return _to_out(await get_issue_or_404(db, issue_id))
+
+
+@router.post("/{issue_id}/verify/nhipmpl", response_model=IssueOut)
+async def verify_nhipmpl(
+    issue_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.GOVERNMENT))],
+    action: Annotated[str, Form()],
+    comments: Annotated[str | None, Form()] = None,
+):
+    """NHIPMPL's final check after GMC: approve (verified - closed) or send back for rework."""
+    issue = await get_issue_or_404(db, issue_id)
+    if not _gmc_verified(issue):
+        raise HTTPException(status_code=400, detail="Defect is not pending verification by NHIPMPL")
+    note = (comments or "").strip()
+    if action == "approve":
+        await record_status(
+            db, issue, IssueStatus.CLOSED, user, note="Verified by NHIPMPL - closed" + (f". {note}" if note else "")
+        )
+        await notify_issue_event(
+            db, issue, user, "Defect closed", f"{_issue_label(issue)} verified by NHIPMPL ({user.full_name}) and closed."
+        )
+    elif action == "reject":
+        if len(note) < 5:
+            raise HTTPException(status_code=400, detail="Write why rework is needed (at least 5 characters)")
+        db.add(IssueRejection(issue_id=issue.id, reason=f"NHIPMPL: {note}", comments=note, rejected_by_id=user.id))
+        await record_status(db, issue, IssueStatus.UNDER_REVIEW, user, note=f"Rework required (NHIPMPL): {note}")
+        await notify_issue_event(
+            db, issue, user, "Rework required", f"{_issue_label(issue)} sent back by NHIPMPL ({user.full_name}): {note}"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="action must be approve or reject")
     await db.commit()
     return _to_out(await get_issue_or_404(db, issue_id))
 
@@ -491,6 +572,8 @@ async def verify_reject(
     issue = await get_issue_or_404(db, issue_id)
     if issue.status not in (IssueStatus.COMPLETED, IssueStatus.VERIFICATION_PENDING):
         raise HTTPException(status_code=400, detail="Defect is not awaiting verification")
+    if _gmc_verified(issue):
+        raise HTTPException(status_code=400, detail="Already verified by GMC - NHIPMPL verifies it now")
     path = await save_upload(photo, f"issue_reject_{issue_id}")
     issue.verification_photo_path = path
     issue.verification_lat = verification_lat
