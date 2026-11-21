@@ -828,6 +828,104 @@ async def update_plaza(
     return _orm_dict(row)
 
 
+@router.delete("/toll/plazas/{plaza_id}")
+async def delete_plaza(
+    plaza_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: delete a toll plaza with its daily figures and its report data."""
+    from sqlalchemy import text
+
+    row = (await db.execute(select(TollPlaza).where(TollPlaza.id == plaza_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Toll plaza not found")
+    await db.execute(text("DELETE FROM toll_daily_stats WHERE plaza_id = :i"), {"i": plaza_id})
+    for section in ("tms", "atms"):
+        await db.execute(
+            text("DELETE FROM toll_perf_rows WHERE report_type LIKE :k"), {"k": f"{section}:{plaza_id}:%"}
+        )
+        await db.execute(
+            text("DELETE FROM toll_perf_notes WHERE note_key LIKE :k"), {"k": f"{section}:{plaza_id}:%"}
+        )
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
+CORRIDOR_DDL = (
+    "CREATE TABLE IF NOT EXISTS corridor_points ("
+    "corridor_key VARCHAR(128) PRIMARY KEY, points TEXT NOT NULL, updated_by VARCHAR(255), "
+    "updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+)
+
+
+@router.get("/corridor-points")
+async def get_corridor_points(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    """Chainage points edited by GMC Experts, per package corridor (overrides the defaults)."""
+    import json as _json
+
+    from sqlalchemy import text
+
+    await db.execute(text(CORRIDOR_DDL))
+    rows = (await db.execute(text("SELECT corridor_key, points FROM corridor_points"))).all()
+    await db.commit()
+    return {k: _json.loads(v) for k, v in rows}
+
+
+class CorridorPointIn(BaseModel):
+    label: str
+    nh: str
+    ch: float
+    kind: str = "work"
+
+
+@router.put("/corridor-points/{corridor_key}")
+async def save_corridor_points(
+    corridor_key: str,
+    body: list[CorridorPointIn],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    import json as _json
+
+    from sqlalchemy import text
+
+    points = [
+        {"label": p.label.strip()[:80] or "Point", "nh": p.nh.strip()[:16], "ch": round(p.ch, 3),
+         "kind": p.kind if p.kind in ("start", "end", "toll", "work") else "work"}
+        for p in body
+    ]
+    points.sort(key=lambda p: (p["nh"], p["ch"]))
+    await db.execute(text(CORRIDOR_DDL))
+    await db.execute(
+        text(
+            "INSERT INTO corridor_points (corridor_key, points, updated_by) VALUES (:k, :p, :u) "
+            "ON CONFLICT (corridor_key) DO UPDATE SET points = :p, updated_by = :u, updated_at = now()"
+        ),
+        {"k": corridor_key[:128], "p": _json.dumps(points), "u": user.full_name},
+    )
+    await db.commit()
+    return points
+
+
+@router.delete("/corridor-points/{corridor_key}")
+async def reset_corridor_points(
+    corridor_key: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    from sqlalchemy import text
+
+    await db.execute(text(CORRIDOR_DDL))
+    await db.execute(text("DELETE FROM corridor_points WHERE corridor_key = :k"), {"k": corridor_key})
+    await db.commit()
+    return {"ok": True}
+
+
 @router.delete("/toll/stats/{stat_id}")
 async def delete_toll_stat(
     stat_id: int,

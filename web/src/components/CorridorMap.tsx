@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { api } from "../api";
+import { useAuth } from "../auth";
 
 type LatLng = [number, number];
 type Segment = { nh: string; from: number; to: number; color: string; label: string; coords: LatLng[] };
@@ -14,6 +16,14 @@ const KIND_COLOR: Record<Point["kind"], string> = {
   toll: "#60a5fa",
   work: "#c084fc",
 };
+
+/** "1362+780" or "1362.78" -> 1362.78 (NaN if not a chainage). */
+export function parseCh(text: string): number {
+  const t = text.trim();
+  const m = t.match(/^(\d+)\s*\+\s*(\d{1,3})$/);
+  if (m) return Number(m[1]) + Number(m[2].padEnd(3, "0")) / 1000;
+  return t ? Number(t) : NaN;
+}
 
 /** 880.6 -> "880+600" */
 export function fmtCh(km: number): string {
@@ -73,7 +83,18 @@ function FitRoute({ corridor }: { corridor: Corridor }) {
   const map = useMap();
   useEffect(() => {
     const all = corridor.segments.flatMap((s) => s.coords);
-    if (all.length) map.fitBounds(L.latLngBounds(all), { padding: [48, 48] });
+    if (!all.length) return;
+    const fit = () => {
+      map.invalidateSize();
+      map.fitBounds(L.latLngBounds(all), { padding: [36, 36] });
+    };
+    fit();
+    const timers = [150, 600].map((ms) => window.setTimeout(fit, ms));
+    window.addEventListener("resize", fit);
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      window.removeEventListener("resize", fit);
+    };
   }, [corridor.key, map]);
   useEffect(() => {
     const onFs = () => window.setTimeout(() => map.invalidateSize(), 150);
@@ -92,7 +113,18 @@ const ringIcon = L.divIcon({ className: "cm-ring-icon", html: '<span class="cm-r
  * NH badge, point list and Play / Pause / Replay / Play all / Full screen.
  */
 export function CorridorMap({ packageName }: { packageName: string }) {
-  const [corridors, setCorridors] = useState<Corridor[] | null>(null);
+  const { token, role, isReadonly } = useAuth();
+  // GMC Experts correct the chainage points; NHIPMPL sees them read-only.
+  const canEdit = role === "admin" && !isReadonly;
+  const [baseCorridors, setCorridors] = useState<Corridor[] | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, Point[]>>({});
+  const [editing, setEditing] = useState<{ label: string; nh: string; ch: string; kind: Point["kind"] }[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const corridors = useMemo(
+    () => baseCorridors?.map((c) => (overrides[c.key] ? { ...c, points: overrides[c.key] } : c)) ?? null,
+    [baseCorridors, overrides]
+  );
   const [activeKey, setActiveKey] = useState(packageName);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -108,6 +140,19 @@ export function CorridorMap({ packageName }: { packageName: string }) {
   }, []);
 
   useEffect(() => setActiveKey(packageName), [packageName]);
+
+  useEffect(() => {
+    if (!token) return;
+    api
+      .nhitGet<Record<string, Point[]>>(token, "/corridor-points")
+      .then(setOverrides)
+      .catch(() => setOverrides({}));
+  }, [token]);
+
+  useEffect(() => {
+    setEditing(null);
+    setEditError(null);
+  }, [activeKey]);
 
   const corridor = corridors?.find((c) => c.key === activeKey) || null;
   const prep = useMemo(() => (corridor ? prepare(corridor) : null), [corridor]);
@@ -387,6 +432,147 @@ export function CorridorMap({ packageName }: { packageName: string }) {
           </li>
         ))}
       </ul>
+
+      {canEdit ? (
+        <div className="cm-edit">
+          {!editing ? (
+            <button
+              type="button"
+              className="cm-btn"
+              onClick={() =>
+                setEditing(corridor.points.map((p) => ({ label: p.label, nh: p.nh, ch: fmtCh(p.ch), kind: p.kind })))
+              }
+            >
+              ✎ Edit chainage points
+            </button>
+          ) : (
+            <>
+              <table className="cm-edit-table">
+                <thead>
+                  <tr>
+                    <th>Point</th>
+                    <th>Highway</th>
+                    <th>Chainage (km+m)</th>
+                    <th>Type</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editing.map((r, i) => {
+                    const set = (next: Partial<typeof r>) =>
+                      setEditing((rows) => (rows ? rows.map((x, j) => (j === i ? { ...x, ...next } : x)) : rows));
+                    return (
+                      <tr key={i}>
+                        <td>
+                          <input value={r.label} onChange={(e) => set({ label: e.target.value })} />
+                        </td>
+                        <td>
+                          <select value={r.nh} onChange={(e) => set({ nh: e.target.value })}>
+                            {[...new Set(corridor.segments.map((sg) => sg.nh))].map((nh) => (
+                              <option key={nh}>{nh}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input value={r.ch} placeholder="1362+780" onChange={(e) => set({ ch: e.target.value })} />
+                        </td>
+                        <td>
+                          <select value={r.kind} onChange={(e) => set({ kind: e.target.value as Point["kind"] })}>
+                            <option value="start">Start</option>
+                            <option value="end">End</option>
+                            <option value="toll">Toll plaza</option>
+                            <option value="work">Other point</option>
+                          </select>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="cm-btn"
+                            onClick={() => setEditing((rows) => (rows ? rows.filter((_, j) => j !== i) : rows))}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {editError ? <p className="cm-edit-error">{editError}</p> : null}
+              <div className="cm-controls">
+                <button
+                  type="button"
+                  className="cm-btn"
+                  onClick={() =>
+                    setEditing((rows) => [
+                      ...(rows || []),
+                      { label: "Toll Plaza", nh: corridor.segments[0].nh, ch: "", kind: "toll" },
+                    ])
+                  }
+                >
+                  + Add point
+                </button>
+                <button
+                  type="button"
+                  className="cm-btn primary"
+                  disabled={saving}
+                  onClick={async () => {
+                    if (!token || !editing) return;
+                    const pts: Point[] = [];
+                    for (const r of editing) {
+                      const ch = parseCh(r.ch);
+                      if (!r.label.trim() || !Number.isFinite(ch)) {
+                        setEditError(`Check "${r.label || "point"}": chainage must look like 1362+780`);
+                        return;
+                      }
+                      pts.push({ label: r.label.trim(), nh: r.nh, ch, kind: r.kind });
+                    }
+                    setSaving(true);
+                    setEditError(null);
+                    try {
+                      const saved = await api.nhitPut<Point[]>(
+                        token,
+                        `/corridor-points/${encodeURIComponent(corridor.key)}`,
+                        pts
+                      );
+                      setOverrides((o) => ({ ...o, [corridor.key]: saved }));
+                      setEditing(null);
+                    } catch (e: unknown) {
+                      setEditError(e instanceof Error ? e.message : "Save failed");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  {saving ? "Saving…" : "Save points"}
+                </button>
+                <button type="button" className="cm-btn" onClick={() => setEditing(null)}>
+                  Cancel
+                </button>
+                {overrides[corridor.key] ? (
+                  <button
+                    type="button"
+                    className="cm-btn"
+                    disabled={saving}
+                    onClick={async () => {
+                      if (!token || !window.confirm("Go back to the original chainage points?")) return;
+                      await api.nhitDelete(token, `/corridor-points/${encodeURIComponent(corridor.key)}`).catch(() => null);
+                      setOverrides((o) => {
+                        const next = { ...o };
+                        delete next[corridor.key];
+                        return next;
+                      });
+                      setEditing(null);
+                    }}
+                  >
+                    Reset to original
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className="cm-stats">
         {groups.map((g) => (

@@ -1,3 +1,4 @@
+import { TollReportsPage } from "./pages/TollReportsPage";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
@@ -17,7 +18,6 @@ import {
   BackupDrPage,
   HighwayIncidentsPage,
   IntegrationsPage,
-  ItsPage,
   SecurityPage,
   TollPage,
 } from "./pages/NhitPages";
@@ -173,7 +173,23 @@ export default function App() {
           path="/its"
           element={
             <StaffPortal>
-              <ItsPage />
+              <TollReportsPage key="tms" section="tms" />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/tms-reports"
+          element={
+            <StaffPortal>
+              <TollReportsPage key="tms" section="tms" />
+            </StaffPortal>
+          }
+        />
+        <Route
+          path="/atms-reports"
+          element={
+            <StaffPortal>
+              <TollReportsPage key="atms" section="atms" />
             </StaffPortal>
           }
         />

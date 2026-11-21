@@ -2307,3 +2307,14 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 /* Project Overview: quantity / remarks editing */
 .qty-input { width: 7rem; padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
 .remark-input { width: 14rem; padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
+
+/* Toll reports: Total row */
+.data tr.total-row td { font-weight: 700; border-top: 2px solid var(--line); }
+
+/* Corridor map: chainage point editor */
+.cm-edit { margin: 0.75rem 0; }
+.cm-edit-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+.cm-edit-table th { text-align: left; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; padding: 0.3rem; }
+.cm-edit-table td { padding: 0.25rem 0.3rem; }
+.cm-edit-table input, .cm-edit-table select { width: 100%; padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font: inherit; }
+.cm-edit-error { color: #fca5a5; margin: 0.25rem 0; }

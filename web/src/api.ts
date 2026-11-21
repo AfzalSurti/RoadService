@@ -953,6 +953,10 @@ export const api = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
 
+  /** POST a FormData body to an /api/v1/nhit path. */
+  nhitPostForm: <T>(token: string, path: string, form: FormData) =>
+    request<T>(`/api/v1/nhit${path}`, { method: "POST", token, body: form }),
+
   tollPerfImport: <T>(token: string, reportType: string, file: File) => {
     const fd = new FormData();
     fd.append("file", file);

@@ -103,19 +103,14 @@ export function AppLayout() {
           </NavGroup>
 
           {staff ? (
-            <NavGroup id="tms" title="TMS Dashboard" paths={["/toll", "/highway-incidents", "/its"]}>
-              <NavLink to="/toll">Toll Operations</NavLink>
-              <NavLink to="/highway-incidents">Incidents</NavLink>
-              <NavLink to="/its">ATMS / TMS Reports</NavLink>
-            </NavGroup>
-          ) : null}
-
-          {adminGov ? (
-            <NavGroup id="atms" title="ATMS Dashboard" paths={["/integrations", "/backup-dr"]}>
-              <NavLink to="/integrations">Integrations</NavLink>
-              <NavLink to="/backup-dr">Backup/DR</NavLink>
-              <NavLink to="/vendors">Vendors</NavLink>
-            </NavGroup>
+            <>
+              <NavGroup id="tms" title="TMS Dashboard" paths={["/tms-reports", "/its"]}>
+                <NavLink to="/tms-reports">TMS Reports</NavLink>
+              </NavGroup>
+              <NavGroup id="atms" title="ATMS Dashboard" paths={["/atms-reports"]}>
+                <NavLink to="/atms-reports">ATMS Reports</NavLink>
+              </NavGroup>
+            </>
           ) : null}
 
           <NavGroup
@@ -134,6 +129,8 @@ export function AppLayout() {
               "/projects",
               "/rates",
               "/users",
+              "/integrations",
+              "/backup-dr",
             ]}
           >
             <NavLink to="/staff-details">Staff Details</NavLink>
@@ -154,6 +151,8 @@ export function AppLayout() {
               </>
             ) : null}
             {role === "admin" ? <NavLink to="/users">Users</NavLink> : null}
+            {adminGov ? <NavLink to="/integrations">Integrations</NavLink> : null}
+            {adminGov ? <NavLink to="/backup-dr">Backup/DR</NavLink> : null}
           </NavGroup>
         </nav>
         <div className="sidebar-foot">

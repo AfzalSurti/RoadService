@@ -21,7 +21,8 @@ export function TmsInventory({ projectId }: { projectId: number }) {
     api.nhitGet<Row[]>(token, "/its").then(setDevices).catch(() => setDevices([]));
   }, [token]);
 
-  const mine = (r: Row) => r.project_id == null || Number(r.project_id) === projectId;
+  // Only this package's plazas / devices (unassigned ones belong to no package).
+  const mine = (r: Row) => r.project_id != null && Number(r.project_id) === projectId;
   const pkgPlazas = plazas.filter(mine);
   const pkgDevices = devices.filter(
     (d) => mine(d) && ["atms", "tms", "mlff"].includes(String(d.system_type || "").toLowerCase())
@@ -70,7 +71,7 @@ export function TmsInventory({ projectId }: { projectId: number }) {
           </table>
         </div>
       ) : (
-        <p className="muted">No toll plazas recorded for this package (add them on Toll Operations).</p>
+        <p className="muted">No toll plazas recorded for this package (add them on TMS Reports).</p>
       )}
 
       <h3>ATMS / TMS devices</h3>

@@ -10,7 +10,7 @@ Steps / report types:
 import json
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +54,7 @@ TOLL_PERF_COLUMNS: dict[str, list[str]] = {
     ],
     "toll_collection_summary": [
         "Vehicle Type",
+        "Category",
         "No of Vehicles (For Corresponding month of previous year)",
         "Fee Collected (For Corresponding month of previous year)",
         "No of Vehicles (For Previous Month)",
@@ -143,15 +144,35 @@ def _parse(report_type: str, rows: list[list[Any]]) -> list[dict[str, Any]]:
     return parsed
 
 
-async def _notes(db: AsyncSession) -> dict[str, str]:
+SECTIONS = ("tms", "atms")
+
+
+def _scope(section: str, plaza_id: int | None) -> str:
+    """Rows are kept per section (ATMS / TMS Reports) and per toll plaza: "tms:12:"."""
+    if section not in SECTIONS:
+        raise HTTPException(status_code=400, detail="section must be tms or atms")
+    return f"{section}:{plaza_id or 0}:"
+
+
+async def _notes(db: AsyncSession, scope: str = "") -> dict[str, str]:
     out = {k: "" for k in NOTE_KEYS}
     for r in (await db.execute(select(TollPerfNote))).scalars().all():
-        out[r.note_key] = r.note_value or ""
+        if scope and r.note_key.startswith(scope):
+            out[r.note_key[len(scope):]] = r.note_value or ""
+        elif not scope and r.note_key in out:
+            out[r.note_key] = r.note_value or ""
     return out
 
 
 @router.get("")
-async def get_all(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[User, Depends(Roles)]):
+async def get_all(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(Roles)],
+    section: str = Query(default="tms"),
+    plaza_id: int | None = Query(default=None),
+):
+    """One section's four reports for one toll plaza (only that plaza's data)."""
+    scope = _scope(section, plaza_id)
     empty = {"columns": TOLL_PERF_COLUMNS, "rows": {k: [] for k in TOLL_PERF_COLUMNS}, "notes": {k: "" for k in NOTE_KEYS}}
     try:
         db_rows = (
@@ -163,12 +184,22 @@ async def get_all(db: Annotated[AsyncSession, Depends(get_db)], _: Annotated[Use
         await db.rollback()
         return empty
     by_type: dict[str, list[dict[str, Any]]] = {k: [] for k in TOLL_PERF_COLUMNS}
+    legacy: dict[str, list[dict[str, Any]]] = {k: [] for k in TOLL_PERF_COLUMNS}
     for r in db_rows:
         try:
-            by_type.setdefault(r.report_type, []).append(json.loads(r.payload or "{}"))
+            rec = json.loads(r.payload or "{}")
         except json.JSONDecodeError:
             continue
-    return {"columns": TOLL_PERF_COLUMNS, "rows": by_type, "notes": await _notes(db)}
+        if r.report_type.startswith(scope):
+            by_type.setdefault(r.report_type[len(scope):], []).append(rec)
+        elif r.report_type in legacy:
+            legacy[r.report_type].append(rec)  # imported before plazas / sections existed
+    # Data imported before the plaza picker existed shows only under TMS with no plaza chosen.
+    if section == "tms" and not plaza_id:
+        for k, rows in legacy.items():
+            if not by_type.get(k):
+                by_type[k] = rows
+    return {"columns": TOLL_PERF_COLUMNS, "rows": by_type, "notes": await _notes(db, scope)}
 
 
 @router.post("/{report_type}/import")
@@ -177,7 +208,10 @@ async def import_report(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(Editors)],
     file: UploadFile = File(...),
+    section: str = Query(default="tms"),
+    plaza_id: int | None = Query(default=None),
 ):
+    scope = _scope(section, plaza_id)
     if report_type not in TOLL_PERF_COLUMNS:
         raise HTTPException(status_code=404, detail="Unknown report type")
     content = await file.read()
@@ -188,13 +222,14 @@ async def import_report(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Could not read the file: {exc}") from exc
 
-    for r in (await db.execute(select(TollPerfRow).where(TollPerfRow.report_type == report_type))).scalars().all():
+    key = scope + report_type
+    for r in (await db.execute(select(TollPerfRow).where(TollPerfRow.report_type == key))).scalars().all():
         await db.delete(r)
     for i, rec in enumerate(parsed):
-        db.add(TollPerfRow(report_type=report_type, payload=json.dumps(rec, ensure_ascii=False), sort_order=i))
+        db.add(TollPerfRow(report_type=key, payload=json.dumps(rec, ensure_ascii=False), sort_order=i))
     await write_audit(
         db, actor_id=user.id, action="toll_perf_import", entity_type="toll_perf",
-        entity_id=report_type, detail=f"{len(parsed)} rows",
+        entity_id=key, detail=f"{len(parsed)} rows",
     )
     await db.commit()
     return {"ok": True, "report_type": report_type, "imported": len(parsed), "rows": parsed}
@@ -205,17 +240,21 @@ async def save_notes(
     body: dict[str, str],
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(Editors)],
+    section: str = Query(default="tms"),
+    plaza_id: int | None = Query(default=None),
 ):
+    scope = _scope(section, plaza_id)
     for key in NOTE_KEYS:
         if key not in body:
             continue
-        row = (await db.execute(select(TollPerfNote).where(TollPerfNote.note_key == key))).scalar_one_or_none()
+        full = scope + key
+        row = (await db.execute(select(TollPerfNote).where(TollPerfNote.note_key == full))).scalar_one_or_none()
         if row:
             row.note_value = body[key]
         else:
-            db.add(TollPerfNote(note_key=key, note_value=body[key]))
+            db.add(TollPerfNote(note_key=full, note_value=body[key]))
     await db.commit()
-    return await _notes(db)
+    return await _notes(db, scope)
 
 
 @router.delete("/{report_type}", status_code=204)
@@ -223,9 +262,12 @@ async def clear_report(
     report_type: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(Editors)],
+    section: str = Query(default="tms"),
+    plaza_id: int | None = Query(default=None),
 ):
     if report_type not in TOLL_PERF_COLUMNS:
         raise HTTPException(status_code=404, detail="Unknown report type")
-    for r in (await db.execute(select(TollPerfRow).where(TollPerfRow.report_type == report_type))).scalars().all():
+    key = _scope(section, plaza_id) + report_type
+    for r in (await db.execute(select(TollPerfRow).where(TollPerfRow.report_type == key))).scalars().all():
         await db.delete(r)
     await db.commit()
