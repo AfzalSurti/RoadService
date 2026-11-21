@@ -54,7 +54,7 @@ function pageHits(role: string | null): Hit[] {
     [adminGov, "Vendors", "/vendors", "agency work order loa contractor"],
     [true, "Map", "/map", "location gps pins"],
     [staff, "TMS Reports", "/tms-reports", "toll plaza collection performance tms etc sla"],
-    [staff, "ATMS Reports", "/atms-reports", "atms report toll plaza performance"],
+    [staff, "ATMS Physical Progress", "/atms-reports", "atms physical progress tracker ofc vides vasd vms ecb tmcs"],
     [adminGov, "Integrations", "/integrations", "integration sync"],
     [adminGov, "Backup / DR", "/backup-dr", "backup disaster recovery"],
     [true, "Staff Details", "/staff-details", "staff professionals employees"],

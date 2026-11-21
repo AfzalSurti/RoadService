@@ -926,6 +926,109 @@ async def reset_corridor_points(
     return {"ok": True}
 
 
+ATMS_PROGRESS_DDL = (
+    "CREATE TABLE IF NOT EXISTS atms_progress ("
+    "project_id INTEGER PRIMARY KEY, title TEXT, headers TEXT, rows TEXT NOT NULL, "
+    "updated_by VARCHAR(255), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+)
+
+
+@router.get("/atms-progress")
+async def get_atms_progress(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    """ATMS physical progress tracker of one package (None until one is imported)."""
+    import json as _json
+
+    from sqlalchemy import text
+
+    await db.execute(text(ATMS_PROGRESS_DDL))
+    row = (
+        await db.execute(
+            text("SELECT title, headers, rows, updated_by, updated_at FROM atms_progress WHERE project_id = :p"),
+            {"p": project_id},
+        )
+    ).first()
+    await db.commit()
+    if not row:
+        return None
+    return {
+        "project_id": project_id,
+        "title": row[0] or "",
+        "headers": _json.loads(row[1] or "[]"),
+        "rows": _json.loads(row[2] or "[]"),
+        "updated_by": row[3],
+        "updated_at": row[4].isoformat() if row[4] else None,
+    }
+
+
+async def _save_atms(db: AsyncSession, project_id: int, data: dict, user: User) -> dict:
+    import json as _json
+
+    from sqlalchemy import text
+
+    await db.execute(text(ATMS_PROGRESS_DDL))
+    await db.execute(
+        text(
+            "INSERT INTO atms_progress (project_id, title, headers, rows, updated_by) VALUES (:p, :t, :h, :r, :u) "
+            "ON CONFLICT (project_id) DO UPDATE SET title = :t, headers = :h, rows = :r, updated_by = :u, "
+            "updated_at = now()"
+        ),
+        {
+            "p": project_id,
+            "t": data.get("title") or "",
+            "h": _json.dumps(data.get("headers") or []),
+            "r": _json.dumps(data.get("rows") or []),
+            "u": user.full_name,
+        },
+    )
+    await db.commit()
+    return await get_atms_progress(project_id, db, user)
+
+
+@router.post("/atms-progress/import")
+async def import_atms_progress(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    project_id: Annotated[int, Form()],
+    file: UploadFile = File(...),
+):
+    """GMC Experts: load the ATMS Project Status workbook for a package (replaces the previous one)."""
+    import asyncio
+
+    from app.services.atms_progress import read_atms_progress
+
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Upload the ATMS Project Status Excel file (.xlsx)")
+    content = await file.read()
+    try:
+        data = await asyncio.to_thread(read_atms_progress, content)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read the workbook: {exc}") from exc
+    if not data["rows"]:
+        raise HTTPException(status_code=400, detail="No rows found under the header row")
+    return await _save_atms(db, project_id, data, user)
+
+
+class AtmsProgressIn(BaseModel):
+    title: str = ""
+    headers: list[str] = []
+    rows: list[dict]
+
+
+@router.put("/atms-progress/{project_id}")
+async def save_atms_progress(
+    project_id: int,
+    body: AtmsProgressIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: save edits (completed quantities, target dates, remarks, title)."""
+    return await _save_atms(db, project_id, body.model_dump(), user)
+
+
 @router.delete("/toll/stats/{stat_id}")
 async def delete_toll_stat(
     stat_id: int,

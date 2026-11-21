@@ -109,7 +109,7 @@ export function AppLayout() {
                 <NavLink to="/tms-reports">TMS Reports</NavLink>
               </NavGroup>
               <NavGroup id="atms" title="ATMS Dashboard" paths={["/atms-reports"]}>
-                <NavLink to="/atms-reports">ATMS Reports</NavLink>
+                <NavLink to="/atms-reports">ATMS Physical Progress</NavLink>
               </NavGroup>
             </>
           ) : null}

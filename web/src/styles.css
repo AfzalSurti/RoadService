@@ -2328,3 +2328,21 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 
 /* "New version available" banner */
 .update-banner { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 0.9rem; padding: 0.7rem 1rem; border-radius: 12px; background: #0b2a43; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.25); font-size: 0.92rem; max-width: calc(100vw - 32px); }
+
+/* ATMS Physical Progress (layout of the ATMS Project Status Excel) */
+.atms-cards .stat.atms-main { border-color: #1f8a4c; }
+.atms-bar { display: inline-block; width: 100%; max-width: 120px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; vertical-align: middle; }
+.atms-cards .atms-bar { display: block; max-width: none; margin-top: 0.4rem; }
+.atms-bar > span { display: block; height: 100%; background: #1f8a4c; }
+.atms-pct { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.atms-pct .atms-bar { width: 70px; }
+.atms-sheet-title { text-align: center; }
+.atms-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.atms-table tr.atms-group td { font-weight: 700; background: color-mix(in srgb, var(--line) 45%, transparent); }
+.atms-table tr.atms-section td { background: color-mix(in srgb, #2f4a8f 14%, transparent); }
+.atms-table tr.atms-subtotal td { font-style: italic; text-align: right; }
+.atms-table tr.atms-subtotal td:nth-child(2) { text-align: left; }
+.atms-table tr.atms-overall td { font-weight: 700; background: color-mix(in srgb, #1f8a4c 14%, transparent); }
+.atms-table tr.atms-done td:nth-child(7) { color: #1f8a4c; font-weight: 600; }
+.atms-title-input { min-width: 360px; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
+@media print { .sidebar, .topbar, .works-tabs, .btn-row, .update-banner { display: none !important; } }

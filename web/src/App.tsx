@@ -1,3 +1,4 @@
+import { AtmsProgressPage } from "./pages/AtmsProgressPage";
 import { TollReportsPage } from "./pages/TollReportsPage";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
@@ -189,7 +190,7 @@ export default function App() {
           path="/atms-reports"
           element={
             <StaffPortal>
-              <TollReportsPage key="atms" section="atms" />
+              <AtmsProgressPage />
             </StaffPortal>
           }
         />
