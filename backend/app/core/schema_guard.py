@@ -456,6 +456,15 @@ async def ensure_schema() -> None:
                 await conn.execute(text(f"ALTER TABLE vendors ADD COLUMN IF NOT EXISTS {col} {typ}"))
             # Vendors imported from the WO/PO trackers carry "Contact: ..." in remarks.
             await conn.execute(text(VENDOR_CONTACT_BACKFILL))
+            # One-off clean-up: the sample defects (#10-#21) got their photos by a setup script on
+            # 20 Nov 2026 that ran three times; drop those setup-only "photo replaced" entries.
+            await conn.execute(
+                text(
+                    "DELETE FROM issue_status_history WHERE issue_id BETWEEN 10 AND 21 "
+                    "AND from_status = to_status AND note LIKE '%photo replaced by GMC Experts%' "
+                    "AND created_at < '2026-11-21'"
+                )
+            )
             if not await _table_exists(conn, "vendor_documents"):
                 for stmt in VENDOR_DOCUMENTS_DDL:
                     await conn.execute(text(stmt))

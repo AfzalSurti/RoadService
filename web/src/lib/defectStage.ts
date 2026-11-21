@@ -28,7 +28,10 @@ export function historyStage(h: { from_status: string | null; to_status: string;
   const note = h.note || "";
   if (note.startsWith("Verified by GMC")) return "Verified by GMC - pending verification by NHIPMPL";
   if (note.startsWith("Verified by NHIPMPL")) return "Verified by NHIPMPL - closed";
-  if (h.from_status === h.to_status) return "Update";
+  if (h.from_status === h.to_status) {
+    if (/photo replaced/i.test(note)) return "Photo replaced";
+    return "Note added";
+  }
   return defectStage({ status: h.to_status as Issue["status"], gmc_verified: false });
 }
 
