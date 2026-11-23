@@ -931,6 +931,63 @@ ATMS_PROGRESS_DDL = (
     "project_id INTEGER PRIMARY KEY, title TEXT, headers TEXT, rows TEXT NOT NULL, "
     "updated_by VARCHAR(255), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
 )
+ATMS_DAILY_DDL = (
+    "CREATE TABLE IF NOT EXISTS atms_progress_daily ("
+    "project_id INTEGER NOT NULL, report_date DATE NOT NULL, title TEXT, headers TEXT, rows TEXT NOT NULL, "
+    "source_name VARCHAR(255), updated_by VARCHAR(255), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+    "PRIMARY KEY (project_id, report_date))"
+)
+
+
+async def _atms_tables(db: AsyncSession) -> None:
+    """Daily ATMS reports; the single tracker kept before daily reports becomes that day's report."""
+    from sqlalchemy import text
+
+    from app.services.atms_progress import find_date
+
+    await db.execute(text(ATMS_PROGRESS_DDL))
+    await db.execute(text(ATMS_DAILY_DDL))
+    old = (await db.execute(text("SELECT project_id, title, headers, rows, updated_by, updated_at FROM atms_progress"))).all()
+    for pid, title, headers, rows, by, at in old:
+        day = find_date(title or "") or (at.date() if at else date.today())
+        await db.execute(
+            text(
+                "INSERT INTO atms_progress_daily (project_id, report_date, title, headers, rows, updated_by, updated_at) "
+                "VALUES (:p, :d, :t, :h, :r, :u, :a) ON CONFLICT DO NOTHING"
+            ),
+            {"p": pid, "d": day, "t": title, "h": headers, "r": rows, "u": by, "a": at},
+        )
+    if old:
+        await db.execute(text("DELETE FROM atms_progress"))
+
+
+def _parse_day(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD") from exc
+
+
+@router.get("/atms-progress/dates")
+async def atms_progress_dates(
+    project_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_user)],
+):
+    """Days that have an ATMS daily report for a package, newest first."""
+    from sqlalchemy import text
+
+    await _atms_tables(db)
+    rows = (
+        await db.execute(
+            text("SELECT report_date FROM atms_progress_daily WHERE project_id = :p ORDER BY report_date DESC"),
+            {"p": project_id},
+        )
+    ).all()
+    await db.commit()
+    return [r[0].isoformat() for r in rows]
 
 
 @router.get("/atms-progress")
@@ -938,54 +995,60 @@ async def get_atms_progress(
     project_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_user)],
+    day: str | None = None,
 ):
-    """ATMS physical progress tracker of one package (None until one is imported)."""
+    """The ATMS daily report of a package for one day (latest day if none given)."""
     import json as _json
 
     from sqlalchemy import text
 
-    await db.execute(text(ATMS_PROGRESS_DDL))
-    row = (
-        await db.execute(
-            text("SELECT title, headers, rows, updated_by, updated_at FROM atms_progress WHERE project_id = :p"),
-            {"p": project_id},
-        )
-    ).first()
+    await _atms_tables(db)
+    wanted = _parse_day(day)
+    sql = (
+        "SELECT report_date, title, headers, rows, updated_by, updated_at, source_name FROM atms_progress_daily "
+        "WHERE project_id = :p " + ("AND report_date = :d " if wanted else "") + "ORDER BY report_date DESC LIMIT 1"
+    )
+    row = (await db.execute(text(sql), {"p": project_id, "d": wanted} if wanted else {"p": project_id})).first()
     await db.commit()
     if not row:
         return None
     return {
         "project_id": project_id,
-        "title": row[0] or "",
-        "headers": _json.loads(row[1] or "[]"),
-        "rows": _json.loads(row[2] or "[]"),
-        "updated_by": row[3],
-        "updated_at": row[4].isoformat() if row[4] else None,
+        "report_date": row[0].isoformat(),
+        "title": row[1] or "",
+        "headers": _json.loads(row[2] or "[]"),
+        "rows": _json.loads(row[3] or "[]"),
+        "updated_by": row[4],
+        "updated_at": row[5].isoformat() if row[5] else None,
+        "source_name": row[6],
     }
 
 
-async def _save_atms(db: AsyncSession, project_id: int, data: dict, user: User) -> dict:
+async def _save_atms(db: AsyncSession, project_id: int, day: date, data: dict, user: User, source: str | None) -> dict:
     import json as _json
 
     from sqlalchemy import text
 
-    await db.execute(text(ATMS_PROGRESS_DDL))
+    await _atms_tables(db)
     await db.execute(
         text(
-            "INSERT INTO atms_progress (project_id, title, headers, rows, updated_by) VALUES (:p, :t, :h, :r, :u) "
-            "ON CONFLICT (project_id) DO UPDATE SET title = :t, headers = :h, rows = :r, updated_by = :u, "
-            "updated_at = now()"
+            "INSERT INTO atms_progress_daily (project_id, report_date, title, headers, rows, source_name, updated_by) "
+            "VALUES (:p, :d, :t, :h, :r, :s, :u) ON CONFLICT (project_id, report_date) DO UPDATE SET "
+            "title = :t, headers = :h, rows = :r, source_name = COALESCE(:s, atms_progress_daily.source_name), "
+            "updated_by = :u, updated_at = now()"
         ),
         {
             "p": project_id,
+            "d": day,
             "t": data.get("title") or "",
             "h": _json.dumps(data.get("headers") or []),
             "r": _json.dumps(data.get("rows") or []),
+            "s": source,
             "u": user.full_name,
         },
     )
     await db.commit()
-    return await get_atms_progress(project_id, db, user)
+    return await get_atms_progress(project_id, db, user, day.isoformat())
 
 
 @router.post("/atms-progress/import")
@@ -994,8 +1057,11 @@ async def import_atms_progress(
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
     project_id: Annotated[int, Form()],
     file: UploadFile = File(...),
+    report_date: Annotated[str | None, Form()] = None,
 ):
-    """GMC Experts: load the ATMS Project Status workbook for a package (replaces the previous one)."""
+    """GMC Experts: upload a day's ATMS Project Status workbook for a package. The day is the one
+    chosen on the page, else the date in the sheet title ("upto 20.11.2026"), else today. The
+    newest sheet in the workbook is used. Uploading again for the same day replaces that day."""
     import asyncio
 
     from app.services.atms_progress import read_atms_progress
@@ -1009,7 +1075,10 @@ async def import_atms_progress(
         raise HTTPException(status_code=400, detail=f"Could not read the workbook: {exc}") from exc
     if not data["rows"]:
         raise HTTPException(status_code=400, detail="No rows found under the header row")
-    return await _save_atms(db, project_id, data, user)
+    day = _parse_day(report_date) or data.get("sheet_date") or date.today()
+    out = await _save_atms(db, project_id, day, data, user, (file.filename or "")[:255])
+    out["sheet"] = data.get("sheet")
+    return out
 
 
 class AtmsProgressIn(BaseModel):
@@ -1024,9 +1093,29 @@ async def save_atms_progress(
     body: AtmsProgressIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    day: str | None = None,
 ):
-    """GMC Experts: save edits (completed quantities, target dates, remarks, title)."""
-    return await _save_atms(db, project_id, body.model_dump(), user)
+    """GMC Experts: save edits to a day's report (completed quantities, target dates, remarks, title)."""
+    return await _save_atms(db, project_id, _parse_day(day) or date.today(), body.model_dump(), user, None)
+
+
+@router.delete("/atms-progress/{project_id}")
+async def delete_atms_progress(
+    project_id: int,
+    day: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: remove one day's report (e.g. uploaded for the wrong date)."""
+    from sqlalchemy import text
+
+    await _atms_tables(db)
+    await db.execute(
+        text("DELETE FROM atms_progress_daily WHERE project_id = :p AND report_date = :d"),
+        {"p": project_id, "d": _parse_day(day)},
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @router.delete("/toll/stats/{stat_id}")

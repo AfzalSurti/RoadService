@@ -38,22 +38,58 @@ def _num(v: Any) -> float | None:
         return None
 
 
+_DATE = re.compile(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})")
+
+
+def find_date(text: str) -> date | None:
+    """Last dd.mm.yyyy (or dd-mm-yyyy, dd/mm/yyyy) in a text, e.g. "Tracker upto 20.11.2026"."""
+    found = None
+    for d, m, y in _DATE.findall(text or ""):
+        try:
+            found = date(int(y), int(m), int(d))
+        except ValueError:
+            continue
+    return found
+
+
+def _header_row(sv) -> int | None:
+    for r in range(1, min(sv.max_row, 15) + 1):
+        vals = [(_txt(sv.cell(r, c).value)).lower() for c in range(1, 10)]
+        if any("work" in v for v in vals) and "total" in vals:
+            return r
+    return None
+
+
+def _title(sv, head_row: int) -> str:
+    """Every text cell above the header row (any column), e.g. "BWK ATMS Project Tracker upto 20.11.2026"."""
+    parts: list[str] = []
+    for r in range(1, head_row):
+        for c in range(1, min(sv.max_column, 12) + 1):
+            t = _txt(sv.cell(r, c).value)
+            if t and t not in parts:
+                parts.append(t)
+    return " · ".join(parts)
+
+
 def read_atms_progress(content: bytes) -> dict:
     wf = openpyxl.load_workbook(BytesIO(content), data_only=False)
     wv = openpyxl.load_workbook(BytesIO(content), data_only=True)
-    sf, sv = wf.worksheets[0], wv.worksheets[0]
 
-    # Header row: the one with "Work Details" / "Total" / "Completed".
-    head_row = None
-    for r in range(1, min(sf.max_row, 15) + 1):
-        vals = [(_txt(sv.cell(r, c).value)).lower() for c in range(1, 10)]
-        if any("work" in v for v in vals) and "total" in vals:
-            head_row = r
-            break
-    if head_row is None:
+    # A tracker workbook often keeps older sheets (e.g. "15.10.2026") next to the newest one:
+    # use the sheet with the latest date in its title or name, else the sheet Excel opens on.
+    candidates = []
+    for i, sv in enumerate(wv.worksheets):
+        hr = _header_row(sv)
+        if hr is None:
+            continue
+        d = find_date(_title(sv, hr)) or find_date(sv.title)
+        candidates.append((d or date.min, i == wv.index(wv.active), i, hr))
+    if not candidates:
         raise ValueError("Header row (Sr, Work Details, UOM, Total, Completed ...) not found")
+    _, _, idx, head_row = max(candidates)
+    sv, sf = wv.worksheets[idx], wf.worksheets[idx]
     headers = [_txt(sv.cell(head_row, c).value) for c in range(1, 10)]
-    title = " ".join(_txt(sv.cell(r, 1).value) for r in range(1, head_row) if _txt(sv.cell(r, 1).value)).strip()
+    title = _title(sv, head_row)
 
     rows: list[dict] = []
     for r in range(head_row + 1, sf.max_row + 1):
@@ -84,4 +120,10 @@ def read_atms_progress(content: bytes) -> dict:
             if _num(g_value) is not None:
                 row["fixed_pct"] = _num(g_value)
         rows.append(row)
-    return {"title": title, "headers": headers, "rows": rows}
+    return {
+        "title": title,
+        "headers": headers,
+        "rows": rows,
+        "sheet": sv.title,
+        "sheet_date": (find_date(title) or find_date(sv.title) or None),
+    }

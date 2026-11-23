@@ -2397,3 +2397,8 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .month-chip { padding: 0.25rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
 .month-chip.active { background: #2f4a8f; border-color: #2f4a8f; color: #fff; }
 .overview-head input[type="date"] { padding: 0.42rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+
+/* ATMS daily reports */
+.atms-day { margin: 0.2rem 0 0; font-size: 0.95rem; }
+.atms-upload-day { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.75rem; }
+.atms-upload-day input { padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }

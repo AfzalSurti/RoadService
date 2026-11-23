@@ -19,6 +19,9 @@ type AtmsRow = {
 };
 type AtmsData = {
   project_id: number;
+  report_date?: string;
+  source_name?: string | null;
+  sheet?: string;
   title: string;
   headers: string[];
   rows: AtmsRow[];
@@ -78,6 +81,12 @@ export function AtmsProgressPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // Daily reports: one tracker per package per day.
+  const today = new Date().toISOString().slice(0, 10);
+  const [day, setDay] = useState<string>("");
+  const [days, setDays] = useState<string[]>([]);
+  const [uploadDay, setUploadDay] = useState<string>(today);
+  const fmtDay = (d: string) => (d ? d.split("-").reverse().join(".") : "");
 
   useEffect(() => {
     const el = document.getElementById("page-title");
@@ -93,11 +102,28 @@ export function AtmsProgressPage() {
     if (shown.length && !shown.some((p) => p.id === projectId)) setProjectId(shown[0].id);
   }, [shown]);
 
-  const load = async () => {
+  const loadDays = async () => {
+    if (!token || !projectId) return [] as string[];
+    try {
+      const list = await api.nhitGet<string[]>(token, `/atms-progress/dates?project_id=${projectId}`);
+      setDays(list);
+      return list;
+    } catch {
+      setDays([]);
+      return [] as string[];
+    }
+  };
+
+  const load = async (forDay = day) => {
     if (!token || !projectId) return;
     setLoading(true);
     try {
-      setData(await api.nhitGet<AtmsData | null>(token, `/atms-progress?project_id=${projectId}`));
+      const d = await api.nhitGet<AtmsData | null>(
+        token,
+        `/atms-progress?project_id=${projectId}${forDay ? `&day=${forDay}` : ""}`
+      );
+      setData(d);
+      if (d?.report_date && d.report_date !== forDay) setDay(d.report_date);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not load the ATMS progress");
@@ -106,10 +132,13 @@ export function AtmsProgressPage() {
     }
   };
 
+  // New package: latest day. New day: that day's report.
   useEffect(() => {
     setDraft(null);
     setData(null);
-    void load();
+    setDay("");
+    void loadDays();
+    void load("");
   }, [token, projectId]);
 
   const view = draft || data;
@@ -163,9 +192,17 @@ export function AtmsProgressPage() {
       const fd = new FormData();
       fd.append("project_id", String(projectId));
       fd.append("file", file);
-      setData(await api.nhitPostForm<AtmsData>(token, "/atms-progress/import", fd));
+      if (uploadDay) fd.append("report_date", uploadDay);
+      const saved = await api.nhitPostForm<AtmsData>(token, "/atms-progress/import", fd);
+      setData(saved);
       setDraft(null);
-      setMsg(`Imported ${file.name}.`);
+      if (saved?.report_date) setDay(saved.report_date);
+      await loadDays();
+      setMsg(
+        `Daily report for ${fmtDay(saved?.report_date || uploadDay)} uploaded from ${file.name}` +
+          (saved?.sheet ? ` (sheet "${saved.sheet}")` : "") +
+          "."
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Import failed");
     } finally {
@@ -185,7 +222,7 @@ export function AtmsProgressPage() {
     setError(null);
     try {
       setData(
-        await api.nhitPut<AtmsData>(token, `/atms-progress/${projectId}`, {
+        await api.nhitPut<AtmsData>(token, `/atms-progress/${projectId}?day=${day || today}`, {
           title: draft.title,
           headers: draft.headers,
           rows: draft.rows,
@@ -245,6 +282,12 @@ export function AtmsProgressPage() {
         <div className="panel-head-row">
           <div>
             <h2 style={{ margin: 0 }}>ATMS Physical Progress</h2>
+            {view?.report_date ? (
+              <p className="atms-day">
+                Daily report · <strong>{fmtDay(view.report_date)}</strong>
+                {view.source_name ? <span className="muted"> · {view.source_name}</span> : null}
+              </p>
+            ) : null}
             <p className="muted" style={{ margin: "0.25rem 0 0" }}>
               {draft ? (
                 <input
@@ -273,7 +316,32 @@ export function AtmsProgressPage() {
             ) : null}
             {canEdit && view && !draft ? (
               <button className="btn" type="button" onClick={() => setDraft(JSON.parse(JSON.stringify(view)))}>
-                Update progress
+                Edit this day&apos;s report
+              </button>
+            ) : null}
+            {canEdit && view && !draft && view.report_date ? (
+              <button
+                className="btn danger"
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!token || !projectId || !view.report_date) return;
+                  if (!window.confirm(`Delete the daily report of ${fmtDay(view.report_date)}?`)) return;
+                  setBusy(true);
+                  try {
+                    await api.nhitDelete(token, `/atms-progress/${projectId}?day=${view.report_date}`);
+                    setDay("");
+                    await loadDays();
+                    await load("");
+                    setMsg(`Daily report of ${fmtDay(view.report_date)} deleted.`);
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : "Delete failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete this day
               </button>
             ) : null}
             {canEdit && draft ? (
@@ -287,8 +355,14 @@ export function AtmsProgressPage() {
               </>
             ) : null}
             {canEdit && !draft ? (
+              <label className="atms-upload-day">
+                Report date
+                <input type="date" value={uploadDay} max={today} onChange={(e) => setUploadDay(e.target.value)} />
+              </label>
+            ) : null}
+            {canEdit && !draft ? (
               <label className={`btn ghost${busy ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
-                {busy ? "Importing…" : view ? "Replace from Excel" : "Import Excel"}
+                {busy ? "Uploading…" : "Upload daily report (Excel)"}
                 <input
                   type="file"
                   accept=".xlsx,.xlsm"
@@ -304,6 +378,44 @@ export function AtmsProgressPage() {
             ) : null}
           </div>
         </div>
+
+        <div className="overview-head" style={{ marginTop: "0.75rem", marginBottom: "0.25rem" }}>
+          <label>
+            View day
+            <input
+              type="date"
+              value={day}
+              max={today}
+              onChange={(e) => {
+                setDay(e.target.value);
+                setDraft(null);
+                void load(e.target.value);
+              }}
+            />
+          </label>
+          {days.length ? (
+            <div className="month-chips" style={{ margin: 0 }}>
+              <span className="muted">Days with reports:</span>
+              {days.slice(0, 12).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`month-chip${d === (view?.report_date || day) ? " active" : ""}`}
+                  onClick={() => {
+                    setDay(d);
+                    setDraft(null);
+                    void load(d);
+                  }}
+                >
+                  {fmtDay(d)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {day && !loading && !view ? (
+          <p className="muted">No daily report for {fmtDay(day)}{canEdit ? " — upload one with the date set above." : "."}</p>
+        ) : null}
 
         {view ? (
           <>
