@@ -2391,3 +2391,9 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .pw-checks li.ok-rule { color: #1f8a4c; }
 .pw-reveal { display: flex; align-items: center; gap: 0.6rem; }
 .pw-reveal code { flex: 1; padding: 0.5rem 0.7rem; border-radius: 8px; background: color-mix(in srgb, var(--line) 60%, transparent); font-size: 1rem; letter-spacing: 0.04em; }
+
+/* Month / date quick picks (TMS Reports, ATMS daily reports) */
+.month-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.5rem 0 0.75rem; font-size: 0.85rem; }
+.month-chip { padding: 0.25rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.month-chip.active { background: #2f4a8f; border-color: #2f4a8f; color: #fff; }
+.overview-head input[type="date"] { padding: 0.42rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }

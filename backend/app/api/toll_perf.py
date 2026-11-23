@@ -147,11 +147,52 @@ def _parse(report_type: str, rows: list[list[Any]]) -> list[dict[str, Any]]:
 SECTIONS = ("tms", "atms")
 
 
-def _scope(section: str, plaza_id: int | None) -> str:
-    """Rows are kept per section (ATMS / TMS Reports) and per toll plaza: "tms:12:"."""
+def _scope(section: str, plaza_id: int | None, month: str | None = None) -> str:
+    """Rows are kept per section, toll plaza and month (the reports are monthly): "tms:12:2026-11:"."""
+    import re
+
     if section not in SECTIONS:
         raise HTTPException(status_code=400, detail="section must be tms or atms")
-    return f"{section}:{plaza_id or 0}:"
+    if month and not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    return f"{section}:{plaza_id or 0}:" + (f"{month}:" if month else "")
+
+
+async def _file_by_month(db: AsyncSession) -> None:
+    """Reports imported before the month filter existed are filed under the month they were
+    imported in ("tms:5:toll_collection_summary" -> "tms:5:2026-11:toll_collection_summary")."""
+    changed = False
+    for r in (await db.execute(select(TollPerfRow))).scalars().all():
+        parts = r.report_type.split(":")
+        if len(parts) == 3 and parts[0] in SECTIONS and parts[2] in TOLL_PERF_COLUMNS:
+            r.report_type = f"{parts[0]}:{parts[1]}:{r.created_at:%Y-%m}:{parts[2]}"
+            changed = True
+    for n in (await db.execute(select(TollPerfNote))).scalars().all():
+        parts = n.note_key.split(":")
+        if len(parts) == 3 and parts[0] in SECTIONS and parts[2] in NOTE_KEYS:
+            n.note_key = f"{parts[0]}:{parts[1]}:{n.updated_at:%Y-%m}:{parts[2]}"
+            changed = True
+    if changed:
+        await db.commit()
+
+
+@router.get("/months")
+async def report_months(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(Roles)],
+    section: str = Query(default="tms"),
+    plaza_id: int | None = Query(default=None),
+):
+    """Months that have report data for a section / plaza, newest first."""
+    scope = _scope(section, plaza_id)
+    await _file_by_month(db)
+    months = set()
+    for (rt,) in (await db.execute(select(TollPerfRow.report_type))).all():
+        if rt.startswith(scope):
+            parts = rt[len(scope):].split(":")
+            if len(parts) == 2:
+                months.add(parts[0])
+    return sorted(months, reverse=True)
 
 
 async def _notes(db: AsyncSession, scope: str = "") -> dict[str, str]:
@@ -170,9 +211,11 @@ async def get_all(
     _: Annotated[User, Depends(Roles)],
     section: str = Query(default="tms"),
     plaza_id: int | None = Query(default=None),
+    month: str | None = Query(default=None),
 ):
-    """One section's four reports for one toll plaza (only that plaza's data)."""
-    scope = _scope(section, plaza_id)
+    """One section's four reports for one toll plaza and one month (only that data)."""
+    await _file_by_month(db)
+    scope = _scope(section, plaza_id, month)
     empty = {"columns": TOLL_PERF_COLUMNS, "rows": {k: [] for k in TOLL_PERF_COLUMNS}, "notes": {k: "" for k in NOTE_KEYS}}
     try:
         db_rows = (
@@ -210,8 +253,9 @@ async def import_report(
     file: UploadFile = File(...),
     section: str = Query(default="tms"),
     plaza_id: int | None = Query(default=None),
+    month: str | None = Query(default=None),
 ):
-    scope = _scope(section, plaza_id)
+    scope = _scope(section, plaza_id, month)
     if report_type not in TOLL_PERF_COLUMNS:
         raise HTTPException(status_code=404, detail="Unknown report type")
     content = await file.read()
@@ -242,8 +286,9 @@ async def save_notes(
     _: Annotated[User, Depends(Editors)],
     section: str = Query(default="tms"),
     plaza_id: int | None = Query(default=None),
+    month: str | None = Query(default=None),
 ):
-    scope = _scope(section, plaza_id)
+    scope = _scope(section, plaza_id, month)
     for key in NOTE_KEYS:
         if key not in body:
             continue
@@ -264,10 +309,11 @@ async def clear_report(
     _: Annotated[User, Depends(Editors)],
     section: str = Query(default="tms"),
     plaza_id: int | None = Query(default=None),
+    month: str | None = Query(default=None),
 ):
     if report_type not in TOLL_PERF_COLUMNS:
         raise HTTPException(status_code=404, detail="Unknown report type")
-    key = _scope(section, plaza_id) + report_type
+    key = _scope(section, plaza_id, month) + report_type
     for r in (await db.execute(select(TollPerfRow).where(TollPerfRow.report_type == key))).scalars().all():
         await db.delete(r)
     await db.commit()

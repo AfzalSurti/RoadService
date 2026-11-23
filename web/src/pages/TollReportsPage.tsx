@@ -61,6 +61,10 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
   const [plazas, setPlazas] = useState<Row[]>([]);
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const [plazaId, setPlazaId] = useState<string>("");
+  // Reports are monthly: pick the month (defaults to the latest month with data).
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const [month, setMonth] = useState<string>(thisMonth);
+  const [months, setMonths] = useState<string[]>([]);
   const [step, setStep] = useState(0);
   const [data, setData] = useState<TollPerfData>(EMPTY);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -104,7 +108,25 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
     if (!shownPlazas.some((p) => String(p.id) === plazaId)) setPlazaId(String(shownPlazas[0].id));
   }, [shownPlazas]);
 
-  const query = `section=${section}${plazaId ? `&plaza_id=${plazaId}` : ""}`;
+  const plazaQuery = `section=${section}${plazaId ? `&plaza_id=${plazaId}` : ""}`;
+  const query = `${plazaQuery}&month=${month}`;
+
+  // Months that have data for this plaza; jump to the latest one when the plaza changes.
+  const loadMonths = async (jump: boolean) => {
+    if (!token) return;
+    try {
+      const list = await api.nhitGet<string[]>(token, `/toll-perf/months?${plazaQuery}`);
+      setMonths(list);
+      if (jump) setMonth(list[0] || thisMonth);
+    } catch {
+      setMonths([]);
+    }
+  };
+  useEffect(() => {
+    void loadMonths(true);
+  }, [token, plazaQuery]);
+  const monthLabel = (m: string) =>
+    new Date(`${m}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   const load = async () => {
     if (!token) return;
@@ -150,7 +172,8 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
       fd.append("file", file);
       await api.nhitPostForm(token, `/toll-perf/${current.key}/import?${query}`, fd);
       await load();
-    }, `${current.label}: data imported for ${plaza ? String(plaza.name) : "this section"}.`);
+      await loadMonths(false);
+    }, `${current.label}: data imported for ${plaza ? String(plaza.name) : "this section"} · ${monthLabel(month)}.`);
 
   const addPlaza = (e: FormEvent) => {
     e.preventDefault();
@@ -188,7 +211,7 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${section}_${plaza ? String(plaza.name).replace(/\W+/g, "_") : "all"}_${current.key}.csv`;
+    a.download = `${section}_${plaza ? String(plaza.name).replace(/\W+/g, "_") : "all"}_${month}_${current.key}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -248,6 +271,10 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
               ))}
             </select>
           </label>
+          <label>
+            Month
+            <input type="month" value={month} max={thisMonth} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+          </label>
           {canEdit ? (
             <div className="btn-row">
               <button type="button" className="btn ghost" onClick={() => setShowAdd((v) => !v)}>
@@ -259,6 +286,22 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
             </div>
           ) : null}
         </div>
+
+        {months.length ? (
+          <div className="month-chips">
+            <span className="muted">Months with reports:</span>
+            {months.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`month-chip${m === month ? " active" : ""}`}
+                onClick={() => setMonth(m)}
+              >
+                {monthLabel(m)}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {showAdd && canEdit ? (
           <form className="form-grid" onSubmit={addPlaza} style={{ marginBottom: "1rem" }}>
@@ -312,7 +355,8 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
           </article>
         </div>
         <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-          {plaza ? `Showing ${String(plaza.name)} only` : "Choose a toll plaza"} · figures from the Monthly Toll Collection Report.
+          {plaza ? `Showing ${String(plaza.name)} only` : "Choose a toll plaza"} · {monthLabel(month)} · figures from the
+          Monthly Toll Collection Report.
         </p>
 
         <div className="toll-perf-stepper" style={{ marginTop: "1rem" }}>
@@ -336,7 +380,7 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
             <h2 style={{ margin: 0 }}>{current.label}</h2>
             <p className="muted" style={{ margin: "0.25rem 0 0" }}>
               Step {step + 1} of {STEPS.length}
-              {plaza ? ` · ${String(plaza.name)}` : ""}
+              {plaza ? ` · ${String(plaza.name)}` : ""} · {monthLabel(month)}
             </p>
           </div>
           <div className="btn-row">
@@ -388,7 +432,7 @@ export function TollReportsPage({ section }: { section: "tms" | "atms" }) {
               {!rows.length ? (
                 <tr>
                   <td colSpan={columns.length || 1} className="muted">
-                    No data for {plaza ? String(plaza.name) : "this plaza"} yet.
+                    No data for {plaza ? String(plaza.name) : "this plaza"} in {monthLabel(month)}.
                     {canEdit ? " Use Import Data to upload the Excel sheet." : ""}
                   </td>
                 </tr>
