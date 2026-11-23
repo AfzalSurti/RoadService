@@ -167,8 +167,8 @@ def party_statements():
 
 # alembic 034: MPR -> MSR folder name (files stay in the renamed folder).
 MSR_FOLDER_RENAME = (
-    "UPDATE document_folders SET name = 'Monthly Status Reports (MSR)' "
-    "WHERE name = 'Monthly Progress Reports (MPR)'"
+    "UPDATE document_folders SET name = 'MIS Reports' "
+    "WHERE name IN ('Monthly Progress Reports (MPR)', 'Monthly Status Reports (MSR)')"
 )
 
 

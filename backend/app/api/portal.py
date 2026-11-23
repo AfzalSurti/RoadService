@@ -103,7 +103,7 @@ PROJECT_DOCS = [
     "Design Calculations",
     "Project Schedule",
     "Baseline Programme",
-    "Monthly Status Reports (MSR)",
+    "MIS Reports",
     "Inspection Reports",
     "Audit Reports",
     "Commissioning Certificates",
@@ -262,7 +262,9 @@ async def _find_mpr_leaf(db: AsyncSession, project_id: int) -> int | None:
         await db.execute(
             select(DocumentFolder).where(
                 DocumentFolder.parent_id.in_(parents),
-                DocumentFolder.name.like("Monthly Status Report%") | DocumentFolder.name.like("Monthly Progress Report%"),
+                DocumentFolder.name.like("MIS Report%")
+                | DocumentFolder.name.like("Monthly Status Report%")
+                | DocumentFolder.name.like("Monthly Progress Report%"),
             )
         )
     ).scalars().first()
@@ -764,7 +766,7 @@ async def list_mpr(
 @mpr_router.post("", response_model=MprOut, status_code=201)
 async def create_mpr(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR))],
+    user: Annotated[User, Depends(require_roles(UserRole.CONTRACTOR, UserRole.ADMIN))],
     package_name: Annotated[str, Form()],
     project_id: Annotated[int, Form()],
     report_month: Annotated[str, Form()],
@@ -820,8 +822,8 @@ async def create_mpr(
         doc = PortalDocument(
             project_id=project_id,
             folder_id=folder_id,
-            category="Monthly Status Report (MSR)",
-            title=f"MSR {package_name} {month.isoformat()}",
+            category="MIS Report",
+            title=f"MIS Report {package_name} {month.strftime('%d.%m.%Y')}",
             description=last_remarks,
             file_path=pdf_path,
             uploaded_by_id=user.id,
@@ -837,7 +839,7 @@ async def create_mpr(
                 document_id=doc.id,
                 version_no=1,
                 file_path=pdf_path,
-                change_note="MSR PDF import",
+                change_note="MIS report upload",
                 uploaded_by_id=user.id,
             )
         )
@@ -852,8 +854,8 @@ async def create_mpr(
     )
     await notify_involved(
         db,
-        "New MSR submitted",
-        f"Monthly Status Report {package_name} ({month.strftime('%b %Y')}) by {user.full_name} — review it.",
+        "New MIS report submitted",
+        f"MIS report {package_name} ({month.strftime('%d %b %Y')}) by {user.full_name} — review it.",
         project_id=project_id,
         link=f"/mpr?project={project_id}",
         actor=user,
@@ -885,7 +887,7 @@ async def upload_mpr_pdf(
         doc = PortalDocument(
             project_id=row.project_id,
             folder_id=row.folder_id,
-            category="Monthly Status Report (MSR)",
+            category="MIS Report",
             title=f"MPR {row.package_name} {row.report_month}",
             description=row.last_remarks,
             file_path=pdf_path,
@@ -956,8 +958,8 @@ async def review_mpr(
     verdict = {"approved": "approved", "not_approved": "not approved"}.get(status, "marked pending")
     await notify_involved(
         db,
-        f"MSR {verdict}",
-        f"{row.package_name} {row.report_month.strftime('%b %Y')} {verdict} by {user.full_name}"
+        f"MIS report {verdict}",
+        f"{row.package_name} {row.report_month.strftime('%d %b %Y')} {verdict} by {user.full_name}"
         + (f": {row.review_remark}" if row.review_remark else "."),
         project_id=row.project_id,
         extra_ids=[row.submitted_by_id],
@@ -1079,3 +1081,171 @@ async def import_vendor_tracker(
         "added_items": added_items,
     }
 
+
+MIS_COLUMNS = [
+    "Date", "Package", "Vendor", "Physical Progress", "Financial Progress", "Rating / Performance",
+    "Timely Execution", "Pending Activity", "Critical Observation", "Remarks",
+]
+_MIS_FIELDS = {
+    "date": ("date", "report date", "day"),
+    "package": ("package", "project", "project / package"),
+    "vendor": ("vendor", "agency", "contractor"),
+    "physical_progress": ("physical progress", "physical", "physical %"),
+    "financial_progress": ("financial progress", "financial", "financial %"),
+    "rating_performance": ("rating / performance", "rating", "performance"),
+    "timely_execution": ("timely execution",),
+    "pending_activity": ("pending activity", "pending activities"),
+    "critical_observation": ("critical observation", "critical observations"),
+    "last_remarks": ("remarks", "remark", "last remarks"),
+}
+
+
+@mpr_router.get("/template")
+async def mis_template(
+    _: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR, UserRole.GOVERNMENT))],
+):
+    """Excel layout for uploading MIS reports (one row per package / vendor / day)."""
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "MIS Report"
+    ws.append(MIS_COLUMNS)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="2F4A8F")
+    ws.append(["23-11-2026", "Jabalpur - Lakhnadon", "", "45%", "40%", "Good", "On time", "", "", "Sample row - delete"])
+    for col, w in zip("ABCDEFGHIJ", (13, 26, 30, 18, 18, 20, 18, 30, 30, 34)):
+        ws.column_dimensions[col].width = w
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="mis_report_template.xlsx"'},
+    )
+
+
+@mpr_router.post("/import")
+async def import_mis(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    file: UploadFile = File(...),
+    project_id: Annotated[int | None, Form()] = None,
+):
+    """Upload MIS reports from Excel: one row per package / vendor / day. The Package column is
+    matched to a package name (or the package chosen on the page is used). A row for the same
+    package, vendor and day updates that day's report."""
+    from datetime import date as date_cls
+    from datetime import datetime as dt_cls
+    from io import BytesIO
+
+    import openpyxl
+
+    if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(400, "Upload an Excel file (.xlsx)")
+    try:
+        wb = openpyxl.load_workbook(BytesIO(await file.read()), data_only=True, read_only=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"Could not read the workbook: {exc}") from exc
+
+    projects = (await db.execute(select(Project))).scalars().all()
+    vendors = (await db.execute(select(Vendor))).scalars().all()
+
+    def norm(t: str) -> str:
+        return "".join(ch for ch in (t or "").lower() if ch.isalnum())
+
+    def find_project(text: str):
+        t = norm(text)
+        if not t:
+            return next((p for p in projects if p.id == project_id), None)
+        for p in projects:
+            names = [p.name, getattr(p, "short_name", None) or "", getattr(p, "title", None) or ""]
+            if any(t and (t in norm(n) or norm(n) in t) for n in names if n):
+                return p
+        return None
+
+    def to_date(v):
+        if isinstance(v, dt_cls):
+            return v.date()
+        if isinstance(v, date_cls):
+            return v
+        t = str(v or "").strip()
+        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%d-%b-%Y", "%d %b %Y"):
+            try:
+                return dt_cls.strptime(t, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def cell(v) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, float):
+            if 0 < v <= 1 and not v.is_integer():
+                return f"{v * 100:.2f}%"
+            return str(int(v)) if v.is_integer() else str(v)
+        return str(v).strip()
+
+    await _ensure_folder_tree(db)
+    added = updated = 0
+    errors: list[str] = []
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        head_i, cols = None, {}
+        for i, row in enumerate(rows[:10]):
+            labels = [str(c or "").strip().lower() for c in row]
+            found = {k: labels.index(a) for k, alts in _MIS_FIELDS.items() for a in alts if a in labels}
+            if "date" in found and len(found) >= 3:
+                head_i, cols = i, found
+                break
+        if head_i is None:
+            continue
+        for n, row in enumerate(rows[head_i + 1:], start=head_i + 2):
+            if not any(c not in (None, "") for c in row):
+                continue
+            get = lambda k: cell(row[cols[k]]) if k in cols and cols[k] < len(row) else ""  # noqa: E731
+            day = to_date(row[cols["date"]]) if cols["date"] < len(row) else None
+            proj = find_project(get("package"))
+            if not day or not proj:
+                errors.append(f"{ws.title} row {n}: " + ("date missing / invalid" if not day else "package not found"))
+                continue
+            vname = norm(get("vendor"))
+            vendor = next((v for v in vendors if vname and v.project_id == proj.id and norm(v.name) == vname), None) \
+                or next((v for v in vendors if vname and norm(v.name) == vname), None)
+            data = {k: (get(k) or None) for k in ("physical_progress", "financial_progress", "rating_performance",
+                                                  "timely_execution", "pending_activity", "critical_observation",
+                                                  "last_remarks")}
+            existing = (
+                await db.execute(
+                    select(MonthlyProgressReport).where(
+                        MonthlyProgressReport.project_id == proj.id,
+                        MonthlyProgressReport.report_month == day,
+                        (MonthlyProgressReport.vendor_id == vendor.id) if vendor
+                        else MonthlyProgressReport.vendor_id.is_(None),
+                    )
+                )
+            ).scalars().first()
+            if existing:
+                for k, v in data.items():
+                    setattr(existing, k, v)
+                updated += 1
+            else:
+                db.add(MonthlyProgressReport(
+                    project_id=proj.id, vendor_id=vendor.id if vendor else None,
+                    folder_id=await _find_mpr_leaf(db, proj.id), package_name=proj.name, report_month=day,
+                    submitted_by_id=user.id, **data,
+                ))
+                added += 1
+    wb.close()
+    if not added and not updated and not errors:
+        raise HTTPException(400, "No MIS rows found - use the template (Date and Package columns are required)")
+    await write_audit(db, actor_id=user.id, action="mis_import", entity_type="mpr", entity_id=None,
+                      detail=f"{added} added, {updated} updated from {file.filename}")
+    await db.commit()
+    return {"added": added, "updated": updated, "errors": errors[:50], "error_count": len(errors)}

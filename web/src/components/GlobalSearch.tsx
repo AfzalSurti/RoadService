@@ -49,7 +49,7 @@ function pageHits(role: string | null): Hit[] {
     [staff, "Project Inventory", "/civil-assets", "inventory location scope junction bridge culvert sign board"],
     [true, "Defect Management", "/issues", "defects issues potholes complaints repairs"],
     [staff, "RFI — Request for Inspection", "/rfi", "inspection request rfi"],
-    [staff, "MSR", "/mpr", "mpr monthly progress report nsr"],
+    [staff, "MIS Report", "/mpr", "mis report daily msr mpr monthly status progress"],
     [staff, "Project Overview", "/executive", "executive summary stretch"],
     [adminGov, "Vendors", "/vendors", "agency work order loa contractor"],
     [true, "Map", "/map", "location gps pins"],

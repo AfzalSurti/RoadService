@@ -784,6 +784,25 @@ export const api = {
   createMpr: (token: string, form: FormData) =>
     request<MprReport>("/api/v1/mpr", { method: "POST", token, body: form }),
 
+  /** MIS Report Excel layout. */
+  downloadMisTemplate: async (token: string) => {
+    const res = await fetch(`${API_URL}/api/v1/mpr/template`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new ApiError("Could not download the template", res.status);
+    return res.blob();
+  },
+
+  /** Upload MIS reports from Excel (one row per package / vendor / day). */
+  importMis: (token: string, file: File, projectId?: number) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (projectId) fd.append("project_id", String(projectId));
+    return request<{ added: number; updated: number; errors: string[]; error_count: number }>("/api/v1/mpr/import", {
+      method: "POST",
+      token,
+      body: fd,
+    });
+  },
+
   uploadMprPdf: (token: string, id: number, file: File) => {
     const fd = new FormData();
     fd.append("pdf_file", file);

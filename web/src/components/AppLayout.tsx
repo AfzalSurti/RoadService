@@ -101,7 +101,7 @@ export function AppLayout() {
             {staff ? <NavLink to={scoped("/civil-assets")}>Project Inventory</NavLink> : null}
             {adminGov ? <NavLink to="/vendors">Vendors</NavLink> : null}
             {staff ? <NavLink to={scoped("/rfi")}>RFI</NavLink> : null}
-            {staff ? <NavLink to={scoped("/mpr")}>MSR</NavLink> : null}
+            {staff ? <NavLink to={scoped("/mpr")}>MIS Report</NavLink> : null}
             <NavLink to={scoped("/map")}>Map</NavLink>
             <NavLink to={scoped("/issues")}>Defect Management</NavLink>
           </NavGroup>

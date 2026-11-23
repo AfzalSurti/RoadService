@@ -10,7 +10,7 @@ const empty = {
   package_name: "",
   project_id: "",
   vendor_id: "",
-  report_month: new Date().toISOString().slice(0, 7) + "-01",
+  report_month: new Date().toISOString().slice(0, 10),
   physical_progress: "",
   financial_progress: "",
   rating_performance: "",
@@ -35,7 +35,8 @@ function isoToday() {
 
 export function MprPage() {
   const { token, fullName, role, isReadonly } = useAuth();
-  const canEdit = role === "contractor" && !isReadonly;
+  // MIS reports are daily: contractors and GMC Experts upload them; NHIPMPL views.
+  const canEdit = (role === "contractor" || role === "admin") && !isReadonly;
   const [allProjects, setProjects] = useState<Project[]>([]);
   const [allVendors, setVendors] = useState<Vendor[]>([]);
   const [allRows, setRows] = useState<MprReport[]>([]);
@@ -46,7 +47,16 @@ export function MprPage() {
   const { inScope } = usePackageScope();
   const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const vendors = useMemo(() => allVendors.filter((x) => x.project_id == null || inScope(x.project_id)), [allVendors, inScope]);
-  const rows = useMemo(() => allRows.filter((x) => inScope(x.project_id)), [allRows, inScope]);
+  const [dayFilter, setDayFilter] = useState("");
+  const [importInfo, setImportInfo] = useState<{ text: string; errors: string[] } | null>(null);
+  const rows = useMemo(
+    () =>
+      allRows
+        .filter((x) => inScope(x.project_id) && (!dayFilter || String(x.report_month).slice(0, 10) === dayFilter))
+        .sort((a, b) => String(b.report_month).localeCompare(String(a.report_month))),
+    [allRows, inScope, dayFilter]
+  );
+  const fmtDay = (d: unknown) => String(d || "").slice(0, 10).split("-").reverse().join(".");
   const [form, setForm] = useState(empty);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +85,7 @@ export function MprPage() {
     setMsg(null);
     try {
       await api.reviewMpr(token, r.id, { review_status: rv.status, review_remark: rv.remark });
-      setMsg("MSR review saved.");
+      setMsg("MIS report review saved.");
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not save review");
@@ -84,7 +94,7 @@ export function MprPage() {
     }
   };
 
-  // One MSR card per active project package (names come from Projects).
+  // One MIS folder card per active project package (names come from Projects).
   const packageProjects = useMemo(
     () => [...projects].sort((a, b) => a.id - b.id).map((p) => ({ name: p.name, project: p })),
     [projects]
@@ -121,17 +131,17 @@ export function MprPage() {
         setError(
           e instanceof Error
             ? `${e.message} — run NEON_SQL_FIX.sql for monthly_progress_reports if this persists.`
-            : "Failed to load MSR"
+            : "Failed to load MIS reports"
         );
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load MSR");
+      setError(e instanceof Error ? e.message : "Failed to load MIS reports");
     }
   };
 
   useEffect(() => {
     const el = document.getElementById("page-title");
-    if (el) el.textContent = "MSR — Monthly Status Report";
+    if (el) el.textContent = "MIS Report";
   }, []);
 
   useEffect(() => {
@@ -181,7 +191,7 @@ export function MprPage() {
       if (form.last_remarks.trim()) fd.append("last_remarks", form.last_remarks.trim());
       if (pdfFile) fd.append("pdf_file", pdfFile);
       await api.createMpr(token, fd);
-      setMsg("MSR saved and linked to the package MSR folder (PDF imported when provided).");
+      setMsg("MIS report saved and linked to the package MIS folder (PDF imported when provided).");
       setPdfFile(null);
       setForm((f) => ({
         ...empty,
@@ -205,7 +215,7 @@ export function MprPage() {
       <section className="panel">
         <h2>Daily &amp; Weekly reports</h2>
         <p className="muted">
-          Merged here with MSR — quick Excel downloads for today’s issues or the current week
+          Merged here with the MIS Report — quick Excel downloads for today’s issues or the current week
           (Monday–Sunday).
         </p>
         <div className="form-grid" style={{ marginBottom: "0.75rem" }}>
@@ -236,10 +246,10 @@ export function MprPage() {
       </section>
 
       <section className="panel">
-        <h2>Package folders (MSR)</h2>
+        <h2>Package folders (MIS Reports)</h2>
         <p className="muted">
-          Each corridor package has a Documents leaf folder: Civil Related → Project Documents → Monthly
-          Status Reports (MSR). Agency reports are interlinked with vendor profiles.
+          Each corridor package has a Documents leaf folder: Civil Related → Project Documents → MIS Reports.
+          Agency reports are interlinked with vendor profiles.
         </p>
         <div
           className="billing-status-grid"
@@ -260,7 +270,7 @@ export function MprPage() {
               }
             >
               <div>{projectShortName(pkg.project)}</div>
-              <strong style={{ fontSize: "0.95rem" }}>MSR folder</strong>
+              <strong style={{ fontSize: "0.95rem" }}>MIS folder</strong>
               <span style={{ opacity: 0.9 }}>
                 {`Project #${pkg.project.id}`}
               </span>
@@ -271,7 +281,7 @@ export function MprPage() {
 
       {canEdit ? (
         <section className="panel">
-          <h2>Fill Monthly Status Report</h2>
+          <h2>Add daily MIS report</h2>
           <form className="form-grid" onSubmit={onSubmit}>
             <ProjectSelect
               required
@@ -287,7 +297,7 @@ export function MprPage() {
               }}
             />
             <label>
-              Report month
+              Report date
               <input
                 type="date"
                 required
@@ -346,7 +356,7 @@ export function MprPage() {
               />
             </label>
             <label className="span-2">
-              Upload MSR PDF
+              Upload MIS report PDF
               <input
                 type="file"
                 accept="application/pdf,.pdf"
@@ -358,7 +368,7 @@ export function MprPage() {
             </label>
             <div className="span-2">
               <button className="btn" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Save MSR"}
+                {busy ? "Saving…" : "Save MIS report"}
               </button>
             </div>
           </form>
@@ -367,14 +377,110 @@ export function MprPage() {
 
       <section className="panel">
         {!canEdit ? (
-          <p className="muted">View only for GMC MIS Expert and NHIPMPL. Contractor fills the MSR.</p>
+          <p className="muted">View only for NHIPMPL. Contractors and GMC Experts upload the daily MIS reports.</p>
         ) : null}
-        <h2>Submitted MPRs</h2>
+        <div className="panel-head-row">
+          <h2>MIS reports</h2>
+          <div className="btn-row">
+            <label className="atms-upload-day">
+              Day
+              <input type="date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} />
+            </label>
+            {dayFilter ? (
+              <button type="button" className="btn ghost" onClick={() => setDayFilter("")}>
+                All days
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                const head = ["Date", "Package", "Vendor", "Physical Progress", "Financial Progress", "Rating / Performance",
+                  "Timely Execution", "Pending Activity", "Critical Observation", "Remarks", "Status"];
+                const lines = [head.map(cell).join(","), ...rows.map((r) => [
+                  fmtDay(r.report_month), r.package_name, allVendors.find((v) => v.id === r.vendor_id)?.name || "",
+                  r.physical_progress, r.financial_progress, r.rating_performance, r.timely_execution,
+                  r.pending_activity, r.critical_observation, r.last_remarks, r.review_status,
+                ].map(cell).join(","))];
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+                a.download = `MIS_report_${dayFilter || new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+              }}
+            >
+              Export to Excel
+            </button>
+            {canEdit ? (
+              <>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={async () => {
+                    if (!token) return;
+                    try {
+                      const blob = await api.downloadMisTemplate(token);
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = "mis_report_template.xlsx";
+                      a.click();
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "Download failed");
+                    }
+                  }}
+                >
+                  Excel template
+                </button>
+                <label className={`btn${busy ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
+                  {busy ? "Importing…" : "Import from Excel"}
+                  <input
+                    type="file"
+                    accept=".xlsx,.xlsm"
+                    hidden
+                    disabled={busy}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!token || !f) return;
+                      setBusy(true);
+                      setError(null);
+                      setImportInfo(null);
+                      try {
+                        const r = await api.importMis(token, f, projects.length === 1 ? projects[0].id : undefined);
+                        setImportInfo({
+                          text: `${r.added} added, ${r.updated} updated${r.error_count ? `, ${r.error_count} row(s) skipped` : ""}.`,
+                          errors: r.errors,
+                        });
+                        await load();
+                      } catch (err: unknown) {
+                        setError(err instanceof Error ? err.message : "Import failed");
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  />
+                </label>
+              </>
+            ) : null}
+          </div>
+        </div>
+        {importInfo ? (
+          <div className={importInfo.errors.length ? "error" : "ok"}>
+            <strong>Excel import:</strong> {importInfo.text}
+            {importInfo.errors.length ? (
+              <ul style={{ margin: "0.4rem 0 0" }}>
+                {importInfo.errors.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         <table className="data">
           <thead>
             <tr>
               <th>Package</th>
-              <th>Month</th>
+              <th>Date</th>
               <th>Vendor</th>
               <th>Physical</th>
               <th>Financial</th>
@@ -387,7 +493,7 @@ export function MprPage() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{r.package_name}</td>
-                <td>{String(r.report_month).slice(0, 10)}</td>
+                <td>{fmtDay(r.report_month)}</td>
                 <td>
                   {vendors.find((v) => v.id === r.vendor_id)?.name ||
                     (r.vendor_id ? `#${r.vendor_id}` : "—")}
@@ -404,7 +510,7 @@ export function MprPage() {
                       <span className="muted">—</span>
                     )}
                     {(canEdit || role === "admin") && !isReadonly ? (
-                      <label className="upload-icon-btn" title="Upload MSR PDF">
+                      <label className="upload-icon-btn" title="Upload MIS report PDF">
                         ⬆
                         <input
                           type="file"
@@ -417,7 +523,7 @@ export function MprPage() {
                             try {
                               await api.uploadMprPdf(token, r.id, file);
                               await load();
-                              setMsg("MSR PDF uploaded.");
+                              setMsg("MIS report PDF uploaded.");
                             } catch (err: unknown) {
                               setError(err instanceof Error ? err.message : "PDF upload failed");
                             }
@@ -492,7 +598,7 @@ export function MprPage() {
             {!rows.length ? (
               <tr>
                 <td colSpan={8} className="muted">
-                  No MSR submitted yet.
+                  {dayFilter ? `No MIS report for ${fmtDay(dayFilter)}.` : "No MIS report submitted yet."}
                 </td>
               </tr>
             ) : null}
