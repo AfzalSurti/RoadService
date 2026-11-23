@@ -315,15 +315,14 @@ async def sync_tracker(execute, project_id: int, orders: list[dict], items: list
             },
         )
         updated_orders += 1
-        have = {
-            no: iid
-            for iid, no in (
-                await execute(text("SELECT id, item_no FROM rate_items WHERE vendor_id = :v"), {"v": vid})
-            ).all()
-        }
-        seen = set()
+        # An item number can repeat within one work order (e.g. 1.1(b) at three locations):
+        # match the file's rows to the existing rows of that number in order.
+        have: dict[str, list[int]] = {}
+        for iid, no in (
+            await execute(text("SELECT id, item_no FROM rate_items WHERE vendor_id = :v ORDER BY id"), {"v": vid})
+        ).all():
+            have.setdefault(no, []).append(iid)
         for it in (i for i in items if i["wo"] == o["wo"]):
-            seen.add(it["item_no"])
             params = {
                 "p": project_id,
                 "v": vid,
@@ -336,8 +335,8 @@ async def sync_tracker(execute, project_id: int, orders: list[dict], items: list
                 "eq": it["done"],
                 "ea": round(it["done"] * it["rate"], 2),
             }
-            if it["item_no"] in have:
-                params["id"] = have[it["item_no"]]
+            if have.get(it["item_no"]):
+                params["id"] = have[it["item_no"]].pop(0)
                 await execute(
                     text(
                         "UPDATE rate_items SET description = :d, unit = :u, boq_quantity = :q, rate = :r, "
@@ -355,7 +354,7 @@ async def sync_tracker(execute, project_id: int, orders: list[dict], items: list
                     params,
                 )
             updated_items += 1
-        gone = [iid for no, iid in have.items() if no not in seen]
+        gone = [iid for ids in have.values() for iid in ids]
         if gone:
             await execute(text("DELETE FROM quantity_entries WHERE rate_item_id = ANY(:ids)"), {"ids": gone})
             await execute(text("DELETE FROM rate_items WHERE id = ANY(:ids)"), {"ids": gone})
