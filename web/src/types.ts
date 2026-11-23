@@ -396,6 +396,7 @@ export type StaffMeta = {
   my_organization: string | null;
   my_organization_label: string;
   can_add: boolean;
+  can_add_any?: boolean;
   organizations: { id: string; label: string }[];
 };
 

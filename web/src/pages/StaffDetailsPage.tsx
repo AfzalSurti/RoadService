@@ -11,7 +11,10 @@ const empty = {
   mobile_no: "",
   alternate_mobile_no: "",
   email_id: "",
+  organization: "",
 };
+
+const ORG_NAMES: Record<string, string> = { gmc: "GMC", nhimpl: "NHIPMPL", contractor: "Contractor" };
 
 const words = (text: string) =>
   text
@@ -67,6 +70,9 @@ export function StaffDetailsPage() {
   }, [rows, projects]);
 
   const canManage = Boolean(meta?.can_add) && !isReadonly;
+  // GMC Experts maintain all three sections and can upload one Excel for everyone.
+  const canAll = Boolean(meta?.can_add_any) && !isReadonly;
+  const [importInfo, setImportInfo] = useState<{ text: string; errors: string[] } | null>(null);
 
   const grouped = useMemo(() => {
     const map = new Map<string, OrgStaffDetail[]>();
@@ -110,9 +116,9 @@ export function StaffDetailsPage() {
       .catch(() => setProjects([]));
   }, [token]);
 
-  const openCreate = () => {
+  const openCreate = (org = "") => {
     setEditId(null);
-    setForm(empty);
+    setForm({ ...empty, organization: org || meta?.my_organization || "" });
     setShowForm(true);
     setMsg(null);
   };
@@ -128,6 +134,7 @@ export function StaffDetailsPage() {
       mobile_no: row.mobile_no,
       alternate_mobile_no: row.alternate_mobile_no || "",
       email_id: row.email_id,
+      organization: row.organization,
     });
     setShowForm(true);
     setMsg(null);
@@ -147,6 +154,7 @@ export function StaffDetailsPage() {
       mobile_no: form.mobile_no.trim(),
       alternate_mobile_no: form.alternate_mobile_no.trim() || undefined,
       email_id: form.email_id.trim(),
+      organization: canAll ? form.organization || undefined : undefined,
     };
     try {
       if (editId) await api.updateStaffDetail(token, editId, body);
@@ -185,12 +193,74 @@ export function StaffDetailsPage() {
               {meta?.my_organization_label ? ` (${meta.my_organization_label})` : ""}.
             </p>
           </div>
-          {canManage ? (
-            <button className="btn" type="button" onClick={openCreate}>
+          {canAll ? (
+            <div className="btn-row">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={async () => {
+                  if (!token) return;
+                  try {
+                    const blob = await api.downloadStaffTemplate(token);
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = "staff_details_template.xlsx";
+                    a.click();
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : "Download failed");
+                  }
+                }}
+              >
+                Download Excel template
+              </button>
+              <label className={`btn${busy ? " disabled" : ""}`} style={{ cursor: "pointer" }}>
+                {busy ? "Uploading…" : "Upload Excel (all staff)"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xlsm"
+                  hidden
+                  disabled={busy}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!token || !f) return;
+                    setBusy(true);
+                    setError(null);
+                    setImportInfo(null);
+                    try {
+                      const r = await api.importStaff(token, f);
+                      setImportInfo({
+                        text: `${r.added} added, ${r.updated} updated${r.error_count ? `, ${r.error_count} row(s) skipped` : ""}.`,
+                        errors: r.errors,
+                      });
+                      await load();
+                    } catch (err: unknown) {
+                      setError(err instanceof Error ? err.message : "Upload failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          ) : canManage ? (
+            <button className="btn" type="button" onClick={() => openCreate()}>
               Add {orgTitle.split("—")[0].trim()} staff
             </button>
           ) : null}
         </div>
+        {importInfo ? (
+          <div className={importInfo.errors.length ? "error" : "ok"} style={{ marginTop: "0.75rem" }}>
+            <strong>Excel upload:</strong> {importInfo.text}
+            {importInfo.errors.length ? (
+              <ul style={{ margin: "0.4rem 0 0" }}>
+                {importInfo.errors.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         <label style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
           Filter organisation
@@ -213,7 +283,14 @@ export function StaffDetailsPage() {
         if (filterOrg && filterOrg !== orgKey) return null;
         return (
           <section className="panel" key={orgKey}>
-            <h2>{label}</h2>
+            <div className="panel-head-row">
+              <h2>{label}</h2>
+              {canAll || (canManage && meta?.my_organization === orgKey) ? (
+                <button className="btn" type="button" onClick={() => openCreate(orgKey)}>
+                  + Add {ORG_NAMES[orgKey]} staff
+                </button>
+              ) : null}
+            </div>
             <div className="table-scroll">
               <table className="data">
                 <thead>
@@ -280,10 +357,29 @@ export function StaffDetailsPage() {
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onSave}>
             <h2>{editId ? "Edit staff detail" : "Add staff detail"}</h2>
-            <p className="muted">
-              Saving under: <strong>{meta?.my_organization_label || orgTitle}</strong>
-            </p>
+            {canAll ? null : (
+              <p className="muted">
+                Saving under: <strong>{meta?.my_organization_label || orgTitle}</strong>
+              </p>
+            )}
             <div className="form-grid">
+              {canAll ? (
+                <label className="span-2">
+                  Organisation *
+                  <select
+                    required
+                    value={form.organization}
+                    onChange={(e) => setForm({ ...form, organization: e.target.value })}
+                  >
+                    <option value="">Choose…</option>
+                    {(meta?.organizations || []).map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="span-2">
                 Project Name *
                 <input

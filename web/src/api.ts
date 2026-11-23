@@ -812,6 +812,7 @@ export const api = {
       mobile_no: string;
       alternate_mobile_no?: string;
       email_id: string;
+      organization?: string;
     }
   ) =>
     request<OrgStaffDetail>("/api/v1/staff-details", {
@@ -831,6 +832,7 @@ export const api = {
       mobile_no: string;
       alternate_mobile_no?: string;
       email_id: string;
+      organization?: string;
     }
   ) =>
     request<OrgStaffDetail>(`/api/v1/staff-details/${id}`, {
@@ -838,6 +840,23 @@ export const api = {
       token,
       body: JSON.stringify(body),
     }),
+
+  /** GMC Experts: Excel template for GMC, NHIPMPL and Contractor staff. */
+  downloadStaffTemplate: async (token: string) => {
+    const res = await fetch(`${API_URL}/api/v1/staff-details/template`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new ApiError("Could not download the template", res.status);
+    return res.blob();
+  },
+
+  /** GMC Experts: upload all staff (three sections) from one Excel file. */
+  importStaff: (token: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ added: number; updated: number; errors: string[]; error_count: number }>(
+      "/api/v1/staff-details/import",
+      { method: "POST", token, body: fd }
+    );
+  },
 
   deleteStaffDetail: (token: string, id: number) =>
     request<{ ok: boolean }>(`/api/v1/staff-details/${id}`, { method: "DELETE", token }),
