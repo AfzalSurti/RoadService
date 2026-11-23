@@ -13,7 +13,10 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    # None = consolidated GMC bill covering all packages.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     transaction_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     invoice_no: Mapped[str] = mapped_column(String(64), nullable=False)
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False)

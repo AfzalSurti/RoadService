@@ -455,7 +455,7 @@ class InvoiceAction(BaseModel):
 class InvoiceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    project_id: int
+    project_id: int | None = None
     transaction_id: str
     invoice_no: str
     invoice_date: date

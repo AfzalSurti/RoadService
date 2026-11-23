@@ -22,6 +22,7 @@ from app.schemas import (
     InvoiceSummaryUpdate,
 )
 from app.services.invoice_summary import default_summary, dumps_summary, loads_summary
+from app.services.audit import write_audit
 from app.services.issue_service import notify
 from app.services.storage import save_upload
 
@@ -182,7 +183,7 @@ async def create_invoice(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    count = (await db.execute(select(func.count(Invoice.id)))).scalar_one() + 1
+    count = (await db.execute(select(func.coalesce(func.max(Invoice.id), 0)))).scalar_one() + 1
     txn = f"RS/{project.id:04d}/{count:05d}"
     summary = dumps_summary(body.summary) if body.summary is not None else dumps_summary(default_summary())
     parsed = loads_summary(summary)
@@ -462,9 +463,9 @@ def _require_pdf(file: UploadFile) -> None:
 async def create_invoice_claim(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.GOVERNMENT, UserRole.CONTRACTOR))],
-    project_id: Annotated[int, Form()],
     invoice_no: Annotated[str, Form()],
     invoice_date: Annotated[str, Form()],
+    project_id: Annotated[int | None, Form()] = None,
     payment_type: Annotated[str, Form()] = "Stage Payment Statement for Works",
     this_bill_amount: Annotated[float, Form()] = 0,
     cumulative_amount: Annotated[float, Form()] = 0,
@@ -473,10 +474,18 @@ async def create_invoice_claim(
     bill_to: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
     bill_pdf: UploadFile | None = File(None),
+    # GMC Experts entering a contractor's bill on Contractor Billing: the vendor / contractor name.
+    contractor_name: Annotated[str | None, Form()] = None,
 ):
-    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # GMC bills (GMC Experts / NHIPMPL) are one consolidated bill for all packages;
+    # contractor bills stay package-wise.
+    project = None
+    if project_id is not None:
+        project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    elif user.role == UserRole.CONTRACTOR:
+        raise HTTPException(status_code=400, detail="Select the project / package for this bill")
     if contract_amount_cr is not None and cumulative_amount is not None:
         if float(cumulative_amount) > float(contract_amount_cr):
             raise HTTPException(
@@ -484,8 +493,8 @@ async def create_invoice_claim(
                 detail="Cumulative Payment cannot exceed Contract Amount",
             )
     amount = this_bill_amount or 0.01
-    count = (await db.execute(select(func.count(Invoice.id)))).scalar_one() + 1
-    txn = f"RS/{project.id:04d}/{count:05d}"
+    count = (await db.execute(select(func.coalesce(func.max(Invoice.id), 0)))).scalar_one() + 1
+    txn = f"RS/{project.id:04d}/{count:05d}" if project else f"RS/ALL/{count:05d}"
     pdf_path = None
     if bill_pdf and bill_pdf.filename:
         _require_pdf(bill_pdf)
@@ -504,13 +513,15 @@ async def create_invoice_claim(
         bill_from=date.fromisoformat(bill_from[:10]) if bill_from else None,
         bill_to=date.fromisoformat(bill_to[:10]) if bill_to else None,
         invoice_pdf_path=pdf_path,
-        contractor_name=user.full_name,
-        project_title=project.name,
-        piu=project.location or "NHIPMPL HQ",
+        contractor_name=(contractor_name or "").strip()[:255] if contractor_name and user.role == UserRole.ADMIN
+        else user.full_name,
+        project_title=project.name if project else "All packages (consolidated GMC bill)",
+        piu=(project.location if project else None) or "NHIPMPL HQ",
         status=InvoiceStatus.SUBMITTED,
         status_detail=_status_detail(InvoiceStatus.SUBMITTED),
         submitted_by_id=user.id,
-        submitted_by_role=user.role.value,
+        # A contractor bill entered by GMC still belongs to Contractor Billing.
+        submitted_by_role="contractor" if (contractor_name and user.role == UserRole.ADMIN) else user.role.value,
         gmc_review_status="pending" if user.role == UserRole.CONTRACTOR else "approved",
         notes=notes,
     )
@@ -521,6 +532,98 @@ async def create_invoice_claim(
     await _add_activity(db, inv, user, "submitted", notes or "Invoice submitted")
     await db.commit()
     return _out(await _load(db, inv.id))
+
+
+@router.patch("/invoices/{invoice_id}", response_model=InvoiceOut)
+async def edit_invoice(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+    invoice_no: Annotated[str | None, Form()] = None,
+    invoice_date: Annotated[str | None, Form()] = None,
+    payment_type: Annotated[str | None, Form()] = None,
+    this_bill_amount: Annotated[float | None, Form()] = None,
+    cumulative_amount: Annotated[float | None, Form()] = None,
+    contract_amount_cr: Annotated[float | None, Form()] = None,
+    bill_from: Annotated[str | None, Form()] = None,
+    bill_to: Annotated[str | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+    contractor_name: Annotated[str | None, Form()] = None,
+    project_id: Annotated[int | None, Form()] = None,
+    bill_pdf: UploadFile | None = File(None),
+):
+    """Edit a bill. GMC Experts: any bill. Contractors: their own bill while it is still with GMC
+    (submitted, or sent back for clarification)."""
+    inv = await _load(db, invoice_id)
+    if user.role == UserRole.CONTRACTOR and (
+        inv.submitted_by_id != user.id or inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION)
+    ):
+        raise HTTPException(status_code=403, detail="You can edit only your own bills that are not yet processed")
+    changes = []
+    if invoice_no is not None and invoice_no.strip():
+        inv.invoice_no = invoice_no.strip()
+        changes.append("invoice no.")
+    if invoice_date:
+        inv.invoice_date = date.fromisoformat(invoice_date[:10])
+        changes.append("invoice date")
+    if payment_type:
+        inv.payment_type = payment_type.strip()
+    if this_bill_amount is not None:
+        inv.this_bill_amount = _dec(this_bill_amount)
+        inv.amount = _dec(this_bill_amount or 0.01)
+        changes.append("amount")
+    if cumulative_amount is not None:
+        inv.cumulative_amount = _dec(cumulative_amount)
+    if contract_amount_cr is not None:
+        inv.contract_amount_cr = _dec(contract_amount_cr)
+    if (inv.contract_amount_cr is not None and inv.cumulative_amount is not None
+            and float(inv.cumulative_amount) > float(inv.contract_amount_cr)):
+        raise HTTPException(status_code=400, detail="Cumulative Payment cannot exceed Contract Amount")
+    if bill_from is not None:
+        inv.bill_from = date.fromisoformat(bill_from[:10]) if bill_from else None
+    if bill_to is not None:
+        inv.bill_to = date.fromisoformat(bill_to[:10]) if bill_to else None
+    if notes is not None:
+        inv.notes = notes.strip() or None
+    if contractor_name and user.role == UserRole.ADMIN:
+        inv.contractor_name = contractor_name.strip()[:255]
+        changes.append("contractor")
+    if project_id is not None and inv.project_id is not None:
+        project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        inv.project_id = project.id
+        inv.project_title = project.name
+    if bill_pdf and bill_pdf.filename:
+        _require_pdf(bill_pdf)
+        inv.invoice_pdf_path = await save_upload(bill_pdf, "invoice_bill")
+        changes.append("invoice PDF")
+    await _add_activity(db, inv, user, "edited", "Edited: " + (", ".join(changes) or "details"))
+    await db.commit()
+    return _out(await _load(db, inv.id))
+
+
+@router.delete("/invoices/{invoice_id}")
+async def delete_invoice(
+    invoice_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN, UserRole.CONTRACTOR))],
+):
+    """Delete a bill entered by mistake. GMC Experts: any bill. Contractors: their own bill while
+    it is still with GMC."""
+    from sqlalchemy import text
+
+    inv = await _load(db, invoice_id)
+    if user.role == UserRole.CONTRACTOR and (
+        inv.submitted_by_id != user.id or inv.status not in (InvoiceStatus.SUBMITTED, InvoiceStatus.CLARIFICATION)
+    ):
+        raise HTTPException(status_code=403, detail="You can delete only your own bills that are not yet processed")
+    await write_audit(db, actor_id=user.id, action="invoice_deleted", entity_type="invoice", entity_id=str(inv.id),
+                      detail=f"{inv.transaction_id} ({inv.contractor_name or ''}) deleted by {user.full_name}")
+    await db.execute(text("DELETE FROM invoice_activities WHERE invoice_id = :i"), {"i": inv.id})
+    await db.execute(text("DELETE FROM invoices WHERE id = :i"), {"i": inv.id})
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/invoices/{invoice_id}/recommendation-doc", response_model=InvoiceOut)

@@ -212,7 +212,8 @@ export type InvoiceActivity = {
 
 export type Invoice = {
   id: number;
-  project_id: number;
+  /** null = consolidated GMC bill (all packages) */
+  project_id: number | null;
   transaction_id: string;
   invoice_no: string;
   invoice_date: string;

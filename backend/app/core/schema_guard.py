@@ -453,6 +453,8 @@ async def ensure_schema() -> None:
             await conn.execute(text("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS image_url VARCHAR(1024)"))
             await conn.execute(text("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS extension_of_time VARCHAR(128)"))
+            # GMC bills are consolidated across all packages: they have no single package.
+            await conn.execute(text("ALTER TABLE invoices ALTER COLUMN project_id DROP NOT NULL"))
             for col, typ in VENDOR_CONTACT_COLUMNS:
                 await conn.execute(text(f"ALTER TABLE vendors ADD COLUMN IF NOT EXISTS {col} {typ}"))
             # Vendors imported from the WO/PO trackers carry "Contact: ..." in remarks.

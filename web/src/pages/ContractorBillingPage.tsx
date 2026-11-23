@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { formatLabel } from "../components/StatusBadge";
-import type { Invoice, Project } from "../types";
+import type { Invoice, Project, Vendor } from "../types";
 import { usePackageScope } from "../lib/projectScope";
 
 const PAYMENT_TYPES = [
@@ -55,7 +55,9 @@ function netAmountReleased(inv: Invoice) {
 
 export function ContractorBillingPage() {
   const { token, fullName, role, isReadonly } = useAuth();
-  const canEdit = role === "contractor" && !isReadonly;
+  // Contractors submit their own bills; GMC Experts can also enter a bill for a contractor.
+  const canEdit = (role === "contractor" || role === "admin") && !isReadonly;
+  const isGmc = role === "admin";
   const canReview = role === "admin" && !isReadonly;
 
   const [allProjects, setProjects] = useState<Project[]>([]);
@@ -63,7 +65,14 @@ export function ContractorBillingPage() {
   // Sidebar package scope: only the chosen packages' rows are shown.
   const { inScope } = usePackageScope();
   const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
-  const invoices = useMemo(() => allInvoices.filter((x) => inScope(x.project_id)), [allInvoices, inScope]);
+  // Contractor bills only (GMC's own consolidated bills are on GMC Billing).
+  const invoices = useMemo(
+    () => allInvoices.filter((x) => x.submitted_by_role === "contractor" && inScope(x.project_id)),
+    [allInvoices, inScope]
+  );
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [contractorName, setContractorName] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -94,6 +103,7 @@ export function ContractorBillingPage() {
     if (!token) return;
     try {
       const [inv, proj] = await Promise.all([api.invoices(token), api.projects(token)]);
+      if (role === "admin") api.vendors(token).then(setVendors).catch(() => setVendors([]));
       setInvoices(inv);
       setProjects(proj);
       if (!projectId && proj[0]) setProjectId(String(proj[0].id));
@@ -110,7 +120,8 @@ export function ContractorBillingPage() {
     void load();
   }, [token]);
 
-  const projectName = (id: number) => projects.find((p) => p.id === id)?.name || `#${id}`;
+  const projectName = (id: number | null) =>
+    id == null ? "All packages (consolidated)" : projects.find((p) => p.id === id)?.name || `#${id}`;
 
   const counts = useMemo(
     () => ({
@@ -144,6 +155,10 @@ export function ContractorBillingPage() {
       setError("Project, invoice no and Invoice Absolute Amount are required");
       return;
     }
+    if (isGmc && !contractorName.trim()) {
+      setError("Choose the contractor / vendor this bill belongs to");
+      return;
+    }
     const contractN = Number(contractAmount);
     const cumulativeN = Number(cumulative || thisBill);
     if (contractAmount && Number.isFinite(contractN) && Number.isFinite(cumulativeN) && cumulativeN > contractN) {
@@ -167,9 +182,21 @@ export function ContractorBillingPage() {
       if (billTo) fd.append("bill_to", billTo);
       if (notes.trim()) fd.append("notes", notes.trim());
       if (pdf) fd.append("bill_pdf", pdf);
-      const created = await api.createInvoiceClaim(token, fd);
-      setMsg(`Invoice ${created.transaction_id} submitted — awaiting GMC MIS Expert review.`);
+      if (isGmc) fd.append("contractor_name", contractorName.trim());
+      if (editingId) {
+        const saved = await api.updateInvoice(token, editingId, fd);
+        setMsg(`Invoice ${saved.transaction_id} updated.`);
+      } else {
+        const created = await api.createInvoiceClaim(token, fd);
+        setMsg(
+          isGmc
+            ? `Invoice ${created.transaction_id} recorded for ${contractorName}.`
+            : `Invoice ${created.transaction_id} submitted — awaiting GMC MIS Expert review.`
+        );
+      }
       setShowCreate(false);
+      setEditingId(null);
+      setContractorName("");
       setInvoiceNo("");
       setThisBill("");
       setCumulative("");
@@ -283,7 +310,15 @@ export function ContractorBillingPage() {
         </div>
         <div className="btn-row">
           {canEdit ? (
-            <button className="btn" type="button" onClick={() => setShowCreate(true)}>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setContractorName("");
+                setShowCreate(true);
+              }}
+            >
               New
             </button>
           ) : null}
@@ -416,6 +451,53 @@ export function ContractorBillingPage() {
                       >
                         View ▾
                       </button>
+                      {canEdit && (isGmc || inv.status === "submitted" || inv.status === "clarification") ? (
+                        <div className="btn-row" style={{ marginTop: "0.35rem", flexWrap: "nowrap" }}>
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            onClick={() => {
+                              setEditingId(inv.id);
+                              setProjectId(inv.project_id != null ? String(inv.project_id) : "");
+                              setInvoiceNo(inv.invoice_no || "");
+                              setInvoiceDate(String(inv.invoice_date || "").slice(0, 10));
+                              setPaymentType(inv.payment_type || PAYMENT_TYPES[0]);
+                              setThisBill(String(inv.this_bill_amount ?? inv.amount ?? ""));
+                              setCumulative(String(inv.cumulative_amount ?? ""));
+                              setContractAmount(inv.contract_amount_cr != null ? String(inv.contract_amount_cr) : "");
+                              setBillFrom(String(inv.bill_from || "").slice(0, 10));
+                              setBillTo(String(inv.bill_to || "").slice(0, 10));
+                              setNotes(inv.notes || "");
+                              setPdf(null);
+                              setContractorName(inv.contractor_name || "");
+                              setShowCreate(true);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn danger"
+                            disabled={busy}
+                            onClick={async () => {
+                              if (!token || !window.confirm(`Delete bill ${inv.transaction_id} (${inv.contractor_name || ""})? This cannot be undone.`))
+                                return;
+                              setBusy(true);
+                              try {
+                                await api.deleteInvoice(token, inv.id);
+                                setMsg(`Bill ${inv.transaction_id} deleted.`);
+                                await load();
+                              } catch (err: unknown) {
+                                setError(err instanceof Error ? err.message : "Delete failed");
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
                     </td>
                     <td>
                       <span className={`badge gmc-${gmc}`}>
@@ -578,7 +660,7 @@ export function ContractorBillingPage() {
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onSubmit} style={{ maxWidth: 920 }}>
             <div className="panel-head-row">
-              <h2>Contractor Billing — New claim</h2>
+              <h2>{editingId ? "Contractor Billing — Edit bill" : "Contractor Billing — New claim"}</h2>
               <button type="button" className="btn ghost" onClick={() => setShowCreate(false)}>
                 Back to Grid
               </button>
@@ -590,10 +672,28 @@ export function ContractorBillingPage() {
             <div className="soi-header">
               <div>
                 <strong>Invoice claim</strong>
-                <div className="muted">{fullName}</div>
+                <div className="muted">{isGmc ? contractorName || "Choose the contractor below" : fullName}</div>
               </div>
             </div>
             <div className="form-grid">
+              {isGmc ? (
+                <label>
+                  Contractor / vendor *
+                  <select value={contractorName} onChange={(e) => setContractorName(e.target.value)} required>
+                    <option value="">Select…</option>
+                    {[...new Set(vendors.filter((v) => !projectId || String(v.project_id) === projectId).map((v) => v.name))]
+                      .sort((a, b) => a.localeCompare(b))
+                      .map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    {contractorName && !vendors.some((v) => v.name === contractorName) ? (
+                      <option value={contractorName}>{contractorName}</option>
+                    ) : null}
+                  </select>
+                </label>
+              ) : null}
               <label>
                 Project / Package
                 <select value={projectId} onChange={(e) => setProjectId(e.target.value)} required>

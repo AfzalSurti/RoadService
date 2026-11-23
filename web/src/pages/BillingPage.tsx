@@ -53,7 +53,15 @@ export function BillingPage() {
   const [allProjects, setProjects] = useState<Project[]>([]);
   // Sidebar package scope: only the chosen packages' rows are shown.
   const { inScope } = usePackageScope();
-  const invoices = useMemo(() => allInvoices.filter((x) => inScope(x.project_id)), [allInvoices, inScope]);
+  // Consolidated GMC bills (no package) show whatever packages are chosen in the sidebar.
+  const invoices = useMemo(
+    () =>
+      allInvoices.filter(
+        // GMC's own bills only; contractor bills live on Contractor Billing.
+        (x) => x.submitted_by_role !== "contractor" && (x.project_id == null || inScope(x.project_id))
+      ),
+    [allInvoices, inScope]
+  );
   const projects = useMemo(() => allProjects.filter((x) => inScope(x.id)), [allProjects, inScope]);
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,10 +203,6 @@ export function BillingPage() {
   const onCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !canUpload) return;
-    if (!form.project_id) {
-      setError("Select a project / package");
-      return;
-    }
     if (!form.payment_type) {
       setError("Select payment type");
       return;
@@ -222,7 +226,6 @@ export function BillingPage() {
     setError(null);
     try {
       const fd = new FormData();
-      fd.append("project_id", form.project_id);
       fd.append("invoice_no", form.invoice_no.trim() || "NA");
       fd.append("invoice_date", form.invoice_date);
       fd.append("payment_type", form.payment_type);
@@ -820,12 +823,10 @@ export function BillingPage() {
               &quot;Not Applicable&quot;.
             </p>
             <div className="form-grid">
-              <ProjectSelect
-                required
-                label="Project / Package"
-                value={form.project_id}
-                onChange={(id) => setForm({ ...form, project_id: id })}
-              />
+              <label>
+                Packages covered
+                <input readOnly value="All packages (consolidated GMC bill)" />
+              </label>
               <label>
                 Contract Amount (Rs. in Cr.)
                 <input

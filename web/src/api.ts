@@ -640,6 +640,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** Edit a bill (GMC Experts: any; contractors: own bill still with GMC). */
+  updateInvoice: (token: string, id: number, form: FormData) =>
+    request<Invoice>(`/api/v1/billing/invoices/${id}`, { method: "PATCH", token, body: form }),
+
+  deleteInvoice: (token: string, id: number) =>
+    request<{ ok: boolean }>(`/api/v1/billing/invoices/${id}`, { method: "DELETE", token }),
+
   createInvoiceClaim: (token: string, form: FormData) =>
     request<Invoice>("/api/v1/billing/invoices/claim", { method: "POST", token, body: form }),
 
