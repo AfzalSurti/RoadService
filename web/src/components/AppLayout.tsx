@@ -10,6 +10,8 @@ import { NavGroup } from "./NavGroup";
 import { PackageScopePicker } from "./PackageScopePicker";
 import { TableFilters } from "./TableFilters";
 import { UpdateBanner } from "./UpdateBanner";
+import { AccountMenu } from "./AccountMenu";
+import { PasswordModal } from "./PasswordModal";
 import { usePackageScope, withProjectQuery } from "../lib/projectScope";
 import { roleLabel } from "../lib/roles";
 import type { Project } from "../types";
@@ -20,6 +22,7 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
+  const [pwOpen, setPwOpen] = useState(false);
   const staff = role === "admin" || role === "contractor" || role === "government";
   const adminGov = role === "admin" || role === "government";
   const billingRoles = role === "admin" || role === "government" || role === "contractor";
@@ -157,43 +160,21 @@ export function AppLayout() {
           </NavGroup>
         </nav>
         <div className="sidebar-foot">
-          <button
-            className="linkish"
-            type="button"
-            onClick={async () => {
-              if (!token) return;
-              const current = window.prompt("Current password:");
-              if (current == null) return;
-              const next = window.prompt("New password (at least 8 characters):");
-              if (next == null) return;
-              if (next.trim().length < 8) {
-                window.alert("New password must be at least 8 characters.");
-                return;
-              }
-              if (window.prompt("Type the new password again:") !== next) {
-                window.alert("The two passwords do not match.");
-                return;
-              }
-              try {
-                await api.changePassword(token, current, next.trim());
-                window.alert("Password changed. Use the new password next time you sign in.");
-              } catch (e: unknown) {
-                window.alert(e instanceof Error ? e.message : "Password change failed");
-              }
-            }}
-          >
+          <button className="linkish" type="button" onClick={() => setPwOpen(true)}>
             Change password
           </button>
           <button
             className="linkish"
             type="button"
             onClick={() => {
+              if (!window.confirm("Log out of RoadService?")) return;
               logout();
-              navigate("/");
+              navigate("/login");
             }}
           >
-            Sign out
+            Log out
           </button>
+          {pwOpen ? <PasswordModal mode="self" onClose={() => setPwOpen(false)} /> : null}
         </div>
       </aside>
       <main className="main">
@@ -203,15 +184,21 @@ export function AppLayout() {
           <GlobalSearch />
           <DeveloperCredit className="navbar" />
           <div className="topbar-actions">
-            <div className="topbar-user">
-              <span className="topbar-name">{fullName}</span>
-              <small>{roleLabel(role)}</small>
-            </div>
             <button className="theme-toggle" type="button" onClick={toggleTheme}>
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </button>
             {isReadonly ? <span className="badge view-only">View only</span> : null}
-            {unread ? <span className="badge status-verification_pending">{unread} new</span> : null}
+            {unread ? (
+              <button
+                type="button"
+                className="badge status-verification_pending badge-btn"
+                onClick={() => navigate("/notifications")}
+                title="Open notifications"
+              >
+                {unread} new
+              </button>
+            ) : null}
+            <AccountMenu />
           </div>
         </div>
         <div className="main-scroll">

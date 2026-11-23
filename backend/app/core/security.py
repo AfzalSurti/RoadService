@@ -71,3 +71,15 @@ async def require_write_access(user: Annotated[User, Depends(get_current_user)])
             detail="Government role is read-only",
         )
     return user
+
+
+def password_problem(password: str) -> str | None:
+    """The portal's password rule (same as the web form): at least 8 characters, with at least
+    one letter and one number, and no spaces at the start or end. Returns the problem, or None."""
+    if password != password.strip():
+        return "Password must not start or end with a space"
+    if len(password) < 8:
+        return "Password must be at least 8 characters"
+    if not any(c.isalpha() for c in password) or not any(c.isdigit() for c in password):
+        return "Password must contain at least one letter and one number"
+    return None

@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_user, hash_password, require_roles
+from app.core.security import get_current_user, hash_password, password_problem, require_roles
+from app.services.audit import write_audit
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas import UserCreate, UserOut, UserUpdate
@@ -57,7 +58,7 @@ async def update_user(
     user_id: int,
     body: UserUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+    admin: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -65,7 +66,13 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
     data = body.model_dump(exclude_unset=True)
     if "password" in data:
-        user.hashed_password = hash_password(data.pop("password"))
+        new = data.pop("password") or ""
+        problem = password_problem(new)
+        if problem:
+            raise HTTPException(status_code=400, detail=problem)
+        user.hashed_password = hash_password(new)
+        await write_audit(db, actor_id=admin.id, action="password_reset", entity_type="user",
+                          entity_id=str(user.id), detail=f"Password reset for {user.email} by {admin.full_name}")
     for key, value in data.items():
         setattr(user, key, value)
     await db.commit()

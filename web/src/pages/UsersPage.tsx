@@ -1,3 +1,4 @@
+import { PasswordModal } from "../components/PasswordModal";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -15,6 +16,7 @@ const emptyForm = {
 };
 
 export function UsersPage() {
+  const [resetFor, setResetFor] = useState<{ id: number; full_name: string; email: string } | null>(null);
   const { token, isReadonly } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -219,25 +221,7 @@ export function UsersPage() {
                     </button>
                   ) : null}
                   {!isReadonly ? (
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      onClick={async () => {
-                        if (!token) return;
-                        const pw = window.prompt(`New password for ${u.full_name} (${u.email}) — at least 8 characters:`);
-                        if (pw == null) return;
-                        if (pw.trim().length < 8) {
-                          window.alert("Password must be at least 8 characters.");
-                          return;
-                        }
-                        try {
-                          await api.updateUser(token, u.id, { password: pw.trim() });
-                          window.alert(`Password reset for ${u.email}. Share the new password with them securely.`);
-                        } catch (e: unknown) {
-                          window.alert(e instanceof Error ? e.message : "Password reset failed");
-                        }
-                      }}
-                    >
+                    <button className="btn ghost" type="button" onClick={() => setResetFor(u)}>
                       Reset password
                     </button>
                   ) : null}
@@ -247,6 +231,14 @@ export function UsersPage() {
           </tbody>
         </table>
       </section>
+      {resetFor ? (
+        <PasswordModal
+          mode="reset"
+          userId={resetFor.id}
+          userLabel={`${resetFor.full_name} (${resetFor.email})`}
+          onClose={() => setResetFor(null)}
+        />
+      ) : null}
     </>
   );
 }
