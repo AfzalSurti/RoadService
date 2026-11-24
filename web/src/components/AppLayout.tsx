@@ -133,7 +133,6 @@ export function AppLayout() {
               "/projects",
               "/rates",
               "/users",
-              "/integrations",
               "/backup-dr",
             ]}
           >
@@ -155,7 +154,6 @@ export function AppLayout() {
               </>
             ) : null}
             {role === "admin" ? <NavLink to="/users">Users</NavLink> : null}
-            {adminGov ? <NavLink to="/integrations">Integrations</NavLink> : null}
             {adminGov ? <NavLink to="/backup-dr">Backup/DR</NavLink> : null}
           </NavGroup>
         </nav>

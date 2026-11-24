@@ -18,7 +18,6 @@ import {
   AttendancePage,
   BackupDrPage,
   HighwayIncidentsPage,
-  IntegrationsPage,
   SecurityPage,
   TollPage,
 } from "./pages/NhitPages";
@@ -202,14 +201,7 @@ export default function App() {
             </StaffPortal>
           }
         />
-        <Route
-          path="/integrations"
-          element={
-            <AdminOrGov>
-              <IntegrationsPage />
-            </AdminOrGov>
-          }
-        />
+        <Route path="/integrations" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/backup-dr"
           element={
