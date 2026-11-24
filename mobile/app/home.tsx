@@ -124,6 +124,9 @@ function FieldHome({ role }: { role: "surveyor" | "contractor" }) {
             <View style={dash.avatar}>
               <Text style={{ fontSize: 22 }}>👤</Text>
             </View>
+            <Pressable onPress={() => router.push("/change-password" as any)}>
+              <Text style={dash.signOut}>Password</Text>
+            </Pressable>
             <Pressable
               onPress={async () => {
                 await logout();
@@ -245,6 +248,9 @@ export default function HomeScreen() {
             <Text style={[styles.link, { color: colors.primary }]}>
               {mode === "dark" ? "Light" : "Dark"}
             </Text>
+          </Pressable>
+          <Pressable onPress={() => router.push("/change-password" as any)}>
+            <Text style={[styles.link, { color: colors.primary }]}>Password</Text>
           </Pressable>
           <Pressable
             onPress={async () => {

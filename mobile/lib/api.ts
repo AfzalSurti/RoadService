@@ -197,6 +197,13 @@ async function request<T>(
 }
 
 export const api = {
+  /** Change my own password (current password required). */
+  changePassword: (token: string, currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/api/v1/auth/change-password", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
   login: (email: string, password: string) =>
     request<TokenResponse>("/api/v1/auth/login/json", {
       method: "POST",
