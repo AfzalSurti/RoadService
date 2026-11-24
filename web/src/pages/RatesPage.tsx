@@ -3,6 +3,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { BoqBillModal } from "../components/BoqBillModal";
 import { RaBillModal } from "../components/RaBillModal";
+import { BILL_DETAIL_LABELS, BillDetailsFields, type BillDetails } from "../components/BillDetailsFields";
 import { ProjectSelect } from "../components/ProjectSelect";
 import type { RateItem, Vendor, VendorBill } from "../types";
 import * as v from "../lib/validation";
@@ -194,6 +195,9 @@ export function RatesPage() {
   }, [items, vendors]);
 
   const [raBill, setRaBill] = useState<{ vendorId: number; billNo: string } | null>(null);
+  const [detailFor, setDetailFor] = useState<VendorBill | null>(null);
+  const [detailDraft, setDetailDraft] = useState<BillDetails>({});
+  const [detailPdfs, setDetailPdfs] = useState<File[]>([]);
   const billsOf = (vendorId: number | null) => bills.filter((b) => b.vendor_id === vendorId);
   const startBill = (vendorId: number | null | undefined, focusItemId: number | null = null) => {
     const vendor = vendorId ? vendors.find((x) => x.id === vendorId) : null;
@@ -606,6 +610,36 @@ export function RatesPage() {
                           </tbody>
                         </table>
                         {b.note ? <p className="muted">Note: {b.note}</p> : null}
+                        <div className="bill-details-view">
+                          <div className="panel-head-row">
+                            <strong>Bill &amp; recommendation details</strong>
+                            {canManage && b.vendor_id != null ? (
+                              <button
+                                type="button"
+                                className="btn ghost"
+                                onClick={() => {
+                                  setDetailFor(b);
+                                  setDetailDraft((b.details || {}) as BillDetails);
+                                  setDetailPdfs([]);
+                                }}
+                              >
+                                {b.details ? "Edit details" : "+ Add details"}
+                              </button>
+                            ) : null}
+                          </div>
+                          {b.details ? (
+                            <dl className="meta">
+                              {BILL_DETAIL_LABELS.filter(([k]) => b.details?.[k]).map(([k, label]) => (
+                                <div key={k}>
+                                  <dt>{label}</dt>
+                                  <dd>{String(b.details?.[k])}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : (
+                            <p className="muted">No invoice / recommendation details yet.</p>
+                          )}
+                        </div>
                         <div className="bill-docs">
                           <strong>Attached documents</strong>
                           {b.documents?.length ? (
@@ -715,6 +749,51 @@ export function RatesPage() {
             </p>
           )}
         </section>
+      ) : null}
+
+      {detailFor && projectId && detailFor.vendor_id != null ? (
+        <div className="modal-backdrop" onClick={() => setDetailFor(null)}>
+          <form
+            className="modal-card boq-bill-modal"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!token || detailFor.vendor_id == null) return;
+              try {
+                await api.saveBillDetails(token, {
+                  project_id: Number(projectId),
+                  vendor_id: detailFor.vendor_id,
+                  bill_no: detailFor.bill_no,
+                  details: detailDraft as Record<string, string>,
+                });
+                if (detailPdfs.length)
+                  await api.uploadBillDocuments(token, Number(projectId), detailFor.vendor_id, detailFor.bill_no, detailPdfs);
+                setDetailFor(null);
+                void load();
+              } catch (err: unknown) {
+                window.alert(err instanceof Error ? err.message : "Save failed");
+              }
+            }}
+          >
+            <h2>
+              {detailFor.bill_no} · {vendorName(detailFor.vendor_id)}
+            </h2>
+            <BillDetailsFields value={detailDraft} onChange={setDetailDraft} />
+            <h3 className="bill-detail-head">Bill PDF</h3>
+            <label className="bill-pdf-input">
+              Upload the bill PDF
+              <input type="file" accept="application/pdf,.pdf" multiple onChange={(e) => setDetailPdfs(Array.from(e.target.files || []))} />
+            </label>
+            <div className="btn-row" style={{ marginTop: "1rem" }}>
+              <button className="btn" type="submit">
+                Save details
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setDetailFor(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
 
       {raBill && projectId ? (

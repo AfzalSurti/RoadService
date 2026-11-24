@@ -1,9 +1,11 @@
+import json
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 from typing import Annotated
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
@@ -407,6 +409,13 @@ async def list_vendor_bills(
             cancelled_by=r["user_name"],
             cancelled_at=r["created_at"],
         )
+    for r in (await db.execute(text(q + " AND kind = 'details' ORDER BY id"), params)).mappings():
+        bill = bills.get((r["vendor_id"], r["bill_no"]))
+        if bill and bill.status == "active":
+            try:
+                bill.details = json.loads(r["comments"] or "{}")
+            except ValueError:
+                bill.details = None
     for r in (await db.execute(text(q + " AND kind = 'document' ORDER BY id"), params)).mappings():
         bill = bills.get((r["vendor_id"], r["bill_no"]))
         if bill and bill.status == "active":
@@ -477,6 +486,46 @@ async def upload_bill_documents(
         )
     await db.commit()
     return {"ok": True, "added": len(files)}
+
+
+class VendorBillDetails(BaseModel):
+    project_id: int
+    vendor_id: int
+    bill_no: str
+    details: dict
+
+
+BILL_DETAIL_KEYS = (
+    "invoice_no", "invoice_date", "submission_date", "payment_type", "invoice_amount", "bill_from", "bill_to",
+    "recommended_gmc", "recommended_nhipmpl", "net_released", "voucher_no", "status", "remarks",
+)
+
+
+@router.put("/bills/details")
+async def save_bill_details(
+    body: VendorBillDetails,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: invoice and recommendation details of a vendor bill (can be filled in later)."""
+    if not await _bill_entries(db, body.project_id, body.vendor_id, body.bill_no):
+        raise HTTPException(status_code=404, detail="Bill not found")
+    clean = {k: str(v).strip()[:255] for k, v in body.details.items() if k in BILL_DETAIL_KEYS and v not in (None, "")}
+    await db.execute(text(BILL_RECORDS_DDL))
+    await db.execute(
+        text("DELETE FROM vendor_bill_records WHERE project_id = :p AND vendor_id = :v AND bill_no = :b AND kind = 'details'"),
+        {"p": body.project_id, "v": body.vendor_id, "b": body.bill_no},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO vendor_bill_records (project_id, vendor_id, bill_no, kind, comments, user_id, user_name) "
+            "VALUES (:p, :v, :b, 'details', :c, :u, :un)"
+        ),
+        {"p": body.project_id, "v": body.vendor_id, "b": body.bill_no, "c": json.dumps(clean),
+         "u": user.id, "un": user.full_name},
+    )
+    await db.commit()
+    return {"ok": True, "details": clean}
 
 
 @router.delete("/bills/documents/{doc_id}")
@@ -620,6 +669,27 @@ async def ra_bill(
     if vendor.remarks and vendor.remarks.startswith("WO No: "):
         wo_no = vendor.remarks.split("\n", 1)[0].removeprefix("WO No: ").strip()
     digits = "".join(ch for ch in bill_no if ch.isdigit())
+    # Invoice no. / date / bill period entered in the bill details take precedence.
+    det: dict = {}
+    if (await db.execute(text("SELECT to_regclass('public.vendor_bill_records')"))).scalar():
+        raw = (
+            await db.execute(
+                text(
+                    "SELECT comments FROM vendor_bill_records WHERE project_id = :p AND vendor_id = :v "
+                    "AND bill_no = :b AND kind = 'details' ORDER BY id DESC LIMIT 1"
+                ),
+                {"p": project_id, "v": vendor_id, "b": bill_no},
+            )
+        ).scalar()
+        try:
+            det = json.loads(raw or "{}")
+        except ValueError:
+            det = {}
+    if det.get("invoice_date"):
+        bill_date = date.fromisoformat(det["invoice_date"][:10])
+    if det.get("bill_from"):
+        period_from = date.fromisoformat(det["bill_from"][:10])
+    period_to = date.fromisoformat(det["bill_to"][:10]) if det.get("bill_to") else bill_date
     return {
         "project": {"id": project.id, "name": project.name, "title": getattr(project, "title", None)},
         "vendor": {
@@ -631,11 +701,11 @@ async def ra_bill(
             "gst_no": vendor.gst_no,
         },
         "bill_no": bill_no,
-        "invoice_no": digits or str(idx + 1),
+        "invoice_no": det.get("invoice_no") or digits or str(idx + 1),
         "bill_index": idx + 1,
         "bill_date": bill_date.isoformat() if bill_date else None,
         "period_from": period_from.isoformat() if period_from else None,
-        "period_to": bill_date.isoformat() if bill_date else None,
+        "period_to": period_to.isoformat() if period_to else None,
         "lines": lines,
     }
 

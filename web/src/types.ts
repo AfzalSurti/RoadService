@@ -181,6 +181,7 @@ export type VendorBill = {
   cancelled_by?: string | null;
   cancelled_at?: string | null;
   documents?: { id: number; file_path: string; file_name: string | null; uploaded_by: string | null; created_at: string }[];
+  details?: Record<string, string> | null;
 };
 
 export type RateItemSurveyor = {

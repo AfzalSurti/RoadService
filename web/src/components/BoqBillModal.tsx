@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import type { RateItem, Vendor } from "../types";
+import { BillDetailsFields, hasDetails, type BillDetails } from "./BillDetailsFields";
 
 function money(n: number) {
   return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -37,6 +38,8 @@ export function BoqBillModal({
   const [qty, setQty] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [details, setDetails] = useState<BillDetails>({});
+  const [pdfs, setPdfs] = useState<File[]>([]);
 
   const open = items.filter((i) => remainingQty(i) > 0);
   const lines = useMemo(
@@ -68,6 +71,17 @@ export function BoqBillModal({
         note: note.trim() || undefined,
         lines: lines.map((l) => ({ rate_item_id: l.item.id, quantity: l.q })),
       });
+      // Bill / recommendation details and the bill PDF go with the bill.
+      const filled = { ...details, invoice_amount: details.invoice_amount || billAmount.toFixed(2) };
+      if (hasDetails(details)) {
+        await api.saveBillDetails(token, {
+          project_id: projectId,
+          vendor_id: vendor.id,
+          bill_no: billNo.trim(),
+          details: filled as Record<string, string>,
+        });
+      }
+      if (pdfs.length) await api.uploadBillDocuments(token, projectId, vendor.id, billNo.trim(), pdfs);
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Bill could not be saved");
@@ -164,6 +178,20 @@ export function BoqBillModal({
             Remaining after bill <strong className="boq-remaining">₹ {money(Math.max(totalBoq - doneBefore - billAmount, 0))}</strong>
           </span>
         </div>
+
+        <BillDetailsFields value={details} onChange={setDetails} />
+
+        <h3 className="bill-detail-head">Bill PDF</h3>
+        <label className="bill-pdf-input">
+          Upload the bill PDF (signed invoice, measurement sheets …)
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            multiple
+            onChange={(e) => setPdfs(Array.from(e.target.files || []))}
+          />
+          {pdfs.length ? <small className="muted">{pdfs.map((f) => f.name).join(", ")}</small> : null}
+        </label>
 
         <div className="btn-row" style={{ marginTop: "1rem" }}>
           <button className="btn" type="submit" disabled={busy || !open.length}>

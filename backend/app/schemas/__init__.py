@@ -379,6 +379,8 @@ class VendorBillOut(BaseModel):
     cancelled_by: str | None = None
     cancelled_at: datetime | None = None
     documents: list[dict] = []
+    # Invoice / recommendation details (invoice no., dates, GMC / NHIPMPL recommendation, released ...)
+    details: dict | None = None
 
 
 class VendorBillCancel(BaseModel):

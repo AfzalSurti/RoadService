@@ -491,6 +491,13 @@ export const api = {
     return request<{ ok: boolean }>("/api/v1/rates/bills/documents", { method: "POST", token, body: fd });
   },
 
+  /** GMC Experts: invoice / recommendation details of a vendor bill. */
+  saveBillDetails: (
+    token: string,
+    body: { project_id: number; vendor_id: number; bill_no: string; details: Record<string, string> }
+  ) =>
+    request<{ ok: boolean }>("/api/v1/rates/bills/details", { method: "PUT", token, body: JSON.stringify(body) }),
+
   deleteBillDocument: (token: string, docId: number) =>
     request<{ ok: boolean }>(`/api/v1/rates/bills/documents/${docId}`, { method: "DELETE", token }),
 

@@ -2402,3 +2402,9 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .atms-day { margin: 0.2rem 0 0; font-size: 0.95rem; }
 .atms-upload-day { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.75rem; }
 .atms-upload-day input { padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
+
+/* Vendor bill: bill / recommendation details and PDF */
+.bill-detail-head { margin: 1rem 0 0.4rem; font-size: 0.95rem; }
+.bill-pdf-input { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.bill-details-view { margin-top: 0.75rem; }
+.bill-details-view .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.4rem 1rem; margin: 0.4rem 0 0; }
