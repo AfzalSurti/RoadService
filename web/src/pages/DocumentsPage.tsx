@@ -524,6 +524,26 @@ export function DocumentsPage() {
                       <button type="button" className="linkish" onClick={() => openDoc(d)}>
                         Manage
                       </button>
+                      {role === "admin" && !isReadonly ? (
+                        <button
+                          type="button"
+                          className="linkish danger"
+                          style={{ marginLeft: "0.6rem" }}
+                          onClick={async () => {
+                            if (!token) return;
+                            if (!window.confirm(`Delete "${d.title}" and all its versions? This cannot be undone.`)) return;
+                            try {
+                              await api.deleteDocument(token, d.id);
+                              setDocs((prev) => prev.filter((x) => x.id !== d.id));
+                              setSelected((s) => (s?.id === d.id ? null : s));
+                            } catch (err: unknown) {
+                              window.alert(err instanceof Error ? err.message : "Delete failed");
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

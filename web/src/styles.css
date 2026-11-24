@@ -2410,3 +2410,6 @@ button.bar-row:hover .bar-label { text-decoration: underline; }
 .bill-details-view .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.4rem 1rem; margin: 0.4rem 0 0; }
 
 .role-select { padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; }
+
+/* Documents: delete action */
+table.data button.linkish.danger { color: #c0392b; }

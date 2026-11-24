@@ -725,6 +725,10 @@ export const api = {
     });
   },
 
+  /** GMC Experts: delete a document (all versions). */
+  deleteDocument: (token: string, docId: number) =>
+    request<{ ok: boolean }>(`/api/v1/documents/${docId}`, { method: "DELETE", token }),
+
   uploadDocument: (token: string, form: FormData) =>
     request<PortalDocument>("/api/v1/documents", { method: "POST", token, body: form }),
 

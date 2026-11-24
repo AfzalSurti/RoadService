@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -438,6 +438,25 @@ async def update_doc_meta(
     await write_audit(db, actor_id=user.id, action="document_meta_update", entity_type="document", entity_id=str(doc.id))
     await db.commit()
     return _orm_dict(doc)
+
+
+@router.delete("/documents/{doc_id}")
+async def delete_document(
+    doc_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_roles(UserRole.ADMIN))],
+):
+    """GMC Experts: delete a document with its versions and approval history."""
+    doc = (await db.execute(select(PortalDocument).where(PortalDocument.id == doc_id))).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    title = doc.title
+    await db.execute(sa_delete(DocumentApproval).where(DocumentApproval.document_id == doc_id))
+    await db.execute(sa_delete(DocumentVersion).where(DocumentVersion.document_id == doc_id))
+    await db.delete(doc)
+    await write_audit(db, actor_id=user.id, action="document_delete", entity_type="document", entity_id=str(doc_id), detail=title)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/documents/{doc_id}/log-download")
