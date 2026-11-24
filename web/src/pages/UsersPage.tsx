@@ -16,6 +16,7 @@ const emptyForm = {
 };
 
 export function UsersPage() {
+  const myId = useAuth().userId;
   const [resetFor, setResetFor] = useState<{ id: number; full_name: string; email: string } | null>(null);
   const { token, isReadonly } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -204,7 +205,36 @@ export function UsersPage() {
                 <td>{u.id}</td>
                 <td>{u.full_name}</td>
                 <td>{u.email}</td>
-                <td>{roleLabel(u.role)}</td>
+                <td>
+                  {!isReadonly && u.id !== myId ? (
+                    <select
+                      className="role-select"
+                      value={u.role}
+                      onChange={async (e) => {
+                        const next = e.target.value;
+                        if (!token || next === u.role) return;
+                        if (!window.confirm(`Change ${u.full_name}'s role from ${roleLabel(u.role)} to ${roleLabel(next)}?
+
+What they can see and do changes at their next sign-in.`))
+                          return;
+                        try {
+                          await api.updateUser(token, u.id, { role: next });
+                          load();
+                        } catch (err: unknown) {
+                          window.alert(err instanceof Error ? err.message : "Role change failed");
+                        }
+                      }}
+                    >
+                      {["admin", "government", "contractor", "surveyor"].map((r) => (
+                        <option key={r} value={r}>
+                          {roleLabel(r)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    roleLabel(u.role)
+                  )}
+                </td>
                 <td>{u.is_active ? "Yes" : "No"}</td>
                 <td>
                   {!isReadonly ? (

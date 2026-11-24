@@ -73,6 +73,11 @@ async def update_user(
         user.hashed_password = hash_password(new)
         await write_audit(db, actor_id=admin.id, action="password_reset", entity_type="user",
                           entity_id=str(user.id), detail=f"Password reset for {user.email} by {admin.full_name}")
+    if "role" in data and data["role"] is not None and data["role"] != user.role:
+        if user.id == admin.id:
+            raise HTTPException(status_code=400, detail="You cannot change your own role")
+        await write_audit(db, actor_id=admin.id, action="role_changed", entity_type="user", entity_id=str(user.id),
+                          detail=f"{user.email}: {user.role.value} -> {data['role'].value} by {admin.full_name}")
     for key, value in data.items():
         setattr(user, key, value)
     await db.commit()
