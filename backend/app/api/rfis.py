@@ -50,6 +50,8 @@ class RfiOut(BaseModel):
     category: str | None = None
     inspection_date: date | None = None
     photo_path: str | None = None
+    attachment_path: str | None = None
+    agency_name: str | None = None
     priority: str
     status: str
     raised_by_id: int
@@ -84,6 +86,8 @@ def _out(row: SiteRfi, user: User) -> RfiOut:
         category=state.get("category"),
         inspection_date=state.get("inspection_date"),
         photo_path=state.get("photo_path"),
+        attachment_path=state.get("attachment_path"),
+        agency_name=state.get("agency_name"),
         priority=row.priority,
         status=row.status,
         raised_by_id=row.raised_by_id,
@@ -234,7 +238,9 @@ async def raise_rfi(
     contractor_name: Annotated[str | None, Form()] = None,
     category: Annotated[str | None, Form()] = None,
     inspection_date: Annotated[str | None, Form()] = None,
+    agency_name: Annotated[str | None, Form()] = None,
     photo: UploadFile | None = File(None),
+    attachment: UploadFile | None = File(None),
 ):
     project = (
         await db.execute(
@@ -251,6 +257,13 @@ async def raise_rfi(
         if not issue or issue.project_id != project_id:
             raise HTTPException(400, "related_issue_id must belong to the same project")
 
+    # Contractors must say where (chainage) and for which agency the inspection is.
+    if user.role == UserRole.CONTRACTOR:
+        if not (chainage or "").strip():
+            raise HTTPException(400, "Chainage is required")
+        if not (agency_name or "").strip():
+            raise HTTPException(400, "Agency name is required")
+
     prio = (priority or "medium").strip().lower()
     if prio not in ("low", "medium", "high", "urgent"):
         raise HTTPException(400, "Invalid priority")
@@ -265,6 +278,12 @@ async def raise_rfi(
     photo_path = None
     if photo and photo.filename:
         photo_path = await save_upload(photo, "rfi_photo")
+
+    attachment_path = None
+    if attachment and attachment.filename:
+        if not attachment.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, "The attachment must be a PDF file")
+        attachment_path = await save_upload(attachment, "rfi_attachment")
 
     count = (await db.execute(select(func.count(SiteRfi.id)))).scalar_one() + 1
     rfi_no = f"RFI-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{count:04d}"
@@ -281,6 +300,8 @@ async def raise_rfi(
         category=(category or "").strip() or None,
         inspection_date=insp,
         photo_path=photo_path,
+        attachment_path=attachment_path,
+        agency_name=(agency_name or "").strip() or None,
         priority=prio,
         status="open",
         raised_by_id=user.id,

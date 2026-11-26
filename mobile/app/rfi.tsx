@@ -1,7 +1,9 @@
+import * as DocumentPicker from "expo-document-picker";
 import { Stack, router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   FlatList,
+  Linking,
   Modal,
   Pressable,
   RefreshControl,
@@ -11,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { api, type Project, type SiteRfi } from "../lib/api";
+import { api, mediaUrl, type Project, type SiteRfi } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
 
@@ -21,12 +23,17 @@ export default function RfiScreen() {
   const [rows, setRows] = useState<SiteRfi[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showRaise, setShowRaise] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<SiteRfi | null>(null);
   const [answer, setAnswer] = useState("");
+  const [vendors, setVendors] = useState<{ id: number; name: string; project_id: number | null }[]>([]);
+  const [agencySearch, setAgencySearch] = useState("");
+  const [pdf, setPdf] = useState<{ uri: string; name: string; mimeType?: string | null } | null>(null);
   const [form, setForm] = useState({
+    agency_name: "",
     project_id: "",
     subject: "",
     description: "",
@@ -44,6 +51,7 @@ export default function RfiScreen() {
       const [list, proj] = await Promise.all([api.rfis(token), api.projects(token)]);
       setRows(list);
       setProjects(proj);
+      if (canRaise) api.vendors(token).then(setVendors).catch(() => setVendors([]));
       setError(null);
       if (!form.project_id && proj[0]) {
         setForm((f) => ({ ...f, project_id: String(proj[0].id) }));
@@ -61,10 +69,19 @@ export default function RfiScreen() {
 
   const raise = async () => {
     if (!token) return;
-    if (!form.project_id || form.subject.trim().length < 3 || form.description.trim().length < 5) {
-      setError("Project, subject and description are required");
+    if (role === "contractor" && !form.agency_name.trim()) {
+      setFormError("Select the agency name");
       return;
     }
+    if (!form.project_id || form.subject.trim().length < 3 || form.description.trim().length < 5) {
+      setFormError("Project, subject and description are required");
+      return;
+    }
+    if (role === "contractor" && !form.chainage.trim()) {
+      setFormError("Chainage is required");
+      return;
+    }
+    setFormError(null);
     setBusy(true);
     setError(null);
     try {
@@ -74,16 +91,46 @@ export default function RfiScreen() {
         description: form.description.trim(),
         chainage: form.chainage.trim() || undefined,
         priority: form.priority,
+        agency_name: form.agency_name.trim() || undefined,
+        attachment: pdf,
       });
       setShowRaise(false);
-      setForm((f) => ({ ...f, subject: "", description: "", chainage: "" }));
+      setForm((f) => ({ ...f, agency_name: "", subject: "", description: "", chainage: "" }));
+      setAgencySearch("");
+      setPdf(null);
       await load();
     } catch (e: any) {
-      setError(e.message);
+      setFormError(e.message);
     } finally {
       setBusy(false);
     }
   };
+
+  const pickPdf = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.length) return;
+    const a = res.assets[0];
+    setPdf({ uri: a.uri, name: a.name || "attachment.pdf", mimeType: a.mimeType });
+  };
+
+  // Agencies (vendors) of the contractor's packages; picking one also picks its package.
+  const projectIds = new Set(projects.map((p) => p.id));
+  const agencyOptions = (() => {
+    const q = agencySearch.trim().toLowerCase();
+    const seen = new Set<string>();
+    return vendors
+      .filter((v) => v.project_id == null || projectIds.has(v.project_id))
+      .filter((v) => !q || v.name.toLowerCase().includes(q))
+      .filter((v) => {
+        const k = v.name.trim().toLowerCase();
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 8);
+  })();
+  const typedAgency = agencySearch.trim();
+  const typedIsListed = agencyOptions.some((v) => v.name.trim().toLowerCase() === typedAgency.toLowerCase());
 
   return (
     <View style={[styles.page, { backgroundColor: colors.bg }]}>
@@ -93,7 +140,13 @@ export default function RfiScreen() {
           <Text style={styles.secondaryText}>Back</Text>
         </Pressable>
         {canRaise ? (
-          <Pressable style={styles.primary} onPress={() => setShowRaise(true)}>
+          <Pressable
+            style={styles.primary}
+            onPress={() => {
+              setFormError(null);
+              setShowRaise(true);
+            }}
+          >
             <Text style={styles.primaryText}>{role === "contractor" ? "Raise RFI" : "Raise new RFI"}</Text>
           </Pressable>
         ) : null}
@@ -157,7 +210,13 @@ export default function RfiScreen() {
                 <Text style={styles.meta}>{selected.status}</Text>
                 <Text style={[styles.cardTitle, { fontSize: 16 }]}>{selected.subject}</Text>
                 <Text style={{ color: "#e8eef6", marginVertical: 8 }}>{selected.description}</Text>
+                {selected.agency_name ? <Text style={styles.meta}>Agency: {selected.agency_name}</Text> : null}
                 {selected.chainage ? <Text style={styles.meta}>Chainage: {selected.chainage}</Text> : null}
+                {selected.attachment_path ? (
+                  <Pressable onPress={() => Linking.openURL(mediaUrl(selected.attachment_path || ""))}>
+                    <Text style={{ color: "#3b9eff", marginBottom: 4 }}>Open attached PDF</Text>
+                  </Pressable>
+                ) : null}
                 {selected.ae_name ? <Text style={styles.meta}>AE: {selected.ae_name}</Text> : null}
                 {selected.contractor_name ? (
                   <Text style={styles.meta}>Contractor: {selected.contractor_name}</Text>
@@ -248,6 +307,53 @@ export default function RfiScreen() {
         <View style={styles.modalBg}>
           <ScrollView style={styles.modalCard}>
             <Text style={styles.cardTitle}>Raise new RFI</Text>
+            {formError ? <Text style={styles.error}>{formError}</Text> : null}
+            <Text style={styles.meta}>Agency name{role === "contractor" ? " *" : ""}</Text>
+            {form.agency_name ? (
+              <Pressable
+                style={[styles.chip, styles.chipOn]}
+                onPress={() => {
+                  setForm({ ...form, agency_name: "" });
+                  setAgencySearch("");
+                }}
+              >
+                <Text style={{ color: "#e8eef6", fontWeight: "700" }}>{form.agency_name}</Text>
+                <Text style={styles.meta}>Tap to change</Text>
+              </Pressable>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search agency name"
+                  placeholderTextColor="#8b9bb0"
+                  value={agencySearch}
+                  onChangeText={setAgencySearch}
+                />
+                {agencyOptions.map((v) => (
+                  <Pressable
+                    key={v.id}
+                    style={styles.chip}
+                    onPress={() =>
+                      setForm({
+                        ...form,
+                        agency_name: v.name.trim(),
+                        project_id: v.project_id ? String(v.project_id) : form.project_id,
+                      })
+                    }
+                  >
+                    <Text style={{ color: "#e8eef6" }}>{v.name}</Text>
+                    {v.project_id ? (
+                      <Text style={styles.meta}>{projects.find((p) => p.id === v.project_id)?.name || ""}</Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+                {typedAgency && !typedIsListed ? (
+                  <Pressable style={styles.chip} onPress={() => setForm({ ...form, agency_name: typedAgency })}>
+                    <Text style={{ color: "#3b9eff" }}>Use “{typedAgency}”</Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
             <Text style={styles.meta}>Project</Text>
             {projects.map((p) => (
               <Pressable
@@ -278,11 +384,20 @@ export default function RfiScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder="Chainage (optional)"
+              placeholder={role === "contractor" ? "Chainage * (e.g. 92+500 to 94+500)" : "Chainage (optional)"}
               placeholderTextColor="#8b9bb0"
               value={form.chainage}
               onChangeText={(t) => setForm({ ...form, chainage: t })}
             />
+            <Text style={styles.meta}>Attachment (PDF)</Text>
+            <Pressable style={[styles.chip, { marginBottom: 10 }]} onPress={pickPdf}>
+              <Text style={{ color: pdf ? "#e8eef6" : "#3b9eff" }}>{pdf ? `📎 ${pdf.name}` : "+ Attach PDF"}</Text>
+            </Pressable>
+            {pdf ? (
+              <Pressable onPress={() => setPdf(null)} style={{ marginBottom: 10 }}>
+                <Text style={styles.meta}>Remove PDF</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={styles.primary} disabled={busy} onPress={raise}>
               <Text style={styles.primaryText}>{busy ? "Submitting…" : "Submit RFI"}</Text>
             </Pressable>

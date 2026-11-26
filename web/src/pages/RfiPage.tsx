@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { ProjectSelect } from "../components/ProjectSelect";
 import { formatLabel } from "../components/StatusBadge";
 import { projectIdFromUrl, usePackageScope } from "../lib/projectScope";
-import type { Issue, Project, SiteRfi } from "../types";
+import type { Issue, Project, SiteRfi, Vendor } from "../types";
 import { PdfDownloadButton } from "../components/PdfDownloadButton";
 
 const empty = {
@@ -17,6 +17,7 @@ const empty = {
   related_issue_id: "",
   ae_name: "",
   contractor_name: "",
+  agency_name: "",
   category: "",
   inspection_date: "",
 };
@@ -59,6 +60,8 @@ export function RfiPage() {
   const [showRaise, setShowRaise] = useState(false);
   const [form, setForm] = useState(empty);
   const [photo, setPhoto] = useState<File | null>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [answer, setAnswer] = useState("");
   const [reportView, setReportView] = useState("RFI View");
   const [filters, setFilters] = useState({
@@ -176,9 +179,26 @@ export function RfiPage() {
     };
   }, [token, filters.status, filters.project_id, filters.ae_name, filters.contractor, scopedProjectId]);
 
+  // Agency (vendor) names for the RFI form.
+  useEffect(() => {
+    if (!token || !showRaise || vendors.length) return;
+    api.vendors(token).then(setVendors).catch(() => setVendors([]));
+  }, [token, showRaise, vendors.length]);
+  const agencyNames = useMemo(() => {
+    const names = vendors
+      .filter((v) => !form.project_id || String(v.project_id) === form.project_id)
+      .map((v) => v.name.trim())
+      .filter(Boolean);
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+  }, [vendors, form.project_id]);
+
   const onRaise = async (e: FormEvent) => {
     e.preventDefault();
     if (!token || !canRaise) return;
+    if (role === "contractor" && (!form.chainage.trim() || !form.agency_name.trim())) {
+      setError("Agency name and chainage are required");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMsg(null);
@@ -194,11 +214,14 @@ export function RfiPage() {
       if (form.contractor_name.trim()) fd.append("contractor_name", form.contractor_name.trim());
       if (form.category.trim()) fd.append("category", form.category.trim());
       if (form.inspection_date) fd.append("inspection_date", form.inspection_date);
+      if (form.agency_name.trim()) fd.append("agency_name", form.agency_name.trim());
       if (photo) fd.append("photo", photo);
+      if (attachment) fd.append("attachment", attachment);
       const created = await api.raiseRfi(token, fd);
       setShowRaise(false);
       setForm(empty);
       setPhoto(null);
+      setAttachment(null);
       setMsg(`RFI ${created.rfi_no} raised`);
       setSelected(created);
       await load();
@@ -407,6 +430,7 @@ export function RfiPage() {
                 {selected.chainage ? ` · Ch. ${selected.chainage}` : ""}
                 {selected.ae_name ? ` · AE ${selected.ae_name}` : ""}
                 {selected.contractor_name ? ` · ${selected.contractor_name}` : ""}
+                {selected.agency_name ? ` · Agency: ${selected.agency_name}` : ""}
               </p>
               <h3 style={{ fontSize: "0.95rem" }}>{selected.subject}</h3>
               <p style={{ whiteSpace: "pre-wrap" }}>{selected.description}</p>
@@ -416,6 +440,13 @@ export function RfiPage() {
                 <p>
                   <a href={mediaUrl(selected.photo_path)} target="_blank" rel="noreferrer">
                     Open attached photo
+                  </a>
+                </p>
+              ) : null}
+              {selected.attachment_path ? (
+                <p>
+                  <a href={mediaUrl(selected.attachment_path)} target="_blank" rel="noreferrer">
+                    Open attached PDF
                   </a>
                 </p>
               ) : null}
@@ -497,6 +528,29 @@ export function RfiPage() {
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={onRaise}>
             <h2>New inspection / RFI request</h2>
             <div className="form-grid">
+              <label className="span-2">
+                Agency name{role === "contractor" ? " *" : ""}
+                <input
+                  list="rfi-agency-names"
+                  required={role === "contractor"}
+                  value={form.agency_name}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const v = vendors.find((x) => x.name.trim() === name.trim());
+                    setForm({
+                      ...form,
+                      agency_name: name,
+                      project_id: !form.project_id && v?.project_id ? String(v.project_id) : form.project_id,
+                    });
+                  }}
+                  placeholder="Select or type the agency"
+                />
+                <datalist id="rfi-agency-names">
+                  {agencyNames.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              </label>
               <ProjectSelect
                 className="span-2"
                 required
@@ -536,8 +590,9 @@ export function RfiPage() {
                 />
               </label>
               <label>
-                Chainage start–end
+                Chainage start–end{role === "contractor" ? " *" : ""}
                 <input
+                  required={role === "contractor"}
                   value={form.chainage}
                   onChange={(e) => setForm({ ...form, chainage: e.target.value })}
                   placeholder="e.g. 12+500 to 12+650"
@@ -592,6 +647,14 @@ export function RfiPage() {
               <label className="span-2">
                 Photo / screenshot
                 <input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files?.[0] || null)} />
+              </label>
+              <label className="span-2">
+                Attachment (PDF)
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => setAttachment(e.target.files?.[0] || null)}
+                />
               </label>
             </div>
             <div className="btn-row" style={{ marginTop: "1rem" }}>

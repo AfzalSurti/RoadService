@@ -446,6 +446,8 @@ export type SiteRfi = {
   category?: string | null;
   inspection_date?: string | null;
   photo_path?: string | null;
+  attachment_path?: string | null;
+  agency_name?: string | null;
   priority: string;
   status: string;
   raised_by_id: number;

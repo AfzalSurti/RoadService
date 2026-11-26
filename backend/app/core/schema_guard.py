@@ -102,6 +102,9 @@ BILL_COLUMNS_DDL = (
     "ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_no VARCHAR(64)",
     "ALTER TABLE quantity_entries ADD COLUMN IF NOT EXISTS bill_date DATE",
     "CREATE INDEX IF NOT EXISTS ix_quantity_entries_vendor_id ON quantity_entries (vendor_id)",
+    # RFI: PDF attachment and agency (vendor) name.
+    "ALTER TABLE site_rfis ADD COLUMN IF NOT EXISTS attachment_path VARCHAR(512)",
+    "ALTER TABLE site_rfis ADD COLUMN IF NOT EXISTS agency_name VARCHAR(255)",
 )
 
 

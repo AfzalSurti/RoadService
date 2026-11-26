@@ -411,6 +411,8 @@ class SiteRfi(Base):
     category: Mapped[str | None] = mapped_column(String(128), nullable=True, deferred=True)
     inspection_date: Mapped[date | None] = mapped_column(Date, nullable=True, deferred=True)
     photo_path: Mapped[str | None] = mapped_column(String(512), nullable=True, deferred=True)
+    attachment_path: Mapped[str | None] = mapped_column(String(512), nullable=True, deferred=True)
+    agency_name: Mapped[str | None] = mapped_column(String(255), nullable=True, deferred=True)
     priority: Mapped[str] = mapped_column(String(32), default="medium", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="open", nullable=False, index=True)  # open|answered|closed
     raised_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)

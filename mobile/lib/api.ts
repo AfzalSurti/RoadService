@@ -158,6 +158,8 @@ export type SiteRfi = {
   can_close: boolean;
   ae_name?: string | null;
   contractor_name?: string | null;
+  agency_name?: string | null;
+  attachment_path?: string | null;
   category?: string | null;
   inspection_date?: string | null;
 };
@@ -280,6 +282,9 @@ export const api = {
       work_date?: string;
     } | null>(`/api/v1/nhit/attendance/today`, { token }),
 
+  /** Agencies (vendors) for the RFI form. */
+  vendors: (token: string) =>
+    request<{ id: number; name: string; project_id: number | null }[]>("/api/v1/vendors", { token }),
   rfis: (token: string, status?: string) =>
     request<SiteRfi[]>(`/api/v1/rfis${status ? `?status=${status}` : ""}`, { token }),
   raiseRfi: (
@@ -291,6 +296,9 @@ export const api = {
       chainage?: string;
       priority?: string;
       related_issue_id?: number;
+      agency_name?: string;
+      /** PDF picked on the phone. */
+      attachment?: { uri: string; name: string; mimeType?: string | null } | null;
     }
   ) => {
     const fd = new FormData();
@@ -300,6 +308,14 @@ export const api = {
     if (body.chainage) fd.append("chainage", body.chainage);
     if (body.priority) fd.append("priority", body.priority);
     if (body.related_issue_id) fd.append("related_issue_id", String(body.related_issue_id));
+    if (body.agency_name) fd.append("agency_name", body.agency_name);
+    if (body.attachment) {
+      fd.append("attachment", {
+        uri: body.attachment.uri,
+        name: body.attachment.name || "attachment.pdf",
+        type: body.attachment.mimeType || "application/pdf",
+      } as any);
+    }
     return request<SiteRfi>("/api/v1/rfis", { method: "POST", token, body: fd });
   },
   answerRfi: (token: string, id: number, body: { answer_text: string }) =>
@@ -399,3 +415,11 @@ export const api = {
 };
 
 export { API_URL };
+
+/** Full URL of an uploaded file (Cloudinary URL, or a name served by the API). */
+export function mediaUrl(path?: string | null) {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const name = path.split(/[/\\]/).pop() || path;
+  return `${API_URL}/uploads/${name}`;
+}
