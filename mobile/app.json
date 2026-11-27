@@ -24,7 +24,10 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
       ]
     },
     "extra": {
@@ -33,7 +36,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "84a9b009-2c75-4f81-9a46-22a3f5e68410"
+        "projectId": "1b5878ab-a30f-48b9-8234-38a201a9b0c3"
       }
     },
     "plugins": [
@@ -58,6 +61,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "afzal932720"
   }
 }
