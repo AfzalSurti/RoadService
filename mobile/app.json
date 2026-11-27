@@ -2,7 +2,7 @@
   "expo": {
     "name": "Invit",
     "slug": "invit",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "scheme": "invit",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.invit.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
